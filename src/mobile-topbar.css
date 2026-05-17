@@ -1,0 +1,139 @@
+/* Mobile release polish: compact header for Telegram Mini App */
+.compact-topbar {
+  padding: 6px 0 5px !important;
+  margin-bottom: 4px;
+}
+
+.compact-topbar.comic-strip::after {
+  height: 2px !important;
+  margin-top: 5px !important;
+  border-width: 1px !important;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, .58) !important;
+}
+
+.compact-brand-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start !important;
+  gap: 8px !important;
+}
+
+.studio-title-block {
+  min-width: 0;
+  padding-left: 2px !important;
+}
+
+.studio-title-block .eyebrow {
+  margin-bottom: 2px !important;
+  font-size: 9px !important;
+  letter-spacing: .16em !important;
+}
+
+.studio-title-block h1,
+.topbar h1 {
+  max-width: 100% !important;
+  font-size: clamp(24px, 8.1vw, 36px) !important;
+  line-height: .9 !important;
+  -webkit-line-clamp: 1 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block !important;
+}
+
+.day-badge {
+  min-width: 78px !important;
+  padding: 6px 7px !important;
+  gap: 3px !important;
+  border-width: 2px !important;
+  box-shadow: 3px 3px 0 var(--pink) !important;
+}
+
+.day-badge > span:first-child {
+  font-size: 11px !important;
+}
+
+.day-mini {
+  min-width: 39px !important;
+  height: 13px !important;
+  padding: 1px 5px !important;
+  font-size: 8px !important;
+}
+
+.compact-wallet {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  margin: 7px 0 5px !important;
+  padding: 5px 6px !important;
+  border: 2px solid var(--ink);
+  border-radius: 20px;
+  background: rgba(255, 240, 187, .97);
+  box-shadow: 3px 3px 0 var(--pink);
+}
+
+.compact-wallet span {
+  min-width: 0 !important;
+  min-height: 24px !important;
+  padding: 2px 5px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  gap: 4px !important;
+}
+
+.compact-wallet span + span {
+  border-left: 1px solid rgba(5, 6, 13, .18) !important;
+}
+
+.compact-wallet .ui-icon {
+  width: 14px !important;
+  height: 14px !important;
+  margin-right: 3px !important;
+}
+
+.momentum-button {
+  min-height: 22px !important;
+  padding: 0 3px !important;
+  gap: 6px !important;
+}
+
+.momentum-button span {
+  font-size: 10px !important;
+  white-space: nowrap;
+}
+
+.momentum-button .xp {
+  height: 8px !important;
+  border-width: 1px !important;
+}
+
+.momentum-button::after {
+  width: 18px !important;
+  height: 18px !important;
+  right: 0 !important;
+  top: -9px !important;
+  font-size: 11px !important;
+}
+
+.screen-card {
+  margin-top: 5px !important;
+}
+
+@media (max-width: 390px) {
+  .compact-wallet {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .studio-title-block h1,
+  .topbar h1 {
+    font-size: clamp(22px, 8vw, 32px) !important;
+  }
+
+  .compact-wallet span {
+    font-size: 11px !important;
+    padding-inline: 3px !important;
+  }
+}
