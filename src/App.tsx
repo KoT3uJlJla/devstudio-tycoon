@@ -358,23 +358,8 @@ export default function App() {
   const canRelease = Boolean(state?.selectedProject?.startedAt && state.selectedProject.progress >= 100);
 
   useEffect(() => {
-    if (!state) return;
-    const mainButton = window.Telegram?.WebApp?.MainButton;
-    if (!mainButton) return;
-    const handleClick = () => {
-      setState((current) => {
-        if (!current) return current;
-        if (canRelease) return releaseProject(current);
-        if (current.screen !== 'develop') return { ...current, screen: 'develop' };
-        if (current.selectedProject?.genre && current.selectedProject.theme && current.selectedProject.platform && !current.selectedProject.startedAt) return startProject(current);
-        return current;
-      });
-    };
-    mainButton.setText(canRelease ? 'РЕЛИЗНУТЬ ИГРУ' : state.screen === 'develop' ? 'НАЧАТЬ РАЗРАБОТКУ' : 'НОВАЯ ИГРА');
-    mainButton.show();
-    mainButton.onClick(handleClick);
-    return () => mainButton.offClick(handleClick);
-  }, [canRelease, state?.screen, state?.selectedProject?.id, state?.selectedProject?.progress]);
+  window.Telegram?.WebApp?.MainButton?.hide?.();
+}, []);
 
   if (!state) return <div className="loading"><span>Загружаем студию…</span></div>;
 
