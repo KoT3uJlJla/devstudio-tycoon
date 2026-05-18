@@ -1,6 +1,3 @@
-const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
-const API_URL = 'https://devstudio-tycoon-api.onrender.com';
-
 const releaseCommentPool = [
   'Смелая идея, и она почти сработала.',
   'Есть шероховатости, но характер чувствуется.',
@@ -129,80 +126,45 @@ function randomReleaseComment() {
   return releaseCommentPool[randomIndex(releaseCommentPool.length)] ?? releaseCommentPool[0];
 }
 
-function telegramInitData() {
-  return window.Telegram?.WebApp?.initData || '';
+function walletCoinTextNode() {
+  const walletCoins = document.querySelector<HTMLElement>('.wallet span:first-child');
+  if (!walletCoins) return null;
+  return Array.from(walletCoins.childNodes).reverse().find((node) => node.nodeType === Node.TEXT_NODE) ?? null;
 }
 
-function updateWalletCoins(value: number) {
-  const walletCoins = document.querySelector<HTMLElement>('.wallet span:first-child');
-  if (!walletCoins) return;
-  const textNode = Array.from(walletCoins.childNodes).reverse().find((node) => node.nodeType === Node.TEXT_NODE);
+function readDisplayedCoins() {
+  return parseNumber(walletCoinTextNode()?.textContent ?? '');
+}
+
+function writeDisplayedCoins(value: number) {
+  const textNode = walletCoinTextNode();
   if (textNode) textNode.textContent = ` ${Math.round(value).toLocaleString('ru-RU')}`;
 }
 
-function readLocalSave(): Record<string, unknown> | null {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistClaimedOfflineReward(amount: number) {
-  const save = readLocalSave();
-  if (!save) return null;
-  const currentCoins = Number(save.coins) || 0;
-  const pendingReward = Math.max(0, Number(save.lastOfflineReward) || amount);
-  const reward = Math.max(0, pendingReward || amount);
-  const nextSave = {
-    ...save,
-    coins: currentCoins + reward,
-    lastOfflineReward: 0,
-    lastSavedAt: Date.now(),
-  };
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSave));
-  } catch {
-    return nextSave;
-  }
-
-  const initData = telegramInitData();
-  if (initData) {
-    void fetch(`${API_URL}/api/save`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `tma ${initData}`,
-      },
-      body: JSON.stringify(nextSave),
-    }).catch(() => undefined);
-  }
-
-  return nextSave;
-}
-
 function patchOfflineRewardClaim() {
-  document.querySelectorAll<HTMLElement>('.offline-toast').forEach((toast) => {
-    if (toast.dataset.offlineClaimPatched === 'true') return;
-    toast.dataset.offlineClaimPatched = 'true';
-    toast.addEventListener('click', (event) => {
-      const amount = parseNumber(textOf(toast));
-      if (!Number.isFinite(amount) || amount <= 0) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      const nextSave = persistClaimedOfflineReward(amount);
-      const nextCoins = Number(nextSave?.coins);
-      if (Number.isFinite(nextCoins)) updateWalletCoins(nextCoins);
+  const toast = document.querySelector<HTMLElement>('.offline-toast');
+  if (!toast) return;
+  const amount = parseNumber(textOf(toast));
+  if (!Number.isFinite(amount) || amount <= 0) return;
+
+  if (toast.dataset.offlineVisualPatched !== 'true') {
+    toast.dataset.offlineVisualPatched = 'true';
+    const displayed = readDisplayedCoins();
+    if (Number.isFinite(displayed)) {
+      const baseCoins = Math.max(0, displayed - amount);
+      toast.dataset.offlineBaseCoins = String(baseCoins);
+      writeDisplayedCoins(baseCoins);
+    }
+  }
+
+  if (toast.dataset.offlineClickPatched !== 'true') {
+    toast.dataset.offlineClickPatched = 'true';
+    toast.addEventListener('click', () => {
+      const baseCoins = Number(toast.dataset.offlineBaseCoins);
+      if (Number.isFinite(baseCoins)) writeDisplayedCoins(baseCoins + amount);
       toast.classList.add('offline-toast-claimed');
-      toast.textContent = `Зачислено +${Math.round(amount).toLocaleString('ru-RU')} 🪙`;
-      window.setTimeout(() => window.location.reload(), 240);
     }, { capture: true });
-  });
+  }
 }
 
 function patchReleaseModal() {
