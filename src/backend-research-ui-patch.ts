@@ -165,9 +165,14 @@ function patchButton(button: HTMLButtonElement) {
     if (button.disabled && body.action !== 'product_instinct') return;
     button.disabled = true;
     try {
-      if (body.action === 'product_instinct') await postProductInstinct();
-      else await postResearch(body);
-      markButtonDone(button);
+      const payload = body.action === 'product_instinct'
+        ? await postProductInstinct()
+        : await postResearch(body);
+      if (payload?.save?.data) {
+        markButtonDone(button);
+      } else {
+        button.disabled = false;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('not_enough_rp')) notice('Не хватает очков науки. Исследование не открыто.');
