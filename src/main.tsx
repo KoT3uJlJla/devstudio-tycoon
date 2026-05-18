@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import AppWithServerSync from './AppWithServerSync';
+import App from './App';
 import './styles.css';
 import './mobile-topbar.css';
 import './v8-ui-patch.css';
@@ -26,7 +26,7 @@ async function boot() {
 
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <AppWithServerSync />
+      <App />
     </React.StrictMode>,
   );
 }
