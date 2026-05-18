@@ -1,3 +1,5 @@
+import { applyVisibleBalanceFromSave } from './visible-balance-sync';
+
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
 const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.onrender.com';
 
@@ -58,6 +60,7 @@ function persistRawSaveData(data: unknown) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    applyVisibleBalanceFromSave(data);
     return true;
   } catch {
     return false;
@@ -104,7 +107,7 @@ async function postJson<T>(url: string, body: Record<string, unknown> = {}, time
 }
 
 async function fetchAuthoritativeSave() {
-  const response = await fetch(`${API_URL}/api/save`, {
+  const response = await fetch(`${API_URL}/api/stars/reconcile`, {
     headers: { Authorization: `tma ${telegramInitData()}` },
   });
   const payload = await response.json().catch(() => null) as EconomyPayload | null;
@@ -135,7 +138,7 @@ async function createStarsInvoice(itemId: string) {
 }
 
 function refreshAfterServerState() {
-  window.setTimeout(() => window.location.reload(), 120);
+  window.setTimeout(() => window.location.reload(), 450);
 }
 
 async function refreshSaveAndReload() {
@@ -144,8 +147,8 @@ async function refreshSaveAndReload() {
 }
 
 async function waitForPaidInvoice(invoiceId: string) {
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, attempt < 6 ? 500 : 1000));
     const status = await getInvoiceStatus(invoiceId).catch(() => null);
     if (status?.invoice?.status === 'paid') {
       await refreshSaveAndReload().catch(() => refreshAfterServerState());
