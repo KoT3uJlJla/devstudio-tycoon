@@ -1,64 +1,86 @@
-# DevStudio Tycoon MVP v0.6.1
+# DevStudio Tycoon MVP v0.7.6
 
-Telegram Mini App prototype: React + Vite + TypeScript.
+Telegram Mini App prototype: React + Vite + TypeScript, Cloudflare Pages frontend, Render backend, MongoDB Atlas storage.
 
-## Что нового в v0.6.1 (этот патч)
+## Current deployment
 
-Работа над ошибками + правки внешнего вида + аудит безопасности поверх v0.6.
+- Frontend: Cloudflare Pages — https://devstudio-tycoon-stat.pages.dev
+- Backend: Render — https://devstudio-tycoon-api.onrender.com
+- Cloud save/auth: Telegram Mini App `initData`, validated on the backend.
+- Backend env: `BOT_TOKEN`, `MONGODB_URI`, `PORT`; optional `APP_URL`, `ALLOWED_ORIGINS`/`CORS_ORIGINS`, `MAX_INIT_DATA_AGE_SECONDS`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_SECRET`.
 
-### Баг-фиксы
+## Security / hardening notes in v0.7.6
 
-- **XP-бар студии больше не упирается в 21%.** В `gameLogic.ts` `studioXp` зажимался диапазоном 0..249, а сама полоска делит на 1200 — она физически не могла заполниться. Поднял потолок до 999 999.
-- **Скан аудитории в нулевом игровом месяце больше не теряется** при перезагрузке. `revealedUntilMonth` и `lastUpdatedMonth` нормализовались через `|| -1`, что выкидывало валидный `0`. Заменил на `Number.isFinite(...)`.
-- **Модалка релиза больше не крутит `setInterval` после финального шага.** Раньше таймер срабатывал каждые 850 мс бесконечно, пока модалка открыта; теперь сам снимает себя при `step >= finalStep` и корректно перезапускается при новом релизе.
-- **Кнопка «Обновить пул» теперь действительно обновляет пул кандидатов.** Раньше она только дергала вибрацию. Теперь за 10 ⭐ сдвигает витрину по `employeePool` (с проверкой, что есть кого показать).
-- **Сохранение не пишется на каждый тик.** `saveGame` дебаунсится на 1.2 с, а Telegram CloudStorage дополнительно троттлится на 15 с — на старом коде CloudStorage звался ~60 раз в минуту, упираясь в его собственные rate-limit'ы.
+- App shell now has a Content-Security-Policy in both `index.html` and `dist/index.html`.
+- Frontend and backend package manifests pin runtime with `"engines": { "node": ">=20" }`.
+- Backend startup preloads `server/server-hardening.js`, which defaults Telegram `initData` max age to 24 hours and restricts CORS origins.
+- Default allowed CORS origins are:
+  - `https://devstudio-tycoon-stat.pages.dev`
+  - `http://localhost:5173`
+  - `http://127.0.0.1:5173`
+- Override CORS allowlist through `ALLOWED_ORIGINS` or `CORS_ORIGINS` as a comma-separated list.
+- Telegram `initData` is validated server-side with HMAC-SHA256 derived from `BOT_TOKEN`; stale `auth_date` is rejected.
+- Protected economy lives on backend for game stars, shop purchases, research unlocks, development skips/promotions and wallet reconciliation.
+- Client saves are normalized and clamped before use. Client-side state is never a secret; important economy state must be authoritative on the backend.
 
-### Безопасность / hardening
+## Deployment workflow
 
-- **`package.json`: убрал `"latest"` у всех зависимостей.** Прибитые `latest` — это автоматическое доверие любой будущей версии в реестре (supply-chain риск). Заменил на семвер-диапазоны.
-- **Жёсткая валидация в `parseSave`.** Раньше `JSON.parse(raw) as Partial<GameState>` пропускал строки и массивы, которые потом спредились в стейт мусорными числовыми ключами. Теперь сейв принимается, только если это plain object.
-- **`try/catch` вокруг всех походов в `localStorage`/CloudStorage** — в приватном режиме Safari или при превышении квоты приложение больше не падает.
-- **Cloud-троттлинг + flush на `resetGame`** — нет утечки отложенных запросов после сброса прогресса.
+### Frontend / Cloudflare Pages
 
-### Внешний вид и отступы
+Cloudflare Pages is currently updated from `dist`, so every frontend source change must be followed by a fresh build and `dist` upload.
 
-Главная проблема v0.6: правило `h1, h2, h3, p { margin: 0 }` срезало все вертикальные отступы, а карточки нигде их обратно не возвращали — eyebrow, заголовок, описание и кнопка слипались в одну стену текста. Что сделал:
+```bash
+npm install
+npm run build
+```
 
-- Карточкам с блочной раскладкой (`bankruptcy-card`, `studio-upgrade`, `news-panel`, `audience-card`, `product-instinct`, `locked-insight`, `tutorial-banner`, `empty-panel`) поставил `display: flex; flex-direction: column; gap: 10px`.
-- Внутренним «столбцам текста» (левая колонка `time-card`/`economy-preview`, элементы `news-row`/`market-event`, текст в `shop-card`/`employee-card`/`task-card`/`live-game`, заголовочный блок `section-head`) — `gap: 4px`.
-- Сбросил `eyebrow { margin-bottom: 5px }` в местах, где появился родительский `gap`, чтобы не было «двойного» отступа.
-- Инпут названия игры (`.project-name`) был «голым» 28-пиксельным полем без рамки — добавил padding, фон, бордюр и фокус-стейт.
-- Нижний навигатор с 6 русскими лейблами теперь корректно сжимается на 340–400 px и обрезает overflow вместо вытеснения иконок.
-- Подкрутил `padding`/`line-height` в `daily-card`, `offline-toast`, `onboarding-card`, `tutorial-banner`, `ledger-row`, `stat-card`, `chip`.
-- Убавил плотность halftone-узора (`::after { opacity: .1 }`), он перегружал текст.
-- Поправил контраст `focus-visible` (был еле виден на жёлтом).
-- Поставил `z-index` на `.comic-card::after`, чтобы наложение точно не перехватывало клики.
+Then upload the fresh `dist/` folder to Cloudflare Pages.
 
-## Что в v0.6 (для контекста)
+### Backend / Render
 
-- Игровое время замедлено: 1 игровой день ≈ 18 секунд реального времени.
-- Оценки стали менее предсказуемыми: шире RNG критиков, сильнее влияние желаний аудитории и глобальных событий.
-- У сотрудников появился найм/увольнение.
-- Добавлены уровни студии 1–4 (LVL 1: 0 слотов; LVL 2: 3; LVL 3: 7; LVL 4: 11).
-- Апгрейды студии — за монеты. LVL 4 рассчитан как долгий F2P-рубеж (~30 реальных дней без доната).
-- Банкротство: баланс может уйти до −50 000 монет, через месяц без зарплат уходит команда, ещё через месяц обнуляется рейтинг.
-- «Желания месяца» теперь показывают только рекомендуемые жанр и сеттинг, без подсказок по фокусу.
-- Глобальные события рынка: 8 позитивных и 8 негативных, длятся 60 игровых дней.
+Render runs the backend from `server/`:
 
-## Запуск
+```bash
+cd server
+npm install
+npm start
+```
+
+Use Render Manual Deploy after backend changes. The start command runs:
+
+```bash
+node --import ./server-hardening.js index.js
+```
+
+## Local development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Откроется на `http://localhost:5173`.
+The frontend opens on `http://localhost:5173`.
 
-## Проверка
+For backend development:
 
 ```bash
-npm run lint   # tsc --noEmit
+cd server
+npm install
+npm start
+```
+
+## Checks
+
+```bash
+npm run lint
 npm run build
 npm audit --omit=dev
+cd server && npm audit --omit=dev
 ```
+
+## Notes for future audits
+
+- `dist/` is intentionally present while Cloudflare Pages is deployed by manual upload. Do not change frontend source without rebuilding `dist`.
+- The minified frontend bundle is not a security boundary. Game logic, endpoint names and constants are visible to users.
+- If Cloudflare build-from-source is enabled later, move `dist/` into `.gitignore` and remove it from version control.
+- Render free plan cold starts can delay backend responses; save conflict handling should continue to prefer backend-authoritative wallet/economy state.
