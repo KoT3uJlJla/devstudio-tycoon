@@ -188,6 +188,12 @@ export function registerStarsPaymentRoutes(app, deps) {
     }
   });
 
+  app.get("/api/stars/reconcile", deps.requireTelegramUser, async (req, res) => {
+    const data = await reconcilePaidInvoiceRewards(deps, req.telegramUser);
+    const save = data ? { data, updatedAt: new Date() } : await deps.getSave(req.telegramUser.id);
+    res.json({ ok: true, save: save?.data ? { data: save.data, updatedAt: save.updatedAt || null } : null });
+  });
+
   app.get("/api/stars/invoice/:invoiceId", deps.requireTelegramUser, async (req, res) => {
     const invoice = await deps.db.collection("stars_invoices").findOne({ invoiceId: String(req.params.invoiceId || ""), telegramId: req.telegramUser.id });
     if (!invoice) return res.status(404).json({ ok: false, error: "invoice_not_found" });
