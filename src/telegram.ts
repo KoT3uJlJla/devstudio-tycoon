@@ -43,19 +43,30 @@ declare global {
   }
 }
 
+function safeTelegramCall(callback: () => void) {
+  try {
+    callback();
+  } catch {
+    // Telegram WebView methods are best-effort. They must never block game startup.
+  }
+}
+
 export function initTelegram() {
   const webApp = window.Telegram?.WebApp;
-  webApp?.ready?.();
-  webApp?.expand?.();
-  webApp?.setHeaderColor?.('#070811');
-  webApp?.setBackgroundColor?.('#070811');
-  webApp?.enableClosingConfirmation?.();
+  if (!webApp) return;
+  safeTelegramCall(() => webApp.ready?.());
+  safeTelegramCall(() => webApp.expand?.());
+  safeTelegramCall(() => webApp.setHeaderColor?.('#070811'));
+  safeTelegramCall(() => webApp.setBackgroundColor?.('#070811'));
+  safeTelegramCall(() => webApp.enableClosingConfirmation?.());
 }
 
 export function haptic(type: 'tap' | 'success' | 'warning' = 'tap') {
-  if (type === 'tap') window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light');
-  if (type === 'success') window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
-  if (type === 'warning') window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
+  safeTelegramCall(() => {
+    if (type === 'tap') window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light');
+    if (type === 'success') window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
+    if (type === 'warning') window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
+  });
 }
 
 export type SharePayload = {
@@ -69,15 +80,13 @@ export function shareRelease(text: string, payload: SharePayload = {}) {
   const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/devstudio_bot');
   const url = `https://t.me/share/url?url=${shareUrl}&text=${safeText}`;
 
-  // Подготовлено под будущий шеринг картинок: когда появится публичная картинка,
-  // достаточно передать imageUrl. В Telegram Mini Apps она сможет уйти в Story.
   if (payload.imageUrl && window.Telegram?.WebApp?.shareToStory) {
-    window.Telegram.WebApp.shareToStory(payload.imageUrl, { text: payload.storyText ?? text.slice(0, 180) });
+    safeTelegramCall(() => window.Telegram?.WebApp?.shareToStory?.(payload.imageUrl!, { text: payload.storyText ?? text.slice(0, 180) }));
     return;
   }
 
   if (window.Telegram?.WebApp?.openTelegramLink) {
-    window.Telegram.WebApp.openTelegramLink(url);
+    safeTelegramCall(() => window.Telegram?.WebApp?.openTelegramLink?.(url));
     return;
   }
   window.open(url, '_blank', 'noopener,noreferrer');
