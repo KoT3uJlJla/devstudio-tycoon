@@ -3,7 +3,7 @@ function parseNumber(value: string | null | undefined) {
   return match ? Number(match[0]) : Number.NaN;
 }
 
-function textOf(element: Element | null) {
+function textOf(element: Element | null | undefined) {
   return element?.textContent?.trim() ?? '';
 }
 
