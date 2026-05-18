@@ -10,12 +10,21 @@ type EconomyPayload = {
   economy?: { stars?: number };
 };
 
+type InvoicePayload = {
+  ok?: boolean;
+  error?: string;
+  invoiceLink?: string;
+  invoice?: { invoiceId?: string; status?: string };
+  save?: { data?: unknown };
+};
+
 type TelegramPopupWebApp = {
   showPopup?: (params: {
     title?: string;
     message: string;
     buttons?: Array<{ type: 'ok' | 'close' | 'cancel' | 'default' | 'destructive'; text?: string; id?: string }>;
   }) => void;
+  openInvoice?: (url: string, callback?: (status: string) => void) => void;
 };
 
 const SHOP_ITEM_BY_TITLE: Record<string, string> = {
@@ -45,7 +54,7 @@ function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
-function persistServerSave(payload: EconomyPayload) {
+function persistServerSave(payload: EconomyPayload | InvoicePayload) {
   const data = payload?.save?.data;
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   try {
@@ -60,11 +69,7 @@ function showEconomyNotice(message: string) {
   const webApp = window.Telegram?.WebApp as TelegramPopupWebApp | undefined;
   try {
     if (webApp?.showPopup) {
-      webApp.showPopup({
-        title: 'Магазин студии',
-        message,
-        buttons: [{ type: 'ok' }],
-      });
+      webApp.showPopup({ title: 'Магазин студии', message, buttons: [{ type: 'ok' }] });
       return;
     }
   } catch {
@@ -73,12 +78,12 @@ function showEconomyNotice(message: string) {
   window.alert(message);
 }
 
-async function postEconomyAction(endpoint: EconomyEndpoint, body: Record<string, unknown> = {}) {
+async function postJson<T>(url: string, body: Record<string, unknown> = {}, timeoutMs = 4500): Promise<T> {
   if (!canUseBackendEconomy()) throw new Error('backend_economy_unavailable');
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 4500);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${API_URL}/api/economy/${endpoint}`, {
+    const response = await fetch(url, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -87,20 +92,71 @@ async function postEconomyAction(endpoint: EconomyEndpoint, body: Record<string,
       },
       body: JSON.stringify(body),
     });
-    const payload = await response.json().catch(() => null) as EconomyPayload | null;
-    if (!response.ok || !payload?.ok) {
-      const error = payload?.error || `backend_economy_failed:${endpoint}`;
-      throw new Error(error);
-    }
-    persistServerSave(payload);
+    const payload = await response.json().catch(() => null) as T & { ok?: boolean; error?: string } | null;
+    if (!response.ok || !payload?.ok) throw new Error(payload?.error || `request_failed:${url}`);
     return payload;
   } finally {
     window.clearTimeout(timer);
   }
 }
 
+async function getInvoiceStatus(invoiceId: string): Promise<InvoicePayload> {
+  const response = await fetch(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, {
+    headers: { Authorization: `tma ${telegramInitData()}` },
+  });
+  const payload = await response.json().catch(() => null) as InvoicePayload | null;
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'invoice_status_failed');
+  persistServerSave(payload);
+  return payload;
+}
+
+async function postEconomyAction(endpoint: EconomyEndpoint, body: Record<string, unknown> = {}) {
+  const payload = await postJson<EconomyPayload>(`${API_URL}/api/economy/${endpoint}`, body);
+  persistServerSave(payload);
+  return payload;
+}
+
+async function createStarsInvoice(itemId: string) {
+  return postJson<InvoicePayload>(`${API_URL}/api/stars/invoice`, { itemId }, 6500);
+}
+
 function refreshAfterServerState() {
   window.setTimeout(() => window.location.reload(), 120);
+}
+
+async function waitForPaidInvoice(invoiceId: string) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    const status = await getInvoiceStatus(invoiceId).catch(() => null);
+    if (status?.invoice?.status === 'paid') {
+      refreshAfterServerState();
+      return true;
+    }
+  }
+  return false;
+}
+
+async function openStarsInvoice(itemId: string) {
+  const webApp = window.Telegram?.WebApp as TelegramPopupWebApp | undefined;
+  if (!webApp?.openInvoice) {
+    showEconomyNotice('Оплата Telegram Stars доступна только внутри Telegram Mini App.');
+    return;
+  }
+  const invoicePayload = await createStarsInvoice(itemId);
+  const invoiceLink = invoicePayload.invoiceLink;
+  const invoiceId = invoicePayload.invoice?.invoiceId;
+  if (!invoiceLink || !invoiceId) throw new Error('invoice_create_failed');
+
+  webApp.openInvoice(invoiceLink, (status) => {
+    if (status === 'paid') {
+      void waitForPaidInvoice(invoiceId).then((success) => {
+        if (!success) showEconomyNotice('Оплата прошла, но награда ещё подтверждается сервером. Закрой и открой игру через несколько секунд.');
+      });
+      return;
+    }
+    if (status === 'cancelled') showEconomyNotice('Оплата отменена. Товар не выдан.');
+    if (status === 'failed') showEconomyNotice('Оплата не прошла. Товар не выдан.');
+  });
 }
 
 function attachEconomyAction(
@@ -131,8 +187,10 @@ function attachEconomyAction(
       refreshAfterServerState();
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
-      if (message.includes('not_enough_stars')) {
-        showEconomyNotice('Не хватает игровых ⭐. Покупка за баланс Telegram Stars будет подключена следующим патчем через invoice. Сейчас товар не выдан.');
+      if (message.includes('not_enough_stars') && endpoint === 'shop/purchase' && typeof body.itemId === 'string') {
+        await openStarsInvoice(body.itemId);
+      } else if (message.includes('not_enough_stars')) {
+        showEconomyNotice('Не хватает игровых ⭐. Для этого действия пока нельзя открыть оплату Telegram Stars.');
       } else if (message.includes('daily_already_claimed')) {
         showEconomyNotice('Ежедневная награда уже получена сегодня.');
       } else if (message.includes('milestone_not_ready')) {
