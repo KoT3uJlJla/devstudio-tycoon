@@ -9,6 +9,10 @@ type ResearchPayload = {
   save?: { data?: unknown };
 };
 
+type TelegramPopupApi = {
+  showPopup?: (params: { title?: string; message: string; buttons?: Array<{ type: string; text?: string }> }) => void;
+};
+
 const RESEARCH_BY_TITLE = new Map(researchNodes.map((node) => [node.title, node.id]));
 
 function initData() {
@@ -31,7 +35,8 @@ function persistSave(data: unknown) {
 
 function notice(message: string) {
   try {
-    window.Telegram?.WebApp?.showPopup?.({ title: 'Исследования', message, buttons: [{ type: 'ok' }] });
+    const webApp = window.Telegram?.WebApp as TelegramPopupApi | undefined;
+    webApp?.showPopup?.({ title: 'Исследования', message, buttons: [{ type: 'ok' }] });
     return;
   } catch {
     window.alert(message);
