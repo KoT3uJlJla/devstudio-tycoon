@@ -1,3 +1,5 @@
+import { applyVisibleBalanceFromSave } from './visible-balance-sync';
+
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
 const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.onrender.com';
 
@@ -67,5 +69,8 @@ export async function reconcileStartupSave() {
     9000,
   );
 
-  if (payload?.ok && payload.save?.data) persistSaveData(payload.save.data);
+  if (payload?.ok && payload.save?.data) {
+    persistSaveData(payload.save.data);
+    window.setTimeout(() => applyVisibleBalanceFromSave(payload.save?.data), 0);
+  }
 }
