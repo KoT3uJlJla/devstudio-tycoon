@@ -64,10 +64,11 @@ function quoteBand(score: number) {
 
 function replaceTextNode(node: Node) {
   if (node.nodeType !== Node.TEXT_NODE || !node.textContent) return;
-  node.textContent = node.textContent
+  const next = node.textContent
     .replace(/ПОЛИШ!/g, 'РАБОТА!')
     .replace(/Полиш/g, 'Работа')
     .replace(/полиш/g, 'работа');
+  if (next !== node.textContent) node.textContent = next;
 }
 
 function replacePolishWords(root: ParentNode = document) {
@@ -118,9 +119,19 @@ function applyGameplayPolish() {
   tuneReleaseQuotes();
 }
 
+let scheduled = false;
+function scheduleGameplayPolish() {
+  if (scheduled) return;
+  scheduled = true;
+  window.requestAnimationFrame(() => {
+    scheduled = false;
+    applyGameplayPolish();
+  });
+}
+
 export function installGameplayUiPolish() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   applyGameplayPolish();
-  const observer = new MutationObserver(applyGameplayPolish);
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  const observer = new MutationObserver(scheduleGameplayPolish);
+  observer.observe(document.body, { childList: true, subtree: true });
 }
