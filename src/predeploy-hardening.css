@@ -1,0 +1,180 @@
+/* Pre-deploy audit hardening: first-paint, skeletons and layout consistency. */
+:root {
+  --font-weight-heading: 950;
+  --font-weight-body: 650;
+  --font-weight-strong: 850;
+}
+
+body {
+  font-weight: var(--font-weight-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3,
+.boot-title,
+.project-name,
+.score-help-modal h3,
+.current-prize-card > strong,
+.big-score {
+  font-weight: var(--font-weight-heading) !important;
+  text-wrap: balance;
+}
+
+p, span, small, em, input, button,
+.muted, .small,
+.shop-card p,
+.employee-card .muted,
+.research-node span,
+.unlock-card span,
+.release-modal .muted,
+.onboarding-card p,
+.tutorial-banner p {
+  font-weight: var(--font-weight-body);
+}
+
+strong, b, .pill, .badge, .wallet span, .eyebrow,
+.dev-status-pill, .time-skip-button,
+.score-line span, .score-line b {
+  font-weight: var(--font-weight-strong);
+}
+
+.app-shell, .screen-card, .stack,
+.panel, .comic-card, .comic-panel,
+.shop-card, .employee-card, .research-node, .unlock-card,
+.release-modal, .onboarding-card, .tutorial-banner,
+.studio-upgrade, .news-panel, .bankruptcy-card {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.section-head, .brand-row, .compact-brand-row,
+.inline-actions, .dev-tools-row,
+.task-card, .live-game, .ledger-row,
+.leader-row, .release-archive-row,
+.shop-card, .employee-card {
+  min-width: 0;
+}
+
+.section-head > *, .brand-row > *, .compact-brand-row > *,
+.shop-card > *, .employee-card > *, .task-card > *,
+.live-game > *, .ledger-row > *, .leader-row > * {
+  min-width: 0;
+}
+
+.comic-card, .panel, .shop-card, .employee-card,
+.release-modal, .onboarding-card, .tutorial-banner,
+.studio-upgrade, .news-panel, .bankruptcy-card,
+.research-node, .unlock-card {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+button {
+  max-width: 100%;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+button:disabled,
+.backend-action-pending {
+  pointer-events: none;
+}
+
+.backend-action-pending::before {
+  content: '';
+  position: absolute;
+  inset: 8px auto auto 8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(29,247,255,.2);
+  animation: pending-dot .8s ease-in-out infinite alternate;
+}
+
+.skeleton-card {
+  min-height: 92px;
+  border-radius: 24px;
+  background: linear-gradient(100deg, rgba(255,255,255,.06), rgba(255,255,255,.15), rgba(255,255,255,.06));
+  background-size: 220% 100%;
+  animation: skeleton-sweep 1.2s ease-in-out infinite;
+}
+
+.loading {
+  min-height: 100dvh;
+  padding: 18px;
+  background: radial-gradient(circle at 12% 8%, rgba(255,59,189,.32), transparent 24%), radial-gradient(circle at 86% 6%, rgba(29,247,255,.28), transparent 22%), linear-gradient(145deg, #05060d, #151342 55%, #05060d);
+}
+
+.loading span {
+  max-width: min(100%, 420px);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.wallet span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-wallet {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-title-block h1,
+.topbar h1 {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.score-line {
+  min-height: 44px;
+}
+
+.score-line::after {
+  flex: 0 0 auto;
+}
+
+.modal-backdrop,
+.release-backdrop,
+.dev-event-backdrop,
+.nested-modal-backdrop {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 430px) {
+  .app-shell { padding-left: 12px; padding-right: 12px; }
+  .inline-actions { flex-wrap: wrap; }
+  .inline-actions > button { flex: 1 1 140px; }
+  .shop-card, .employee-card, .task-card, .live-game, .leader-row { grid-template-columns: 1fr; }
+  .employee-card .avatar { justify-self: start; }
+  .wallet span { padding-left: 5px; padding-right: 5px; }
+}
+
+@media (max-width: 360px) {
+  h2 { font-size: 24px; }
+  h3 { font-size: 17px; }
+  .compact-wallet { gap: 5px; }
+  .compact-wallet span { font-size: 10px; }
+  .bottom-nav { width: calc(100% - 12px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+@keyframes skeleton-sweep {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@keyframes pending-dot {
+  from { opacity: .45; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1.2); }
+}
