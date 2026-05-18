@@ -1,4 +1,5 @@
 import { applyOfflineReward, initialState, normalizeState } from './gameLogic';
+import { syncGlobalState } from './globalWorld';
 import type { GameState } from './types';
 
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
@@ -62,7 +63,7 @@ function parseSave(raw: string | null): GameState | null {
   }
   if (!isPlainObject(parsed)) return null;
   try {
-    return normalizeState(parsed as Partial<GameState>);
+    return syncGlobalState(normalizeState(parsed as Partial<GameState>));
   } catch {
     return null;
   }
@@ -81,7 +82,7 @@ async function loadServerSave(): Promise<GameState | null> {
   const rawSave = payload?.save?.data;
   if (!rawSave || !isPlainObject(rawSave)) return null;
   try {
-    return normalizeState(rawSave as Partial<GameState>);
+    return syncGlobalState(normalizeState(rawSave as Partial<GameState>));
   } catch {
     return null;
   }
@@ -99,10 +100,14 @@ async function saveServerState(state: GameState) {
   }).catch(() => undefined);
 }
 
+function finalizeLoadedState(state: GameState): GameState {
+  return syncGlobalState(applyOfflineReward(state));
+}
+
 export async function loadGame(): Promise<GameState> {
   const serverSave = await loadServerSave();
   if (serverSave) {
-    const state = applyOfflineReward(serverSave);
+    const state = finalizeLoadedState(serverSave);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
@@ -112,7 +117,7 @@ export async function loadGame(): Promise<GameState> {
   }
 
   const fromLocal = parseSave(localStorage.getItem(STORAGE_KEY));
-  if (fromLocal) return applyOfflineReward(fromLocal);
+  if (fromLocal) return finalizeLoadedState(fromLocal);
 
   const cloud = cloudStorage();
   if (cloud?.getItem) {
@@ -129,7 +134,7 @@ export async function loadGame(): Promise<GameState> {
     );
     const parsedCloud = parseSave(cloudSave);
     if (parsedCloud) {
-      const state = applyOfflineReward(parsedCloud);
+      const state = finalizeLoadedState(parsedCloud);
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch {
@@ -140,7 +145,7 @@ export async function loadGame(): Promise<GameState> {
     }
   }
 
-  return initialState;
+  return syncGlobalState(initialState);
 }
 
 let lastCloudWriteAt = 0;
@@ -196,7 +201,7 @@ function scheduleServerWrite(state: GameState) {
 }
 
 export function saveGame(state: GameState) {
-  const safeState = normalizeState({ ...state, lastSavedAt: Date.now() });
+  const safeState = syncGlobalState(normalizeState({ ...state, lastSavedAt: Date.now() }));
   let payload: string;
   try {
     payload = JSON.stringify(safeState);
