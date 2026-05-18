@@ -3,11 +3,11 @@ import cors from "cors";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import { MongoClient } from "mongodb";
+import { mergeServerDevelopment, normalizeServerDevelopment, publicDevelopmentStatus } from "./devAuthority.js";
 
 dotenv.config();
 
 const app = express();
-
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
@@ -20,7 +20,6 @@ if (!mongoUri) {
   console.error("MONGODB_URI не указан в .env / Environment Variables");
   process.exit(1);
 }
-
 if (!botToken) {
   console.error("BOT_TOKEN не указан в .env / Environment Variables");
   process.exit(1);
@@ -69,21 +68,14 @@ function safeTimingEqual(a, b) {
 }
 
 function validateTelegramInitData(initData) {
-  if (!initData || typeof initData !== "string") {
-    throw new Error("Нет Telegram initData");
-  }
-
+  if (!initData || typeof initData !== "string") throw new Error("Нет Telegram initData");
   const params = new URLSearchParams(initData);
   const hash = params.get("hash");
   if (!hash) throw new Error("В initData нет hash");
-
   const authDate = Number(params.get("auth_date") || 0);
   if (!authDate) throw new Error("В initData нет auth_date");
-
   const ageSeconds = Math.floor(Date.now() / 1000) - authDate;
-  if (ageSeconds > maxInitDataAgeSeconds) {
-    throw new Error("Telegram initData устарел");
-  }
+  if (ageSeconds > maxInitDataAgeSeconds) throw new Error("Telegram initData устарел");
 
   const dataCheckString = [...params.entries()]
     .filter(([key]) => key !== "hash")
@@ -91,23 +83,12 @@ function validateTelegramInitData(initData) {
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
 
-  const secretKey = crypto
-    .createHmac("sha256", "WebAppData")
-    .update(botToken)
-    .digest();
-
-  const calculatedHash = crypto
-    .createHmac("sha256", secretKey)
-    .update(dataCheckString)
-    .digest("hex");
-
-  if (!safeTimingEqual(calculatedHash, hash)) {
-    throw new Error("Неверная подпись Telegram initData");
-  }
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+  const calculatedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+  if (!safeTimingEqual(calculatedHash, hash)) throw new Error("Неверная подпись Telegram initData");
 
   const userRaw = params.get("user");
   if (!userRaw) throw new Error("В initData нет user");
-
   const user = JSON.parse(userRaw);
   if (!user?.id) throw new Error("В initData нет user.id");
 
@@ -123,13 +104,10 @@ function validateTelegramInitData(initData) {
 function requireTelegramUser(req, res, next) {
   try {
     const auth = req.get("authorization") || "";
-    const initData = auth.startsWith("tma ")
-      ? auth.slice(4)
-      : req.get("x-telegram-init-data");
-
+    const initData = auth.startsWith("tma ") ? auth.slice(4) : req.get("x-telegram-init-data");
     req.telegramUser = validateTelegramInitData(initData);
     next();
-  } catch (error) {
+  } catch {
     res.status(401).json({ ok: false, error: "telegram_auth_failed" });
   }
 }
@@ -189,23 +167,34 @@ function overlayProtectedEconomy(data, economy) {
   };
 }
 
-function publicSave(save, economy) {
-  if (!save) return null;
-  return {
-    data: overlayProtectedEconomy(save.data ?? null, economy),
-    updatedAt: save.updatedAt ?? null,
-  };
-}
-
 async function getSave(telegramId) {
   return db.collection("saves").findOne({ telegramId });
+}
+
+async function writeSave(telegramId, telegramUser, data) {
+  await db.collection("saves").updateOne(
+    { telegramId },
+    {
+      $set: { telegramId, telegramUser, data, updatedAt: new Date() },
+      $setOnInsert: { createdAt: new Date() },
+    },
+    { upsert: true },
+  );
+}
+
+async function getAuthoritativeSave(telegramUser, save, economy) {
+  if (!save) return null;
+  const normalizedData = overlayProtectedEconomy(normalizeServerDevelopment(save.data), economy);
+  if (JSON.stringify(normalizedData?.selectedProject ?? null) !== JSON.stringify(save.data?.selectedProject ?? null)) {
+    await writeSave(telegramUser.id, telegramUser, normalizedData);
+  }
+  return { data: normalizedData, updatedAt: save.updatedAt ?? null };
 }
 
 async function getOrCreateEconomy(telegramUser, saveData = null) {
   const telegramId = telegramUser.id;
   const existing = await db.collection("economy").findOne({ telegramId });
   if (existing) return existing;
-
   const now = new Date();
   const migratedStars = safeInt(saveData?.stars, 0, 9999999);
   const doc = {
@@ -224,7 +213,6 @@ async function getOrCreateEconomy(telegramUser, saveData = null) {
     createdAt: now,
     updatedAt: now,
   };
-
   await db.collection("economy").insertOne(doc);
   return doc;
 }
@@ -236,38 +224,30 @@ async function patchEconomy(telegramId, patch) {
 }
 
 function buildLedgerEntry(kind, amount, reason, meta = {}) {
-  return {
-    id: crypto.randomUUID(),
-    kind,
-    amount,
-    reason,
-    meta,
-    createdAt: new Date(),
-  };
+  return { id: crypto.randomUUID(), kind, amount, reason, meta, createdAt: new Date() };
 }
 
 async function grantStars(economy, amount, reason, meta = {}) {
   const safeAmount = safeInt(amount, 0, 100000);
   if (!safeAmount) return economy;
-  const entry = buildLedgerEntry("star_grant", safeAmount, reason, meta);
   return patchEconomy(economy.telegramId, {
     $inc: { stars: safeAmount },
-    $push: { ledger: { $each: [entry], $slice: -80 } },
+    $push: { ledger: { $each: [buildLedgerEntry("star_grant", safeAmount, reason, meta)], $slice: -80 } },
   });
 }
 
 async function spendStars(economy, amount, reason, meta = {}) {
   const safeAmount = safeInt(amount, 1, 100000);
-  const result = await db.collection("economy").findOneAndUpdate(
+  const updated = await db.collection("economy").findOneAndUpdate(
     { telegramId: economy.telegramId, stars: { $gte: safeAmount } },
     {
       $inc: { stars: -safeAmount },
       $push: { ledger: { $each: [buildLedgerEntry("star_spend", -safeAmount, reason, meta)], $slice: -80 } },
       $set: { updatedAt: new Date() },
     },
-    { returnDocument: "after" }
+    { returnDocument: "after" },
   );
-  return result || result?.value || null;
+  return updated || updated?.value || null;
 }
 
 function ratingBreakdownFromSave(data) {
@@ -275,9 +255,7 @@ function ratingBreakdownFromSave(data) {
   const releaseHistory = Array.isArray(data?.releaseHistory) ? data.releaseHistory : [];
   const activeGames = Array.isArray(data?.activeGames) ? data.activeGames : [];
   const unlockedResearchIds = Array.isArray(data?.unlockedResearchIds) ? data.unlockedResearchIds : [];
-  const recent = releaseHistory
-    .filter((entry) => currentDay - safeInt(entry?.day, 0, 999999) <= 7)
-    .slice(-5);
+  const recent = releaseHistory.filter((entry) => currentDay - safeInt(entry?.day, 0, 999999) <= 7).slice(-5);
   const bestRecent = recent.reduce((best, entry) => Math.max(best, clampNumber(entry?.score, 0, 10)), 0);
   const avgRecent = recent.length ? recent.reduce((sum, entry) => sum + clampNumber(entry?.score, 0, 10), 0) / recent.length : 0;
   const activeRevenue = Math.min(9000, activeGames.reduce((sum, game) => sum + safeInt(game?.totalEarned, 0), 0) / 16);
@@ -310,16 +288,7 @@ async function upsertRating(telegramUser, saveData) {
   const breakdown = ratingBreakdownFromSave(saveData);
   const displayName = sanitizeText(saveData?.studioName || telegramUser.username || telegramUser.firstName || `Игрок ${telegramUser.id}`, "Игрок");
   const bestTitle = sanitizeText(saveData?.latestRelease?.projectName || saveData?.releaseHistory?.slice?.(-1)?.[0]?.title || "Твоя лучшая игра", "Твоя лучшая игра");
-  const doc = {
-    telegramId: telegramUser.id,
-    telegramUser,
-    weekKey: currentWeek,
-    displayName,
-    bestTitle,
-    score: breakdown.total,
-    breakdown: breakdown.items,
-    updatedAt: new Date(),
-  };
+  const doc = { telegramId: telegramUser.id, telegramUser, weekKey: currentWeek, displayName, bestTitle, score: breakdown.total, breakdown: breakdown.items, updatedAt: new Date() };
   await db.collection("ratings").updateOne({ telegramId: telegramUser.id, weekKey: currentWeek }, { $set: doc, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
   await db.collection("economy").updateOne({ telegramId: telegramUser.id }, { $set: { lastRating: { weekKey: currentWeek, score: breakdown.total, updatedAt: new Date() } } });
   return doc;
@@ -327,30 +296,17 @@ async function upsertRating(telegramUser, saveData) {
 
 async function leaderboardForCurrentWeek() {
   const currentWeek = weekKey();
-  const rows = await db.collection("ratings")
-    .find({ weekKey: currentWeek })
-    .sort({ score: -1, updatedAt: 1 })
-    .limit(10)
-    .toArray();
-  return rows.map((row, index) => ({
-    place: index + 1,
-    telegramId: row.telegramId,
-    displayName: row.displayName,
-    bestTitle: row.bestTitle,
-    score: row.score,
-    prize: PRIZE_DISTRIBUTION[index] || null,
-  }));
+  const rows = await db.collection("ratings").find({ weekKey: currentWeek }).sort({ score: -1, updatedAt: 1 }).limit(10).toArray();
+  return rows.map((row, index) => ({ place: index + 1, telegramId: row.telegramId, displayName: row.displayName, bestTitle: row.bestTitle, score: row.score, prize: PRIZE_DISTRIBUTION[index] || null }));
 }
 
 async function syncEconomyFromIncomingSave(telegramUser, incomingData, previousData) {
   let economy = await getOrCreateEconomy(telegramUser, previousData || incomingData);
   const today = todayKey();
-
   if (incomingData?.dailyClaimedAt === today && economy.dailyClaimedAt !== today) {
     economy = await grantStars(economy, 1, "daily_login", { day: today });
     economy = await patchEconomy(economy.telegramId, { $set: { dailyClaimedAt: today } });
   }
-
   const workTaskKey = `${today}:work`;
   const dailyTaskClaims = isPlainObject(incomingData?.dailyTaskClaims) ? incomingData.dailyTaskClaims : {};
   const starTaskClaims = isPlainObject(economy.dailyTaskStarClaims) ? economy.dailyTaskStarClaims : {};
@@ -358,17 +314,14 @@ async function syncEconomyFromIncomingSave(telegramUser, incomingData, previousD
     economy = await grantStars(economy, 1, "daily_task_work", { key: workTaskKey });
     economy = await patchEconomy(economy.telegramId, { $set: { [`dailyTaskStarClaims.${workTaskKey}`]: true } });
   }
-
   if (incomingData?.tutorialRewardClaimed && !economy.tutorialStarClaimed) {
     economy = await grantStars(economy, 1, "tutorial_release", {});
     economy = await patchEconomy(economy.telegramId, { $set: { tutorialStarClaimed: true } });
   }
-
   if (incomingData?.gamesReleased > 0) {
     await upsertRating(telegramUser, incomingData);
     economy = await db.collection("economy").findOne({ telegramId: telegramUser.id });
   }
-
   return economy;
 }
 
@@ -383,7 +336,7 @@ function applyRewardToSaveData(data, reward) {
     next.dailyResearchUnlocked = safeInt(next.dailyResearchUnlocked, 0) + 1;
   }
   next.lastSavedAt = Date.now();
-  return next;
+  return normalizeServerDevelopment(next);
 }
 
 async function start() {
@@ -394,50 +347,36 @@ async function start() {
   await db.collection("ratings").createIndex({ weekKey: 1, score: -1 });
   await db.collection("ratings").createIndex({ telegramId: 1, weekKey: 1 }, { unique: true });
 
-  app.get("/health", (req, res) => {
-    res.json({ ok: true });
-  });
-
-  app.get("/api/me", requireTelegramUser, (req, res) => {
-    res.json({ ok: true, user: req.telegramUser });
-  });
+  app.get("/health", (req, res) => res.json({ ok: true }));
+  app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));
 
   app.get("/api/save", requireTelegramUser, async (req, res) => {
-    const telegramId = req.telegramUser.id;
-    const save = await getSave(telegramId);
+    const save = await getSave(req.telegramUser.id);
     const economy = await getOrCreateEconomy(req.telegramUser, save?.data);
-    res.json({ ok: true, save: publicSave(save, economy), economy: publicEconomy(economy) });
+    res.json({ ok: true, save: await getAuthoritativeSave(req.telegramUser, save, economy), economy: publicEconomy(economy), development: save?.data ? publicDevelopmentStatus(save.data) : null });
   });
 
   app.post("/api/save", requireTelegramUser, async (req, res) => {
     const telegramId = req.telegramUser.id;
     const data = req.body;
-
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      return res.status(400).json({ ok: false, error: "invalid_save_payload" });
-    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) return res.status(400).json({ ok: false, error: "invalid_save_payload" });
 
     const previousSave = await getSave(telegramId);
-    const economy = await syncEconomyFromIncomingSave(req.telegramUser, data, previousSave?.data);
-    const protectedData = overlayProtectedEconomy(data, economy);
+    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);
+    const authoritativeData = normalizeServerDevelopment(mergedDevelopment, previousSave?.data);
+    const economy = await syncEconomyFromIncomingSave(req.telegramUser, authoritativeData, previousSave?.data);
+    const protectedData = overlayProtectedEconomy(authoritativeData, economy);
+    await writeSave(telegramId, req.telegramUser, protectedData);
+    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData) });
+  });
 
-    await db.collection("saves").updateOne(
-      { telegramId },
-      {
-        $set: {
-          telegramId,
-          telegramUser: req.telegramUser,
-          data: protectedData,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: {
-          createdAt: new Date(),
-        },
-      },
-      { upsert: true }
-    );
-
-    res.json({ ok: true, economy: publicEconomy(economy) });
+  app.get("/api/development/status", requireTelegramUser, async (req, res) => {
+    const save = await getSave(req.telegramUser.id);
+    if (!save?.data) return res.json({ ok: true, development: publicDevelopmentStatus(null) });
+    const economy = await getOrCreateEconomy(req.telegramUser, save.data);
+    const authoritative = overlayProtectedEconomy(normalizeServerDevelopment(save.data), economy);
+    await writeSave(req.telegramUser.id, req.telegramUser, authoritative);
+    res.json({ ok: true, development: publicDevelopmentStatus(authoritative), save: { data: authoritative, updatedAt: new Date() } });
   });
 
   app.delete("/api/save", requireTelegramUser, async (req, res) => {
@@ -459,13 +398,11 @@ async function start() {
     const save = await getSave(req.telegramUser.id);
     let economy = await getOrCreateEconomy(req.telegramUser, save?.data);
     const today = todayKey();
-    if (economy.dailyClaimedAt === today) {
-      return res.status(409).json({ ok: false, error: "daily_already_claimed", economy: publicEconomy(economy) });
-    }
+    if (economy.dailyClaimedAt === today) return res.status(409).json({ ok: false, error: "daily_already_claimed", economy: publicEconomy(economy) });
     economy = await grantStars(economy, 1, "daily_login", { day: today });
     economy = await patchEconomy(economy.telegramId, { $set: { dailyClaimedAt: today } });
     const nextData = overlayProtectedEconomy(applyRewardToSaveData(save?.data, { coins: 500 }), economy);
-    await db.collection("saves").updateOne({ telegramId: req.telegramUser.id }, { $set: { data: nextData, updatedAt: new Date() }, $setOnInsert: { telegramId: req.telegramUser.id, telegramUser: req.telegramUser, createdAt: new Date() } }, { upsert: true });
+    await writeSave(req.telegramUser.id, req.telegramUser, nextData);
     res.json({ ok: true, economy: publicEconomy(economy), reward: { stars: 1, coins: 500 } });
   });
 
@@ -475,8 +412,7 @@ async function start() {
     const economy = await getOrCreateEconomy(req.telegramUser, save?.data);
     const updated = await spendStars(economy, amount, reason || "manual_spend", {});
     if (!updated) return res.status(402).json({ ok: false, error: "not_enough_stars", economy: publicEconomy(economy) });
-    const nextData = overlayProtectedEconomy(save?.data, updated);
-    if (save?.data) await db.collection("saves").updateOne({ telegramId: req.telegramUser.id }, { $set: { data: nextData, updatedAt: new Date() } });
+    if (save?.data) await writeSave(req.telegramUser.id, req.telegramUser, overlayProtectedEconomy(normalizeServerDevelopment(save.data), updated));
     res.json({ ok: true, economy: publicEconomy(updated) });
   });
 
@@ -489,8 +425,8 @@ async function start() {
     const updated = await spendStars(economy, item.costStars, `shop:${itemId}`, { itemId, title: item.title });
     if (!updated) return res.status(402).json({ ok: false, error: "not_enough_stars", economy: publicEconomy(economy) });
     const nextData = overlayProtectedEconomy(applyRewardToSaveData(save?.data, item.reward), updated);
-    await db.collection("saves").updateOne({ telegramId: req.telegramUser.id }, { $set: { data: nextData, updatedAt: new Date() }, $setOnInsert: { telegramId: req.telegramUser.id, telegramUser: req.telegramUser, createdAt: new Date() } }, { upsert: true });
-    res.json({ ok: true, economy: publicEconomy(updated), item: { id: itemId, title: item.title, costStars: item.costStars, reward: item.reward }, save: publicSave({ data: nextData, updatedAt: new Date() }, updated) });
+    await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+    res.json({ ok: true, economy: publicEconomy(updated), item: { id: itemId, title: item.title, costStars: item.costStars, reward: item.reward }, save: { data: nextData, updatedAt: new Date() } });
   });
 
   app.post("/api/economy/referral/claim", requireTelegramUser, async (req, res) => {
@@ -504,13 +440,13 @@ async function start() {
     if (safeInt(economy.qualifiedReferrals, 0) < milestone.target) return res.status(403).json({ ok: false, error: "milestone_not_ready", economy: publicEconomy(economy) });
     economy = await patchEconomy(economy.telegramId, { $set: { [`referralMilestoneClaims.${milestoneId}`]: true } });
     const nextData = overlayProtectedEconomy(applyRewardToSaveData(save?.data, milestone.reward), economy);
-    await db.collection("saves").updateOne({ telegramId: req.telegramUser.id }, { $set: { data: nextData, updatedAt: new Date() } });
-    res.json({ ok: true, economy: publicEconomy(economy), reward: milestone.reward, save: publicSave({ data: nextData, updatedAt: new Date() }, economy) });
+    await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+    res.json({ ok: true, economy: publicEconomy(economy), reward: milestone.reward, save: { data: nextData, updatedAt: new Date() } });
   });
 
   app.post("/api/economy/rating/submit", requireTelegramUser, async (req, res) => {
     const save = await getSave(req.telegramUser.id);
-    const data = isPlainObject(req.body?.state) ? req.body.state : save?.data;
+    const data = normalizeServerDevelopment(isPlainObject(req.body?.state) ? req.body.state : save?.data);
     if (!data) return res.status(400).json({ ok: false, error: "missing_state" });
     const rating = await upsertRating(req.telegramUser, data);
     const leaderboard = await leaderboardForCurrentWeek();
@@ -536,10 +472,7 @@ async function start() {
   });
 
   const port = process.env.PORT || 3000;
-
-  app.listen(port, () => {
-    console.log(`Backend запущен: http://localhost:${port}`);
-  });
+  app.listen(port, () => console.log(`Backend запущен: http://localhost:${port}`));
 }
 
 start().catch((error) => {
