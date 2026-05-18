@@ -218,7 +218,7 @@ function restrictedCors(options = {}) {
         callback(null, true);
         return;
       }
-      callback(new Error(`CORS origin blocked: ${origin}`));
+      callback(null, false);
     },
     credentials: false,
   });
