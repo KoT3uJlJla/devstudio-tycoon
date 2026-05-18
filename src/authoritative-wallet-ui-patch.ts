@@ -31,10 +31,14 @@ function walletFromPayload(payload: WalletPayload): WalletState | null {
     ? saveData as Record<string, unknown>
     : null;
   if (!payload.ok || (!saveObject && !payload.economy)) return null;
+
+  // Do not use Math.max here. Coins/RP are spendable resources, so the lower
+  // value after a purchase is the correct value. The old max() resurrected old
+  // balances and made coin/RP spending look broken.
   return {
-    coins: Math.max(safeNumber(payload.economy?.coins), safeNumber(saveObject?.coins)),
-    rp: Math.max(safeNumber(payload.economy?.rp), safeNumber(saveObject?.rp)),
-    stars: Math.max(safeNumber(payload.economy?.stars), safeNumber(saveObject?.stars)),
+    coins: saveObject ? safeNumber(saveObject.coins) : safeNumber(payload.economy?.coins),
+    rp: saveObject ? safeNumber(saveObject.rp) : safeNumber(payload.economy?.rp),
+    stars: payload.economy?.stars !== undefined ? safeNumber(payload.economy.stars) : safeNumber(saveObject?.stars),
     rawSave: saveData,
   };
 }
@@ -92,10 +96,25 @@ async function refreshWalletFromBackend() {
   }
 }
 
+function applyServerSaveEvent(event: Event) {
+  const data = (event as CustomEvent<{ data?: unknown }>).detail?.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+  const saveObject = data as Record<string, unknown>;
+  latestWallet = {
+    coins: safeNumber(saveObject.coins),
+    rp: safeNumber(saveObject.rp),
+    stars: safeNumber(saveObject.stars),
+    rawSave: data,
+  };
+  persistWallet(latestWallet);
+  applyWalletToDom(latestWallet);
+}
+
 export function installAuthoritativeWalletUiPatch() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  window.addEventListener('devstudio:server-save', applyServerSaveEvent);
   void refreshWalletFromBackend();
-  window.setInterval(refreshWalletFromBackend, 2000);
+  window.setInterval(refreshWalletFromBackend, 5000);
   window.setInterval(() => {
     if (latestWallet) applyWalletToDom(latestWallet);
   }, 250);
