@@ -1,3 +1,6 @@
+const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
+const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.onrender.com';
+
 const releaseCommentPool = [
   'Смелая идея, и она почти сработала.',
   'Есть шероховатости, но характер чувствуется.',
@@ -103,6 +106,12 @@ const releaseCommentPool = [
   'Проект оставляет ощущение движения вперёд.',
 ];
 
+type SaveObject = Record<string, unknown>;
+
+let activeDevelopmentAutosaveTimer: number | null = null;
+let lifecycleAutosaveInstalled = false;
+let lastAutosavedProgress = -1;
+
 function parseNumber(value: string | null | undefined) {
   const match = String(value ?? '').replace(',', '.').match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : Number.NaN;
@@ -124,6 +133,92 @@ function randomIndex(length: number) {
 
 function randomReleaseComment() {
   return releaseCommentPool[randomIndex(releaseCommentPool.length)] ?? releaseCommentPool[0];
+}
+
+function telegramInitData() {
+  return window.Telegram?.WebApp?.initData || '';
+}
+
+function readLocalSave(): SaveObject | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as SaveObject : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalAndServer(save: SaveObject, keepalive = false) {
+  const nextSave = { ...save, lastSavedAt: Date.now() };
+  const payload = JSON.stringify(nextSave);
+  localStorage.setItem(STORAGE_KEY, payload);
+  const initData = telegramInitData();
+  if (!initData) return;
+  void fetch(`${API_URL}/api/save`, {
+    method: 'POST',
+    keepalive,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `tma ${initData}`,
+    },
+    body: payload,
+  }).catch(() => undefined);
+}
+
+function readActiveDevelopmentProgress() {
+  const activeDevelopment = document.querySelector<HTMLElement>('.active-dev');
+  if (!activeDevelopment) return Number.NaN;
+  const label = activeDevelopment.querySelector<HTMLElement>('.progress-labeled b')
+    ?? activeDevelopment.querySelector<HTMLElement>('.progress b')
+    ?? activeDevelopment.querySelector<HTMLElement>('.active-progress-fx b');
+  const progress = parseNumber(textOf(label));
+  return Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : Number.NaN;
+}
+
+function persistActiveDevelopmentProgress(keepalive = false) {
+  const progress = readActiveDevelopmentProgress();
+  if (!Number.isFinite(progress) || progress <= 0 || progress === lastAutosavedProgress) return;
+  const save = readLocalSave();
+  const selectedProject = save?.selectedProject;
+  if (!save || !selectedProject || typeof selectedProject !== 'object' || Array.isArray(selectedProject)) return;
+
+  const project = selectedProject as SaveObject;
+  const previousProgress = Math.max(0, Number(project.progress) || 0);
+  const nextProgress = Math.max(previousProgress, progress);
+  if (nextProgress === previousProgress && Number(project.startedAt)) return;
+
+  const durationSeconds = Math.max(1, Number(project.durationSeconds) || 180);
+  const now = Date.now();
+  const fallbackStartedAt = Math.round(now - (nextProgress / 100) * durationSeconds * 1000);
+  const startedAt = Number(project.startedAt) || fallbackStartedAt;
+
+  const nextProject = {
+    ...project,
+    progress: nextProgress,
+    startedAt,
+  };
+
+  saveLocalAndServer({
+    ...save,
+    selectedProject: nextProject,
+  }, keepalive);
+  lastAutosavedProgress = nextProgress;
+}
+
+function startActiveDevelopmentAutosave() {
+  if (activeDevelopmentAutosaveTimer !== null) return;
+  activeDevelopmentAutosaveTimer = window.setInterval(() => persistActiveDevelopmentProgress(false), 2500);
+  if (!lifecycleAutosaveInstalled) {
+    lifecycleAutosaveInstalled = true;
+    const flush = () => persistActiveDevelopmentProgress(true);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+  }
 }
 
 function walletCoinTextNode() {
@@ -273,6 +368,7 @@ function applyPatch() {
 export function installReleaseUiPatch() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   applyPatch();
+  startActiveDevelopmentAutosave();
   const observer = new MutationObserver(() => applyPatch());
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 }
