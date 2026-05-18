@@ -100,29 +100,43 @@ function markInvoiceApplied(data, invoice, reward) {
 function itemIdFromLedgerEntry(entry) {
   const reason = String(entry?.reason || "");
   if (reason.startsWith("invoice:")) return reason.slice("invoice:".length);
+  if (reason.startsWith("shop:")) return reason.slice("shop:".length);
   return "";
 }
 
+function addRewardTotals(totals, reward) {
+  totals.coins += safeInt(reward?.coins, 0);
+  totals.rp += safeInt(reward?.rp, 0);
+}
+
 function rewardTotalsFromPaidSources(deps, invoices, economy) {
-  const totals = { coins: 0, rp: 0, invoiceIds: new Set() };
+  const totals = { coins: 0, rp: 0, invoiceIds: new Set(), shopLedgerIds: new Set() };
 
   for (const invoice of invoices) {
     const reward = deps.SHOP_ITEMS[invoice.itemId]?.reward || {};
-    totals.coins += safeInt(reward.coins, 0);
-    totals.rp += safeInt(reward.rp, 0);
+    addRewardTotals(totals, reward);
     if (invoice.invoiceId) totals.invoiceIds.add(String(invoice.invoiceId));
   }
 
   const ledger = Array.isArray(economy?.ledger) ? economy.ledger : [];
   for (const entry of ledger) {
-    if (entry?.kind !== "telegram_stars_payment") continue;
+    const kind = String(entry?.kind || "");
     const invoiceId = String(entry?.meta?.invoiceId || "");
-    if (invoiceId && totals.invoiceIds.has(invoiceId)) continue;
-    const itemId = itemIdFromLedgerEntry(entry);
-    const reward = deps.SHOP_ITEMS[itemId]?.reward || {};
-    totals.coins += safeInt(reward.coins, 0);
-    totals.rp += safeInt(reward.rp, 0);
-    if (invoiceId) totals.invoiceIds.add(invoiceId);
+    if (kind === "telegram_stars_payment") {
+      if (invoiceId && totals.invoiceIds.has(invoiceId)) continue;
+      const itemId = itemIdFromLedgerEntry(entry);
+      addRewardTotals(totals, deps.SHOP_ITEMS[itemId]?.reward || {});
+      if (invoiceId) totals.invoiceIds.add(invoiceId);
+      continue;
+    }
+
+    if (kind === "star_spend" && String(entry?.reason || "").startsWith("shop:")) {
+      const ledgerId = String(entry?.id || `${entry?.reason || ""}:${entry?.createdAt || ""}`);
+      if (totals.shopLedgerIds.has(ledgerId)) continue;
+      totals.shopLedgerIds.add(ledgerId);
+      const itemId = itemIdFromLedgerEntry(entry);
+      addRewardTotals(totals, deps.SHOP_ITEMS[itemId]?.reward || {});
+    }
   }
 
   return totals;
