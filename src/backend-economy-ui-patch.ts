@@ -1,11 +1,11 @@
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
-const BACKEND_ECONOMY_ACTION_KEY = 'devstudio_backend_economy_action';
 const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.onrender.com';
 
 type EconomyEndpoint = 'daily' | 'shop/purchase' | 'referral/claim';
 
 type EconomyPayload = {
   ok?: boolean;
+  error?: string;
   save?: { data?: unknown };
   economy?: { stars?: number };
 };
@@ -39,20 +39,27 @@ function textOf(element: Element | null) {
 
 function persistServerSave(payload: EconomyPayload) {
   const data = payload?.save?.data;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
   } catch {
-    // Local state remains the visual source until the next load.
+    return false;
   }
 }
 
-function markBackendEconomyAction(name: string) {
+function showEconomyNotice(message: string) {
   try {
-    sessionStorage.setItem(BACKEND_ECONOMY_ACTION_KEY, name);
+    window.Telegram?.WebApp?.showPopup?.({
+      title: 'Магазин студии',
+      message,
+      buttons: [{ type: 'ok' }],
+    });
+    return;
   } catch {
-    // best effort only
+    // fallback below
   }
+  window.alert(message);
 }
 
 async function postEconomyAction(endpoint: EconomyEndpoint, body: Record<string, unknown> = {}) {
@@ -70,7 +77,10 @@ async function postEconomyAction(endpoint: EconomyEndpoint, body: Record<string,
       body: JSON.stringify(body),
     });
     const payload = await response.json().catch(() => null) as EconomyPayload | null;
-    if (!response.ok || !payload?.ok) throw new Error(`backend_economy_failed:${endpoint}`);
+    if (!response.ok || !payload?.ok) {
+      const error = payload?.error || `backend_economy_failed:${endpoint}`;
+      throw new Error(error);
+    }
     persistServerSave(payload);
     return payload;
   } finally {
@@ -78,9 +88,8 @@ async function postEconomyAction(endpoint: EconomyEndpoint, body: Record<string,
   }
 }
 
-function rerunOriginalClick(button: HTMLButtonElement) {
-  button.dataset.backendEconomyFallback = '1';
-  window.setTimeout(() => button.click(), 0);
+function refreshAfterServerState() {
+  window.setTimeout(() => window.location.reload(), 120);
 }
 
 function attachEconomyAction(
@@ -92,11 +101,13 @@ function attachEconomyAction(
   if (button.dataset.backendEconomyPatched === key) return;
   button.dataset.backendEconomyPatched = key;
   button.addEventListener('click', async (event) => {
-    if (button.dataset.backendEconomyFallback === '1') {
-      delete button.dataset.backendEconomyFallback;
+    if (button.disabled || !canUseBackendEconomy()) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      showEconomyNotice('Экономика защищена сервером. Открой игру через Telegram и попробуй ещё раз.');
       return;
     }
-    if (button.disabled || !canUseBackendEconomy()) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -106,13 +117,23 @@ function attachEconomyAction(
     button.classList.add('backend-action-pending');
     try {
       await postEconomyAction(endpoint, body);
-      markBackendEconomyAction(key);
-    } catch {
-      // If backend is unavailable, keep the existing local behavior so the UI does not break.
+      refreshAfterServerState();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('not_enough_stars')) {
+        showEconomyNotice('Не хватает игровых ⭐. Покупка за баланс Telegram Stars будет подключена следующим патчем через invoice. Сейчас товар не выдан.');
+      } else if (message.includes('daily_already_claimed')) {
+        showEconomyNotice('Ежедневная награда уже получена сегодня.');
+      } else if (message.includes('milestone_not_ready')) {
+        showEconomyNotice('Эта реферальная награда пока недоступна.');
+      } else if (message.includes('milestone_already_claimed')) {
+        showEconomyNotice('Эта реферальная награда уже получена.');
+      } else {
+        showEconomyNotice('Сервер экономики временно недоступен. Товар не выдан, попробуй позже.');
+      }
     } finally {
       button.disabled = false;
       button.classList.remove('backend-action-pending');
-      rerunOriginalClick(button);
     }
   }, { capture: true });
 }
@@ -149,7 +170,7 @@ function applyBackendEconomyUiPatch() {
     patchShopPurchases();
     patchReferralClaims();
   } catch {
-    // Progressive enhancement only. It must never block the game.
+    // Protected economy actions should fail closed, not grant local rewards.
   }
 }
 
