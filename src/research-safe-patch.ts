@@ -100,12 +100,23 @@ function actionForButton(button: HTMLButtonElement): Record<string, unknown> | n
   return nodeId === 'product-instinct' ? { action: 'product_instinct' } : { action: 'node', nodeId };
 }
 
+function replayReactHandler(button: HTMLButtonElement) {
+  button.dataset.researchSafeBypass = '1';
+  button.disabled = false;
+  button.classList.remove('backend-action-pending');
+  window.setTimeout(() => button.click(), 0);
+}
+
 function patchButton(button: HTMLButtonElement) {
   const action = actionForButton(button);
   if (!action || button.dataset.researchSafePatched === '1') return;
   button.dataset.researchSafePatched = '1';
 
   button.addEventListener('click', async (event) => {
+    if (button.dataset.researchSafeBypass === '1') {
+      delete button.dataset.researchSafeBypass;
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
@@ -122,7 +133,8 @@ function patchButton(button: HTMLButtonElement) {
           throw error;
         })
         : await postJson('/api/research/unlock', action);
-      if (!payload?.save?.data) button.disabled = false;
+      if (payload?.save?.data) replayReactHandler(button);
+      else button.disabled = false;
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('not_enough_rp')) notice('Не хватает очков науки. Покупка не выполнена.');
