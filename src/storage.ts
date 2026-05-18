@@ -3,6 +3,7 @@ import { syncGlobalState } from './globalWorld';
 import type { GameState } from './types';
 
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
+const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const CLOUD_THROTTLE_MS = 15_000;
 const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 2_500;
 const MAX_SAVE_BYTES = 250_000;
@@ -72,6 +73,16 @@ function writeLocalStorage(key: string, value: string) {
     localStorage.setItem(key, value);
   } catch {
     // ignore
+  }
+}
+
+function consumeDirectBackendAction(endpoint: DevelopmentAction['endpoint']) {
+  try {
+    if (sessionStorage.getItem(BACKEND_UI_ACTION_KEY) !== endpoint) return false;
+    sessionStorage.removeItem(BACKEND_UI_ACTION_KEY);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -317,6 +328,7 @@ function inferDevelopmentAction(previous: GameState | null, current: GameState):
 function scheduleDevelopmentAction(previous: GameState | null, current: GameState) {
   const action = inferDevelopmentAction(previous, current);
   if (!action || !canUseServerSave()) return false;
+  if (consumeDirectBackendAction(action.endpoint)) return true;
   void postDevelopmentAction(action);
   return true;
 }
