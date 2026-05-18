@@ -109,6 +109,21 @@ async function applyInvoiceRewardIfNeeded(deps, invoice) {
   return nextData;
 }
 
+export async function reconcilePaidInvoiceRewards(deps, telegramUser) {
+  const invoices = await deps.db.collection("stars_invoices")
+    .find({ telegramId: telegramUser.id, status: "paid" })
+    .sort({ paidAt: 1, createdAt: 1 })
+    .limit(50)
+    .toArray();
+
+  let latestData = null;
+  for (const invoice of invoices) {
+    const data = await applyInvoiceRewardIfNeeded(deps, invoice);
+    if (data) latestData = data;
+  }
+  return latestData;
+}
+
 async function applyPaidInvoice(deps, invoice, payment) {
   const item = deps.SHOP_ITEMS[invoice.itemId];
   if (!item) return null;
