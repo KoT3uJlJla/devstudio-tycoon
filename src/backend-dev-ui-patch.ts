@@ -2,7 +2,7 @@ const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.onrender.com';
 
-type BackendEndpoint = 'skip' | 'promote' | 'resolve-event' | 'release';
+type BackendEndpoint = 'skip' | 'promote' | 'resolve-event';
 
 type BackendPayload = {
   ok?: boolean;
@@ -42,17 +42,25 @@ function markBackendUiAction(endpoint: BackendEndpoint) {
 
 async function postBackendAction(endpoint: BackendEndpoint, body: Record<string, unknown> = {}) {
   if (!canUseBackendActions()) throw new Error('backend_actions_unavailable');
-  const response = await fetch(`${API_URL}/api/development/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `tma ${telegramInitData()}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => null) as BackendPayload | null;
-  if (!response.ok || !payload?.ok || !persistServerSave(payload)) {
-    throw new Error(`backend_action_failed:${endpoint}`);
+
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(`${API_URL}/api/development/${endpoint}`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `tma ${telegramInitData()}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => null) as BackendPayload | null;
+    if (!response.ok || !payload?.ok || !persistServerSave(payload)) {
+      throw new Error(`backend_action_failed:${endpoint}`);
+    }
+  } finally {
+    window.clearTimeout(timer);
   }
 }
 
@@ -80,10 +88,9 @@ function attachBackendAction(button: HTMLButtonElement, endpoint: BackendEndpoin
     try {
       await postBackendAction(endpoint, body);
       markBackendUiAction(endpoint);
-      button.disabled = false;
-      button.classList.remove('backend-action-pending');
-      rerunOriginalClick(button);
     } catch {
+      // Fallback to local action if backend is slow/unavailable.
+    } finally {
       button.disabled = false;
       button.classList.remove('backend-action-pending');
       rerunOriginalClick(button);
@@ -98,7 +105,8 @@ function patchActiveDevelopmentButtons() {
     const text = buttonText(button);
     if (text.includes('Ускорить на 1ч')) attachBackendAction(button, 'skip');
     if (text.startsWith('Продвижение') && !text.includes('+')) attachBackendAction(button, 'promote');
-    if (text.includes('Релизнуть игру')) attachBackendAction(button, 'release');
+    // Release is intentionally not intercepted here. It must stay fully local/smooth,
+    // while storage.ts mirrors the release to backend after React state changes.
   });
 }
 
