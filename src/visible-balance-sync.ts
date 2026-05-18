@@ -21,11 +21,20 @@ function setSpanValue(span: HTMLElement | undefined, value: string) {
   span.appendChild(document.createTextNode(` ${value}`));
 }
 
+function dispatchServerSave(data: unknown) {
+  try {
+    window.dispatchEvent(new CustomEvent('devstudio:server-save', { detail: data }));
+  } catch {
+    // best-effort live React sync
+  }
+}
+
 export function applyVisibleBalanceFromSave(data: unknown) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  dispatchServerSave(data);
   const balance = data as BalanceLike;
   const wallet = document.querySelector<HTMLElement>('.compact-wallet');
-  if (!wallet) return false;
+  if (!wallet) return true;
   const spans = Array.from(wallet.querySelectorAll<HTMLElement>('span'));
   setSpanValue(spans[0], money(balance.coins));
   setSpanValue(spans[1], money(balance.rp));
