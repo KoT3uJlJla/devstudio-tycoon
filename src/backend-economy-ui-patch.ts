@@ -10,6 +10,14 @@ type EconomyPayload = {
   economy?: { stars?: number };
 };
 
+type TelegramPopupWebApp = {
+  showPopup?: (params: {
+    title?: string;
+    message: string;
+    buttons?: Array<{ type: 'ok' | 'close' | 'cancel' | 'default' | 'destructive'; text?: string; id?: string }>;
+  }) => void;
+};
+
 const SHOP_ITEM_BY_TITLE: Record<string, string> = {
   'Стартовый набор': 'starter_pack',
   'Малый набор монет': 'coins_small',
@@ -49,13 +57,16 @@ function persistServerSave(payload: EconomyPayload) {
 }
 
 function showEconomyNotice(message: string) {
+  const webApp = window.Telegram?.WebApp as TelegramPopupWebApp | undefined;
   try {
-    window.Telegram?.WebApp?.showPopup?.({
-      title: 'Магазин студии',
-      message,
-      buttons: [{ type: 'ok' }],
-    });
-    return;
+    if (webApp?.showPopup) {
+      webApp.showPopup({
+        title: 'Магазин студии',
+        message,
+        buttons: [{ type: 'ok' }],
+      });
+      return;
+    }
   } catch {
     // fallback below
   }
