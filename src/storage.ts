@@ -13,6 +13,11 @@ type TelegramStorage = {
   getItem?: (key: string, callback: (error?: string | null, value?: string | null) => void) => void;
 };
 
+type DevelopmentAction = {
+  endpoint: 'start' | 'skip' | 'promote' | 'resolve-event' | 'release';
+  body?: Record<string, unknown>;
+};
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -119,6 +124,35 @@ async function saveServerState(state: GameState, keepalive = false) {
   }).catch(() => undefined);
 }
 
+async function postDevelopmentAction(action: DevelopmentAction) {
+  if (!canUseServerSave()) return;
+  const payload = await withTimeout(
+    fetch(`${API_URL}/api/development/${action.endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `tma ${telegramInitData()}`,
+      },
+      body: JSON.stringify(action.body ?? {}),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null),
+    null,
+    4500,
+  );
+
+  const serverSave = payload?.save?.data;
+  if (!serverSave || !isPlainObject(serverSave)) return;
+
+  try {
+    const normalized = syncGlobalState(normalizeState(serverSave as Partial<GameState>));
+    lastActionSnapshot = normalized;
+    writeLocalStorage(STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // If server payload cannot be normalized, keep the optimistic local state.
+  }
+}
+
 function finalizeLoadedState(state: GameState): GameState {
   try {
     return syncGlobalState(applyOfflineReward(state));
@@ -127,17 +161,22 @@ function finalizeLoadedState(state: GameState): GameState {
   }
 }
 
+function rememberLoadedState(state: GameState) {
+  lastActionSnapshot = state;
+  return state;
+}
+
 export async function loadGame(): Promise<GameState> {
   try {
     const serverSave = await loadServerSave();
     if (serverSave) {
       const state = finalizeLoadedState(serverSave);
       writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
-      return state;
+      return rememberLoadedState(state);
     }
 
     const fromLocal = parseSave(readLocalStorage(STORAGE_KEY));
-    if (fromLocal) return finalizeLoadedState(fromLocal);
+    if (fromLocal) return rememberLoadedState(finalizeLoadedState(fromLocal));
 
     const cloud = cloudStorage();
     if (cloud?.getItem) {
@@ -157,13 +196,13 @@ export async function loadGame(): Promise<GameState> {
         const state = finalizeLoadedState(parsedCloud);
         writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
         if (canUseServerSave()) void saveServerState(state);
-        return state;
+        return rememberLoadedState(state);
       }
     }
 
-    return syncGlobalState(initialState);
+    return rememberLoadedState(syncGlobalState(initialState));
   } catch {
-    return syncGlobalState(initialState);
+    return rememberLoadedState(syncGlobalState(initialState));
   }
 }
 
@@ -174,6 +213,7 @@ let lastServerWriteAt = 0;
 let pendingServerState: GameState | null = null;
 let serverFlushTimer: number | null = null;
 let lifecycleFlushInstalled = false;
+let lastActionSnapshot: GameState | null = null;
 
 function isActiveDevelopmentSave(state: GameState) {
   return Boolean(state.selectedProject?.startedAt || state.selectedProject?.pendingDevEvent || state.latestRelease);
@@ -239,6 +279,48 @@ function installLifecycleFlush() {
   window.addEventListener('beforeunload', flushAll);
 }
 
+function inferDevelopmentAction(previous: GameState | null, current: GameState): DevelopmentAction | null {
+  if (!previous) return null;
+
+  const previousProject = previous.selectedProject;
+  const currentProject = current.selectedProject;
+
+  if (previousProject?.startedAt && !currentProject && current.latestRelease?.createdAt !== previous.latestRelease?.createdAt) {
+    return { endpoint: 'release' };
+  }
+
+  if (!previousProject?.startedAt && currentProject?.startedAt) {
+    return { endpoint: 'start', body: { project: currentProject } };
+  }
+
+  if (!previousProject?.startedAt || !currentProject?.startedAt) return null;
+
+  if (previousProject.pendingDevEvent && !currentProject.pendingDevEvent) {
+    const scoreDelta = (currentProject.devDecisionScoreBonus ?? 0) - (previousProject.devDecisionScoreBonus ?? 0);
+    const salesDelta = (currentProject.devDecisionSalesMultiplier ?? 1) - (previousProject.devDecisionSalesMultiplier ?? 1);
+    return { endpoint: 'resolve-event', body: { choiceId: scoreDelta >= 0 || salesDelta >= 0 ? 'a' : 'b' } };
+  }
+
+  if (!previousProject.promotionUsed && currentProject.promotionUsed) {
+    return { endpoint: 'promote' };
+  }
+
+  const progressDelta = currentProject.progress - previousProject.progress;
+  const starDelta = previous.stars - current.stars;
+  if (progressDelta >= 35 && starDelta >= 20 && currentProject.progress < 100 && !currentProject.pendingDevEvent) {
+    return { endpoint: 'skip' };
+  }
+
+  return null;
+}
+
+function scheduleDevelopmentAction(previous: GameState | null, current: GameState) {
+  const action = inferDevelopmentAction(previous, current);
+  if (!action || !canUseServerSave()) return false;
+  void postDevelopmentAction(action);
+  return true;
+}
+
 export function saveGame(state: GameState) {
   installLifecycleFlush();
   const safeState = syncGlobalState(normalizeState({ ...state, lastSavedAt: Date.now() }));
@@ -251,7 +333,11 @@ export function saveGame(state: GameState) {
   if (payload.length > MAX_SAVE_BYTES) return;
   writeLocalStorage(STORAGE_KEY, payload);
   scheduleCloudWrite(payload);
-  scheduleServerWrite(safeState);
+
+  const previousSnapshot = lastActionSnapshot;
+  lastActionSnapshot = safeState;
+  const actionHandled = scheduleDevelopmentAction(previousSnapshot, safeState);
+  if (!actionHandled) scheduleServerWrite(safeState);
 }
 
 export function resetGame() {
@@ -262,6 +348,7 @@ export function resetGame() {
   }
   pendingCloudPayload = null;
   pendingServerState = null;
+  lastActionSnapshot = null;
   if (cloudFlushTimer !== null) {
     window.clearTimeout(cloudFlushTimer);
     cloudFlushTimer = null;
