@@ -66,13 +66,35 @@ function markInvoiceApplied(data, invoice, reward) {
   return next;
 }
 
-function paidRewardTotals(deps, invoices) {
-  return invoices.reduce((totals, invoice) => {
+function itemIdFromLedgerEntry(entry) {
+  const reason = String(entry?.reason || "");
+  if (reason.startsWith("invoice:")) return reason.slice("invoice:".length);
+  return "";
+}
+
+function rewardTotalsFromPaidSources(deps, invoices, economy) {
+  const totals = { coins: 0, rp: 0, invoiceIds: new Set() };
+
+  for (const invoice of invoices) {
     const reward = deps.SHOP_ITEMS[invoice.itemId]?.reward || {};
     totals.coins += safeInt(reward.coins, 0);
     totals.rp += safeInt(reward.rp, 0);
-    return totals;
-  }, { coins: 0, rp: 0 });
+    if (invoice.invoiceId) totals.invoiceIds.add(String(invoice.invoiceId));
+  }
+
+  const ledger = Array.isArray(economy?.ledger) ? economy.ledger : [];
+  for (const entry of ledger) {
+    if (entry?.kind !== "telegram_stars_payment") continue;
+    const invoiceId = String(entry?.meta?.invoiceId || "");
+    if (invoiceId && totals.invoiceIds.has(invoiceId)) continue;
+    const itemId = itemIdFromLedgerEntry(entry);
+    const reward = deps.SHOP_ITEMS[itemId]?.reward || {};
+    totals.coins += safeInt(reward.coins, 0);
+    totals.rp += safeInt(reward.rp, 0);
+    if (invoiceId) totals.invoiceIds.add(invoiceId);
+  }
+
+  return totals;
 }
 
 function publicWalletEconomy(economy) {
@@ -115,7 +137,7 @@ async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
   const save = saveData ? { data: saveData } : await deps.getSave(telegramId);
   let economy = await deps.getOrCreateEconomy(telegramUser, save?.data);
   const invoices = await paidInvoicesForPlayer(deps, telegramId);
-  const paidTotals = paidRewardTotals(deps, invoices);
+  const paidTotals = rewardTotalsFromPaidSources(deps, invoices, economy);
 
   const nextCoins = Math.max(
     safeInt(economy?.coins, 0),
@@ -139,39 +161,19 @@ async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
 
   const protectedData = overlayWallet(save?.data || {}, economy);
   if (save?.data) await deps.writeSave(telegramId, telegramUser, protectedData);
-  return { data: protectedData, economy };
-}
-
-function moveLatestRouteBeforePrevious(app, path, method) {
-  const stack = app?._router?.stack || app?.router?.stack;
-  if (!Array.isArray(stack)) return;
-  const matches = stack
-    .map((layer, index) => ({ layer, index }))
-    .filter(({ layer }) => layer?.route?.path === path && layer.route.methods?.[method]);
-  if (matches.length < 2) return;
-  const latest = matches[matches.length - 1];
-  const first = matches[0];
-  const [layer] = stack.splice(latest.index, 1);
-  const insertAt = latest.index < first.index ? first.index - 1 : first.index;
-  stack.splice(insertAt, 0, layer);
-}
-
-function registerAuthoritativeSaveGet(app, deps) {
-  app.get("/api/save", deps.requireTelegramUser, async (req, res) => {
-    try {
-      const { data, economy } = await ensureAuthoritativeWallet(deps, req.telegramUser);
-      res.json({
-        ok: true,
-        save: data ? { data, updatedAt: new Date() } : null,
-        economy: publicWalletEconomy(economy),
-        development: data ? null : null,
-      });
-    } catch (error) {
-      console.error("Authoritative wallet save failed:", error);
-      res.status(500).json({ ok: false, error: "wallet_save_failed" });
-    }
-  });
-  moveLatestRouteBeforePrevious(app, "/api/save", "get");
+  return {
+    data: protectedData,
+    economy,
+    diagnostics: {
+      saveCoins: safeInt(save?.data?.coins, 0),
+      saveRp: safeInt(save?.data?.rp, 0),
+      economyCoins: safeInt(economy?.coins, 0),
+      economyRp: safeInt(economy?.rp, 0),
+      paidInvoiceCount: invoices.length,
+      paidInvoiceCoins: paidTotals.coins,
+      paidInvoiceRp: paidTotals.rp,
+    },
+  };
 }
 
 async function botApi(botToken, method, payload) {
@@ -269,6 +271,7 @@ async function applyPaidInvoice(deps, invoice, payment) {
     { invoiceId: invoice.invoiceId, status: { $ne: "paid" } },
     { $set: { status: "paid", paidAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
   );
+  await ensureAuthoritativeWallet(deps, invoice.telegramUser, nextData);
   return nextData;
 }
 
@@ -295,11 +298,37 @@ async function handleSuccessfulPayment(deps, message) {
   await applyPaidInvoice(deps, invoice, payment);
 }
 
+async function walletStateResponse(deps, telegramUser) {
+  const { data, economy, diagnostics } = await ensureAuthoritativeWallet(deps, telegramUser);
+  return {
+    ok: true,
+    save: data ? { data, updatedAt: new Date() } : null,
+    economy: publicWalletEconomy(economy),
+    diagnostics,
+  };
+}
+
 export function registerStarsPaymentRoutes(app, deps) {
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || "";
   const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL || "";
 
-  registerAuthoritativeSaveGet(app, deps);
+  app.get("/api/wallet/state", deps.requireTelegramUser, async (req, res) => {
+    try {
+      res.json(await walletStateResponse(deps, req.telegramUser));
+    } catch (error) {
+      console.error("Wallet state failed:", error);
+      res.status(500).json({ ok: false, error: "wallet_state_failed" });
+    }
+  });
+
+  app.get("/api/debug/wallet", deps.requireTelegramUser, async (req, res) => {
+    try {
+      const result = await walletStateResponse(deps, req.telegramUser);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ ok: false, error: "wallet_debug_failed", message: error.message || "" });
+    }
+  });
 
   app.post("/api/stars/invoice", deps.requireTelegramUser, async (req, res) => {
     try {
@@ -319,9 +348,14 @@ export function registerStarsPaymentRoutes(app, deps) {
   });
 
   app.get("/api/stars/reconcile", deps.requireTelegramUser, async (req, res) => {
-    const data = await reconcilePaidInvoiceRewards(deps, req.telegramUser);
-    const save = data ? { data, updatedAt: new Date() } : await deps.getSave(req.telegramUser.id);
-    res.json({ ok: true, save: save?.data ? { data: save.data, updatedAt: save.updatedAt || null } : null });
+    try {
+      const data = await reconcilePaidInvoiceRewards(deps, req.telegramUser);
+      const { economy, diagnostics } = await ensureAuthoritativeWallet(deps, req.telegramUser, data);
+      res.json({ ok: true, save: data ? { data: overlayWallet(data, economy), updatedAt: new Date() } : null, economy: publicWalletEconomy(economy), diagnostics });
+    } catch (error) {
+      console.error("Stars reconcile failed:", error);
+      res.status(500).json({ ok: false, error: "stars_reconcile_failed" });
+    }
   });
 
   app.get("/api/stars/invoice/:invoiceId", deps.requireTelegramUser, async (req, res) => {
