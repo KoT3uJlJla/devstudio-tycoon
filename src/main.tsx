@@ -7,6 +7,7 @@ import './v8-ui-patch.css';
 import { installReleaseUiPatch } from './release-ui-patch';
 import { installBackendDevUiPatch } from './backend-dev-ui-patch';
 import { installBackendEconomyUiPatch } from './backend-economy-ui-patch';
+import { installAuthoritativeWalletUiPatch } from './authoritative-wallet-ui-patch';
 import { reconcileStartupSave } from './startup-save-reconcile';
 
 async function boot() {
@@ -15,6 +16,7 @@ async function boot() {
   installReleaseUiPatch();
   installBackendDevUiPatch();
   installBackendEconomyUiPatch();
+  installAuthoritativeWalletUiPatch();
 
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
