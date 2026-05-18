@@ -76,7 +76,10 @@ async function applyPaidInvoice(deps, invoice, payment) {
   if (!item) return null;
   const save = await deps.getSave(invoice.telegramId);
   const economy = await deps.getOrCreateEconomy(invoice.telegramUser, save?.data);
-  const nextData = deps.overlayProtectedEconomy(deps.applyRewardToSaveData(save?.data, item.reward), economy);
+  const nextData = deps.overlayProtectedEconomy(
+    deps.applyRewardToSaveData(save?.data, item.reward, { paidInvoiceId: invoice.invoiceId }),
+    economy,
+  );
   await deps.writeSave(invoice.telegramId, invoice.telegramUser, nextData);
   await deps.patchEconomy(invoice.telegramId, {
     $push: {
@@ -88,7 +91,7 @@ async function applyPaidInvoice(deps, invoice, payment) {
   });
   await deps.db.collection("stars_invoices").updateOne(
     { invoiceId: invoice.invoiceId, status: { $ne: "paid" } },
-    { $set: { status: "paid", paidAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
+    { $set: { status: "paid", paidAt: new Date(), appliedRewardAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
   );
   return nextData;
 }
