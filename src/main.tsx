@@ -4,6 +4,7 @@ import App from './App';
 import './styles.css';
 import './mobile-topbar.css';
 import './v8-ui-patch.css';
+import './predeploy-hardening.css';
 import { installReleaseUiPatch } from './release-ui-patch';
 import { installBackendDevUiPatch } from './backend-dev-ui-patch';
 import { installBackendEconomyUiPatch } from './backend-economy-ui-patch';
