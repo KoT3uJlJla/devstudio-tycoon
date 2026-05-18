@@ -1,0 +1,12 @@
+.release-modal-v8 .score-stage{order:10;margin:10px 0 12px;padding:14px 12px;border:2px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(255,255,255,.06)}
+.release-modal-v8 .critic-grid{order:20}
+.release-modal-v8 .score-suspense{order:10}
+.release-modal-v8 .score-breakdown,.release-modal-v8 .reward-row,.release-modal-v8 .life-result,.release-modal-v8 .bonus-list,.release-modal-v8 .release-actions{order:30}
+.critic-card.shown.critic-score-low{background:#ffd1d8!important;box-shadow:4px 4px 0 #ff8a9b!important}
+.critic-card.shown.critic-score-mid{background:#ffd7a8!important;box-shadow:4px 4px 0 #ff9c4a!important}
+.critic-card.shown.critic-score-good{background:#cfe8ff!important;box-shadow:4px 4px 0 #6bbcff!important}
+.critic-card.shown.critic-score-high{background:var(--paper)!important;box-shadow:4px 4px 0 var(--cyan)!important}
+.critic-card.shown.critic-score-low b{color:#9f2035}.critic-card.shown.critic-score-mid b{color:#9a4a00}.critic-card.shown.critic-score-good b{color:#165a9d}.critic-card.shown.critic-score-high b{color:var(--ink)}
+.archive-best-release{border:2px solid rgba(255,224,78,.75)!important;border-radius:16px;padding:10px;background:rgba(255,224,78,.09)}
+.archive-best-release:before{content:'Лучший';display:inline-flex;width:fit-content;margin-bottom:4px;padding:3px 7px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:10px;font-weight:1000}
+.studio-summary .mini-ledger{grid-template-columns:auto auto;row-gap:6px}
