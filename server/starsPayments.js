@@ -31,6 +31,24 @@ function invoiceIdFromPayload(payload) {
   return value.startsWith("ds_shop:") ? value.slice("ds_shop:".length) : "";
 }
 
+function invoiceAlreadyApplied(data, invoiceId) {
+  return Boolean(isPlainObject(data?.paidInvoiceClaims) && data.paidInvoiceClaims[invoiceId]);
+}
+
+function markInvoiceApplied(data, invoice) {
+  const next = isPlainObject(data) ? { ...data } : {};
+  next.paidInvoiceClaims = {
+    ...(isPlainObject(next.paidInvoiceClaims) ? next.paidInvoiceClaims : {}),
+    [invoice.invoiceId]: {
+      itemId: invoice.itemId,
+      amountStars: invoice.amountStars,
+      appliedAt: Date.now(),
+    },
+  };
+  next.lastSavedAt = Date.now();
+  return next;
+}
+
 async function botApi(botToken, method, payload) {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
@@ -71,16 +89,31 @@ async function ensureWebhook(botToken, webhookUrl, secretToken) {
   }
 }
 
+async function applyInvoiceRewardIfNeeded(deps, invoice) {
+  const item = deps.SHOP_ITEMS[invoice.itemId];
+  if (!item) return null;
+
+  const save = await deps.getSave(invoice.telegramId);
+  const currentData = save?.data || {};
+  if (invoiceAlreadyApplied(currentData, invoice.invoiceId)) return currentData;
+
+  const economy = await deps.getOrCreateEconomy(invoice.telegramUser, currentData);
+  const rewarded = deps.applyRewardToSaveData(currentData, item.reward);
+  const marked = markInvoiceApplied(rewarded, invoice);
+  const nextData = deps.overlayProtectedEconomy(marked, economy);
+  await deps.writeSave(invoice.telegramId, invoice.telegramUser, nextData);
+  await deps.db.collection("stars_invoices").updateOne(
+    { invoiceId: invoice.invoiceId },
+    { $set: { appliedRewardAt: new Date(), updatedAt: new Date() } },
+  );
+  return nextData;
+}
+
 async function applyPaidInvoice(deps, invoice, payment) {
   const item = deps.SHOP_ITEMS[invoice.itemId];
   if (!item) return null;
-  const save = await deps.getSave(invoice.telegramId);
-  const economy = await deps.getOrCreateEconomy(invoice.telegramUser, save?.data);
-  const nextData = deps.overlayProtectedEconomy(
-    deps.applyRewardToSaveData(save?.data, item.reward, { paidInvoiceId: invoice.invoiceId }),
-    economy,
-  );
-  await deps.writeSave(invoice.telegramId, invoice.telegramUser, nextData);
+
+  const nextData = await applyInvoiceRewardIfNeeded(deps, invoice);
   await deps.patchEconomy(invoice.telegramId, {
     $push: {
       ledger: {
@@ -91,7 +124,7 @@ async function applyPaidInvoice(deps, invoice, payment) {
   });
   await deps.db.collection("stars_invoices").updateOne(
     { invoiceId: invoice.invoiceId, status: { $ne: "paid" } },
-    { $set: { status: "paid", paidAt: new Date(), appliedRewardAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
+    { $set: { status: "paid", paidAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
   );
   return nextData;
 }
@@ -143,7 +176,8 @@ export function registerStarsPaymentRoutes(app, deps) {
   app.get("/api/stars/invoice/:invoiceId", deps.requireTelegramUser, async (req, res) => {
     const invoice = await deps.db.collection("stars_invoices").findOne({ invoiceId: String(req.params.invoiceId || ""), telegramId: req.telegramUser.id });
     if (!invoice) return res.status(404).json({ ok: false, error: "invoice_not_found" });
-    const save = invoice.status === "paid" ? await deps.getSave(req.telegramUser.id) : null;
+    const fixedData = invoice.status === "paid" ? await applyInvoiceRewardIfNeeded(deps, invoice) : null;
+    const save = fixedData ? { data: fixedData, updatedAt: new Date() } : invoice.status === "paid" ? await deps.getSave(req.telegramUser.id) : null;
     res.json({ ok: true, invoice: invoicePublic(invoice), save: save?.data ? { data: save.data, updatedAt: save.updatedAt || null } : null });
   });
 
