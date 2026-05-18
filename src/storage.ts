@@ -54,6 +54,22 @@ function withTimeout<T>(promise: Promise<T>, fallback: T, timeoutMs = 2500): Pro
   });
 }
 
+function readLocalStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
 function parseSave(raw: string | null): GameState | null {
   if (!raw || typeof raw !== 'string' || raw.length > MAX_SAVE_BYTES) return null;
   let parsed: unknown;
@@ -72,14 +88,15 @@ function parseSave(raw: string | null): GameState | null {
 
 async function loadServerSave(): Promise<GameState | null> {
   if (!canUseServerSave()) return null;
-  const response = await withTimeout(
+  const payload = await withTimeout(
     fetch(`${API_URL}/api/save`, {
       headers: { Authorization: `tma ${telegramInitData()}` },
-    }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null),
     null,
+    2800,
   );
-  if (!response?.ok) return null;
-  const payload = await response.json().catch(() => null);
   const rawSave = payload?.save?.data;
   if (!rawSave || !isPlainObject(rawSave)) return null;
   try {
@@ -103,51 +120,51 @@ async function saveServerState(state: GameState, keepalive = false) {
 }
 
 function finalizeLoadedState(state: GameState): GameState {
-  return syncGlobalState(applyOfflineReward(state));
+  try {
+    return syncGlobalState(applyOfflineReward(state));
+  } catch {
+    return syncGlobalState(normalizeState(state));
+  }
 }
 
 export async function loadGame(): Promise<GameState> {
-  const serverSave = await loadServerSave();
-  if (serverSave) {
-    const state = finalizeLoadedState(serverSave);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Quota exceeded or storage disabled — silently ignore, we still have state in memory.
-    }
-    return state;
-  }
-
-  const fromLocal = parseSave(localStorage.getItem(STORAGE_KEY));
-  if (fromLocal) return finalizeLoadedState(fromLocal);
-
-  const cloud = cloudStorage();
-  if (cloud?.getItem) {
-    const cloudSave = await withTimeout(
-      new Promise<string | null>((resolve) => {
-        try {
-          cloud.getItem?.(STORAGE_KEY, (_error, value) => resolve(value ?? null));
-        } catch {
-          resolve(null);
-        }
-      }),
-      null,
-      700,
-    );
-    const parsedCloud = parseSave(cloudSave);
-    if (parsedCloud) {
-      const state = finalizeLoadedState(parsedCloud);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch {
-        // Quota exceeded or storage disabled — silently ignore, we still have state in memory.
-      }
-      if (canUseServerSave()) void saveServerState(state);
+  try {
+    const serverSave = await loadServerSave();
+    if (serverSave) {
+      const state = finalizeLoadedState(serverSave);
+      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
       return state;
     }
-  }
 
-  return syncGlobalState(initialState);
+    const fromLocal = parseSave(readLocalStorage(STORAGE_KEY));
+    if (fromLocal) return finalizeLoadedState(fromLocal);
+
+    const cloud = cloudStorage();
+    if (cloud?.getItem) {
+      const cloudSave = await withTimeout(
+        new Promise<string | null>((resolve) => {
+          try {
+            cloud.getItem?.(STORAGE_KEY, (_error, value) => resolve(value ?? null));
+          } catch {
+            resolve(null);
+          }
+        }),
+        null,
+        700,
+      );
+      const parsedCloud = parseSave(cloudSave);
+      if (parsedCloud) {
+        const state = finalizeLoadedState(parsedCloud);
+        writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+        if (canUseServerSave()) void saveServerState(state);
+        return state;
+      }
+    }
+
+    return syncGlobalState(initialState);
+  } catch {
+    return syncGlobalState(initialState);
+  }
 }
 
 let lastCloudWriteAt = 0;
@@ -232,11 +249,7 @@ export function saveGame(state: GameState) {
     return;
   }
   if (payload.length > MAX_SAVE_BYTES) return;
-  try {
-    localStorage.setItem(STORAGE_KEY, payload);
-  } catch {
-    // Storage disabled (private mode / quota); skip and hope cloud/server picks it up.
-  }
+  writeLocalStorage(STORAGE_KEY, payload);
   scheduleCloudWrite(payload);
   scheduleServerWrite(safeState);
 }
