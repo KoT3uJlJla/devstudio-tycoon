@@ -4,6 +4,7 @@ import type { GameState } from './types';
 
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
 const CLOUD_THROTTLE_MS = 15_000;
+const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 2_500;
 const MAX_SAVE_BYTES = 250_000;
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -88,10 +89,11 @@ async function loadServerSave(): Promise<GameState | null> {
   }
 }
 
-async function saveServerState(state: GameState) {
+async function saveServerState(state: GameState, keepalive = false) {
   if (!canUseServerSave()) return;
   await fetch(`${API_URL}/api/save`, {
     method: 'POST',
+    keepalive,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `tma ${telegramInitData()}`,
@@ -154,6 +156,11 @@ let cloudFlushTimer: number | null = null;
 let lastServerWriteAt = 0;
 let pendingServerState: GameState | null = null;
 let serverFlushTimer: number | null = null;
+let lifecycleFlushInstalled = false;
+
+function isActiveDevelopmentSave(state: GameState) {
+  return Boolean(state.selectedProject?.startedAt || state.selectedProject?.pendingDevEvent || state.latestRelease);
+}
 
 function flushCloud() {
   cloudFlushTimer = null;
@@ -179,28 +186,44 @@ function scheduleCloudWrite(payload: string) {
   cloudFlushTimer = window.setTimeout(flushCloud, CLOUD_THROTTLE_MS - elapsed);
 }
 
-function flushServer() {
+function flushServer(keepalive = false) {
   serverFlushTimer = null;
   if (!pendingServerState) return;
   const state = pendingServerState;
   pendingServerState = null;
   lastServerWriteAt = Date.now();
-  void saveServerState(state);
+  void saveServerState(state, keepalive);
 }
 
 function scheduleServerWrite(state: GameState) {
   if (!canUseServerSave()) return;
   pendingServerState = state;
+  const throttleMs = isActiveDevelopmentSave(state) ? ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS : CLOUD_THROTTLE_MS;
   const elapsed = Date.now() - lastServerWriteAt;
-  if (elapsed >= CLOUD_THROTTLE_MS) {
+  if (elapsed >= throttleMs) {
     flushServer();
     return;
   }
   if (serverFlushTimer !== null) return;
-  serverFlushTimer = window.setTimeout(flushServer, CLOUD_THROTTLE_MS - elapsed);
+  serverFlushTimer = window.setTimeout(flushServer, throttleMs - elapsed);
+}
+
+function installLifecycleFlush() {
+  if (lifecycleFlushInstalled || typeof window === 'undefined' || typeof document === 'undefined') return;
+  lifecycleFlushInstalled = true;
+  const flushAll = () => {
+    flushCloud();
+    flushServer(true);
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushAll();
+  });
+  window.addEventListener('pagehide', flushAll);
+  window.addEventListener('beforeunload', flushAll);
 }
 
 export function saveGame(state: GameState) {
+  installLifecycleFlush();
   const safeState = syncGlobalState(normalizeState({ ...state, lastSavedAt: Date.now() }));
   let payload: string;
   try {
