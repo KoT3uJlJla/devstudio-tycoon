@@ -1,3 +1,111 @@
+const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
+const API_URL = 'https://devstudio-tycoon-api.onrender.com';
+
+const releaseCommentPool = [
+  'Смелая идея, и она почти сработала.',
+  'Есть шероховатости, но характер чувствуется.',
+  'Не всё идеально, зато запоминается.',
+  'Проект спорный, но точно не бездушный.',
+  'Игре не хватает полировки, но цепляет.',
+  'Видно амбицию, и это подкупает.',
+  'Не каждый элемент на месте, но общее впечатление хорошее.',
+  'Работает лучше, чем кажется на первый взгляд.',
+  'Есть удачные находки, которые хочется хвалить.',
+  'Не без компромиссов, но с понятным лицом.',
+  'Чувствуется направление и уверенная рука.',
+  'Фундамент хороший, осталось нарастить мясо.',
+  'Порог входа низкий, а удовольствие — выше ожиданий.',
+  'Не без огрехов, зато с настроением.',
+  'Местами сыровато, но очень симпатично.',
+  'Собрано неровно, но с душой.',
+  'Есть идеи, ради которых стоит зайти.',
+  'У проекта слышен собственный голос.',
+  'Не хит, но и мимо пройти сложно.',
+  'Сначала сомневаешься, потом втягиваешься.',
+  'Интереснее, чем подсказывает первое впечатление.',
+  'В проекте есть внутренний ритм.',
+  'Не всё совпало, но многое получилось.',
+  'Амбиции немного опережают исполнение.',
+  'Формула не новая, но подана уверенно.',
+  'Потенциал читается в каждой детали.',
+  'Не каждый риск оправдан, но рисковать стоило.',
+  'Есть ощущение роста команды.',
+  'Проекту идёт его собственная странность.',
+  'Работа не без ошибок, но не без магии.',
+  'У игры есть лицо — это уже немало.',
+  'Не шедевр, но сильная попытка.',
+  'За видимой простотой скрывается характер.',
+  'Технически неровно, эмоционально — попадание.',
+  'Есть за что придраться, но и похвалить есть что.',
+  'Пульс проекта чувствуется сразу.',
+  'Некоторые решения спорные, но не случайные.',
+  'Команда явно понимала, что хотела сказать.',
+  'Есть удачные моменты, которые вытягивают всё остальное.',
+  'Не хватает лоска, зато хватает энергии.',
+  'Сырая форма не скрывает хорошее ядро.',
+  'Хочется большего, и это хороший знак.',
+  'Механики не всегда точны, но настроение работает.',
+  'Иногда буксует, но быстро возвращает интерес.',
+  'Внутри больше жизни, чем можно было ожидать.',
+  'Скромнее по масштабу, чем по эмоции.',
+  'Не всё дожали, но почти дотянули.',
+  'Проект располагает к себе не сразу, зато честно.',
+  'Есть что дорабатывать, но есть и что любить.',
+  'Не без сбоев, но с правильным вектором.',
+  'Некоторые углы остались острыми, и это даже идёт игре.',
+  'Сильнее всего тут работает настроение.',
+  'Есть чувство, что команда нащупала своё.',
+  'Местами грубовато, зато не стерильно.',
+  'Игре идёт её несовершенство.',
+  'Не каждый элемент сияет, но общее полотно смотрится.',
+  'Это не прорыв, но заметная заявка.',
+  'Проект оставляет тёплое послевкусие.',
+  'Есть ощущение ручной работы в хорошем смысле.',
+  'Важнее всего — игре не всё равно.',
+  'Неровный, но любопытный результат.',
+  'Работа местами спотыкается, но не падает.',
+  'Пусть и не без шума, зато с искрой.',
+  'Чувствуется старание, и оно не пропадает зря.',
+  'В проекте много симпатичных решений.',
+  'Даже в слабых местах виден потенциал.',
+  'Не всё отполировано, но и не пусто.',
+  'Сильная база для будущего роста.',
+  'Есть сцены и моменты, которые останутся в памяти.',
+  'Проект не играет безопасно — и это плюс.',
+  'Работа не идеальна, но живая.',
+  'Видно, что команда набирает форму.',
+  'Смесь идей получилась любопытной.',
+  'Есть удачный баланс между дерзостью и понятностью.',
+  'Проект умеет удивлять в мелочах.',
+  'Не каждая деталь точна, но общий тон выдержан.',
+  'Игра предлагает больше, чем обещает на входе.',
+  'Хороший пример того, как стиль поддерживает содержание.',
+  'Не хватает пары итераций до блеска.',
+  'Даже когда ошибается, делает это интересно.',
+  'Не весь замах реализован, но многое попало в цель.',
+  'Здесь есть что обсуждать — и это уже достижение.',
+  'Игра не боится быть собой.',
+  'Местами проседает, но быстро отыгрывается.',
+  'Чувствуется авторское отношение.',
+  'Работа искренняя — и это видно.',
+  'Проект строится на хороших интонациях.',
+  'Есть слабые места, но нет равнодушия.',
+  'Не без шероховатостей, зато с ясным темпераментом.',
+  'Местами хочется больше глубины, но база крепкая.',
+  'Проект приятно удивляет после пары минут.',
+  'Есть ощущение, что команда нашла нужный тон.',
+  'Не всё сбалансировано, но многое увлекает.',
+  'Фокус временами плавает, интерес — нет.',
+  'Есть индивидуальность, которой многим не хватает.',
+  'Релиз не без странностей, но они работают на образ.',
+  'Не финальная форма, но очень хороший шаг.',
+  'Тут есть та самая искра, ради которой хочется ждать продолжения.',
+  'Игру хочется обсуждать, а не просто закрыть.',
+  'Есть задел на что-то по-настоящему сильное.',
+  'Пускай местами грубо, зато не безлико.',
+  'Проект оставляет ощущение движения вперёд.',
+];
+
 function parseNumber(value: string | null | undefined) {
   const match = String(value ?? '').replace(',', '.').match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : Number.NaN;
@@ -7,10 +115,103 @@ function textOf(element: Element | null | undefined) {
   return element?.textContent?.trim() ?? '';
 }
 
+function randomIndex(length: number) {
+  if (length <= 0) return 0;
+  if (globalThis.crypto?.getRandomValues) {
+    const array = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(array);
+    return array[0] % length;
+  }
+  return Math.floor(Math.random() * length);
+}
+
+function randomReleaseComment() {
+  return releaseCommentPool[randomIndex(releaseCommentPool.length)] ?? releaseCommentPool[0];
+}
+
+function telegramInitData() {
+  return window.Telegram?.WebApp?.initData || '';
+}
+
+function updateWalletCoins(value: number) {
+  const walletCoins = document.querySelector<HTMLElement>('.wallet span:first-child');
+  if (!walletCoins) return;
+  const textNode = Array.from(walletCoins.childNodes).reverse().find((node) => node.nodeType === Node.TEXT_NODE);
+  if (textNode) textNode.textContent = ` ${Math.round(value).toLocaleString('ru-RU')}`;
+}
+
+function readLocalSave(): Record<string, unknown> | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistClaimedOfflineReward(amount: number) {
+  const save = readLocalSave();
+  if (!save) return null;
+  const currentCoins = Number(save.coins) || 0;
+  const pendingReward = Math.max(0, Number(save.lastOfflineReward) || amount);
+  const reward = Math.max(0, pendingReward || amount);
+  const nextSave = {
+    ...save,
+    coins: currentCoins + reward,
+    lastOfflineReward: 0,
+    lastSavedAt: Date.now(),
+  };
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSave));
+  } catch {
+    return nextSave;
+  }
+
+  const initData = telegramInitData();
+  if (initData) {
+    void fetch(`${API_URL}/api/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `tma ${initData}`,
+      },
+      body: JSON.stringify(nextSave),
+    }).catch(() => undefined);
+  }
+
+  return nextSave;
+}
+
+function patchOfflineRewardClaim() {
+  document.querySelectorAll<HTMLElement>('.offline-toast').forEach((toast) => {
+    if (toast.dataset.offlineClaimPatched === 'true') return;
+    toast.dataset.offlineClaimPatched = 'true';
+    toast.addEventListener('click', (event) => {
+      const amount = parseNumber(textOf(toast));
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const nextSave = persistClaimedOfflineReward(amount);
+      const nextCoins = Number(nextSave?.coins);
+      if (Number.isFinite(nextCoins)) updateWalletCoins(nextCoins);
+      toast.classList.add('offline-toast-claimed');
+      toast.textContent = `Зачислено +${Math.round(amount).toLocaleString('ru-RU')} 🪙`;
+      window.setTimeout(() => window.location.reload(), 240);
+    }, { capture: true });
+  });
+}
+
 function patchReleaseModal() {
   const modal = document.querySelector<HTMLElement>('.release-modal.animated-release');
   if (!modal) return;
   modal.classList.add('release-modal-v8');
+
+  const coverArt = modal.querySelector<HTMLElement>('.cover-art');
+  coverArt?.classList.add('pixel-cat-cover');
 
   const scoreStage = modal.querySelector<HTMLElement>('.score-stage');
   const criticGrid = modal.querySelector<HTMLElement>('.critic-grid');
@@ -44,6 +245,11 @@ function patchReleaseModal() {
 
   modal.querySelectorAll<HTMLElement>('.critic-card.shown').forEach((card) => {
     const scoreValue = parseNumber(textOf(card.querySelector('b')));
+    const quote = card.querySelector<HTMLElement>('em');
+    if (quote && card.dataset.releaseCommentPatched !== 'true') {
+      quote.textContent = randomReleaseComment();
+      card.dataset.releaseCommentPatched = 'true';
+    }
     card.classList.remove('critic-score-low', 'critic-score-mid', 'critic-score-good', 'critic-score-high');
     if (!Number.isFinite(scoreValue)) return;
     if (scoreValue <= 3) card.classList.add('critic-score-low');
@@ -99,6 +305,7 @@ function applyPatch() {
   patchStudioUpgradeVisibility();
   patchStudioExpensesInSummary();
   patchReleaseArchive();
+  patchOfflineRewardClaim();
 }
 
 export function installReleaseUiPatch() {
