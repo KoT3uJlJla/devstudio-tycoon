@@ -1,10 +1,13 @@
-﻿{
+{
   "name": "devstudio-tycoon-server",
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "node index.js"
+    "start": "node --import ./server-hardening.js index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
