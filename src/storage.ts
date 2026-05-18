@@ -104,16 +104,16 @@ function parseSave(raw: string | null): GameState | null {
   }
 }
 
-async function loadServerSave(): Promise<GameState | null> {
+async function fetchServerSave(path: string, timeoutMs: number): Promise<GameState | null> {
   if (!canUseServerSave()) return null;
   const payload = await withTimeout(
-    fetch(`${API_URL}/api/save`, {
+    fetch(`${API_URL}${path}`, {
       headers: { Authorization: `tma ${telegramInitData()}` },
     })
       .then((response) => (response.ok ? response.json() : null))
       .catch(() => null),
     null,
-    isTelegramRuntime() ? SERVER_LOAD_TIMEOUT_MS : LOCAL_SERVER_LOAD_TIMEOUT_MS,
+    timeoutMs,
   );
   const rawSave = payload?.save?.data;
   if (!rawSave || !isPlainObject(rawSave)) return null;
@@ -122,6 +122,16 @@ async function loadServerSave(): Promise<GameState | null> {
   } catch {
     return null;
   }
+}
+
+async function loadServerSave(): Promise<GameState | null> {
+  if (!canUseServerSave()) return null;
+  const timeoutMs = isTelegramRuntime() ? SERVER_LOAD_TIMEOUT_MS : LOCAL_SERVER_LOAD_TIMEOUT_MS;
+
+  const reconciledSave = await fetchServerSave('/api/stars/reconcile', timeoutMs);
+  if (reconciledSave) return reconciledSave;
+
+  return fetchServerSave('/api/save', timeoutMs);
 }
 
 async function saveServerState(state: GameState, keepalive = false) {
