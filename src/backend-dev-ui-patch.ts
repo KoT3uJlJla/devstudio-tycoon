@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
+const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.onrender.com';
 
 type BackendEndpoint = 'skip' | 'promote' | 'resolve-event' | 'release';
@@ -31,6 +32,14 @@ function persistServerSave(payload: BackendPayload) {
   }
 }
 
+function markBackendUiAction(endpoint: BackendEndpoint) {
+  try {
+    sessionStorage.setItem(BACKEND_UI_ACTION_KEY, endpoint);
+  } catch {
+    // Best-effort marker. If unavailable, storage bridge may still retry safely.
+  }
+}
+
 async function postBackendAction(endpoint: BackendEndpoint, body: Record<string, unknown> = {}) {
   if (!canUseBackendActions()) throw new Error('backend_actions_unavailable');
   const response = await fetch(`${API_URL}/api/development/${endpoint}`, {
@@ -52,10 +61,6 @@ function rerunOriginalClick(button: HTMLButtonElement) {
   window.setTimeout(() => button.click(), 0);
 }
 
-function reloadFromServerSave() {
-  window.setTimeout(() => window.location.reload(), 80);
-}
-
 function attachBackendAction(button: HTMLButtonElement, endpoint: BackendEndpoint, body: Record<string, unknown> = {}) {
   if (button.dataset.backendActionPatched === endpoint) return;
   button.dataset.backendActionPatched = endpoint;
@@ -74,7 +79,10 @@ function attachBackendAction(button: HTMLButtonElement, endpoint: BackendEndpoin
     button.classList.add('backend-action-pending');
     try {
       await postBackendAction(endpoint, body);
-      reloadFromServerSave();
+      markBackendUiAction(endpoint);
+      button.disabled = false;
+      button.classList.remove('backend-action-pending');
+      rerunOriginalClick(button);
     } catch {
       button.disabled = false;
       button.classList.remove('backend-action-pending');
