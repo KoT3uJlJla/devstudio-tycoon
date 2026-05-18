@@ -9,7 +9,7 @@ type EconomyPayload = {
   ok?: boolean;
   error?: string;
   save?: { data?: unknown };
-  economy?: { stars?: number };
+  economy?: { stars?: number; coins?: number; rp?: number };
 };
 
 type InvoicePayload = {
@@ -18,6 +18,7 @@ type InvoicePayload = {
   invoiceLink?: string;
   invoice?: { invoiceId?: string; status?: string };
   save?: { data?: unknown };
+  economy?: { stars?: number; coins?: number; rp?: number };
 };
 
 type TelegramPopupWebApp = {
@@ -67,7 +68,7 @@ function persistRawSaveData(data: unknown) {
   }
 }
 
-function persistServerSave(payload: EconomyPayload | InvoicePayload) {
+function persistServerSave(payload: EconomyPayload | InvoicePayload | null | undefined) {
   return persistRawSaveData(payload?.save?.data);
 }
 
@@ -106,23 +107,37 @@ async function postJson<T>(url: string, body: Record<string, unknown> = {}, time
   }
 }
 
-async function fetchAuthoritativeSave() {
-  const response = await fetch(`${API_URL}/api/stars/reconcile`, {
-    headers: { Authorization: `tma ${telegramInitData()}` },
-  });
-  const payload = await response.json().catch(() => null) as EconomyPayload | null;
-  if (!response.ok || !payload?.ok || !persistServerSave(payload)) {
-    throw new Error(payload?.error || 'save_refresh_failed');
+async function getJson<T>(url: string, timeoutMs = 4500): Promise<T> {
+  if (!canUseBackendEconomy()) throw new Error('backend_economy_unavailable');
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Authorization: `tma ${telegramInitData()}` },
+    });
+    const payload = await response.json().catch(() => null) as T & { ok?: boolean; error?: string } | null;
+    if (!response.ok || !payload?.ok) throw new Error(payload?.error || `request_failed:${url}`);
+    return payload;
+  } finally {
+    window.clearTimeout(timer);
   }
+}
+
+async function fetchWalletState() {
+  const payload = await getJson<EconomyPayload>(`${API_URL}/api/wallet/state`, 6500);
+  if (!persistServerSave(payload)) throw new Error('wallet_state_missing_save');
   return payload;
 }
 
+async function fetchAuthoritativeSave() {
+  // /api/wallet/state is the authoritative wallet endpoint. It also reconciles
+  // already-spent game Stars ledger entries into coins/RP without reloading the app.
+  return fetchWalletState();
+}
+
 async function getInvoiceStatus(invoiceId: string): Promise<InvoicePayload> {
-  const response = await fetch(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, {
-    headers: { Authorization: `tma ${telegramInitData()}` },
-  });
-  const payload = await response.json().catch(() => null) as InvoicePayload | null;
-  if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'invoice_status_failed');
+  const payload = await getJson<InvoicePayload>(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, 4500);
   persistServerSave(payload);
   return payload;
 }
@@ -137,21 +152,12 @@ async function createStarsInvoice(itemId: string) {
   return postJson<InvoicePayload>(`${API_URL}/api/stars/invoice`, { itemId }, 6500);
 }
 
-function refreshAfterServerState() {
-  window.setTimeout(() => window.location.reload(), 450);
-}
-
-async function refreshSaveAndReload() {
-  await fetchAuthoritativeSave();
-  refreshAfterServerState();
-}
-
 async function waitForPaidInvoice(invoiceId: string) {
   for (let attempt = 0; attempt < 16; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, attempt < 6 ? 500 : 1000));
     const status = await getInvoiceStatus(invoiceId).catch(() => null);
     if (status?.invoice?.status === 'paid') {
-      await refreshSaveAndReload().catch(() => refreshAfterServerState());
+      await fetchAuthoritativeSave().catch(() => undefined);
       return true;
     }
   }
@@ -207,7 +213,9 @@ function attachEconomyAction(
     button.classList.add('backend-action-pending');
     try {
       await postEconomyAction(endpoint, body);
-      await refreshSaveAndReload();
+      await fetchAuthoritativeSave();
+      // No full page reload: wallet UI patch and devstudio:server-save event update
+      // the visible balance without showing the startup loading screen.
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('not_enough_stars') && endpoint === 'shop/purchase' && typeof body.itemId === 'string') {
