@@ -6,9 +6,11 @@ import './mobile-topbar.css';
 import './v8-ui-patch.css';
 import { installReleaseUiPatch } from './release-ui-patch';
 import { installBackendDevUiPatch } from './backend-dev-ui-patch';
+import { installBackendEconomyUiPatch } from './backend-economy-ui-patch';
 
 installReleaseUiPatch();
 installBackendDevUiPatch();
+installBackendEconomyUiPatch();
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
