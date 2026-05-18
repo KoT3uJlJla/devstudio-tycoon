@@ -186,6 +186,8 @@ function queueKeyForRequest(req) {
 function serializeSensitiveRequests(req, res, next) {
   const key = queueKeyForRequest(req);
   if (!key) return next();
+  if (req.__devstudioSerialized) return next();
+  req.__devstudioSerialized = true;
 
   const previous = requestQueues.get(key) || Promise.resolve();
   let release;
@@ -208,6 +210,11 @@ function serializeSensitiveRequests(req, res, next) {
 
   res.once('finish', done);
   res.once('close', done);
+}
+
+function serializeBodylessSensitiveRequests(req, res, next) {
+  if (req.method === 'GET' || req.method === 'DELETE') return serializeSensitiveRequests(req, res, next);
+  return next();
 }
 
 function restrictedCors(options = {}) {
@@ -246,6 +253,7 @@ function hardenedExpress(...args) {
   app.use(debugRouteGuard);
   app.use(rateLimitMiddleware);
   app.use(initDataFreshnessGuard);
+  app.use(serializeBodylessSensitiveRequests);
   return app;
 }
 
