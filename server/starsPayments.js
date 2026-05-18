@@ -31,17 +31,34 @@ function invoiceIdFromPayload(payload) {
   return value.startsWith("ds_shop:") ? value.slice("ds_shop:".length) : "";
 }
 
-function invoiceAlreadyApplied(data, invoiceId) {
-  return Boolean(isPlainObject(data?.paidInvoiceClaims) && data.paidInvoiceClaims[invoiceId]);
+function invoiceClaim(data, invoiceId) {
+  return isPlainObject(data?.paidInvoiceClaims) && isPlainObject(data.paidInvoiceClaims[invoiceId])
+    ? data.paidInvoiceClaims[invoiceId]
+    : null;
 }
 
-function markInvoiceApplied(data, invoice) {
+function invoiceRewardLooksApplied(data, reward, claim) {
+  if (!claim) return false;
+  const coinsAfter = Number(claim.coinsAfter);
+  const rpAfter = Number(claim.rpAfter);
+  if (reward.coins && (!Number.isFinite(coinsAfter) || safeInt(data?.coins, -50000) < coinsAfter)) return false;
+  if (reward.rp && (!Number.isFinite(rpAfter) || safeInt(data?.rp, 0) < rpAfter)) return false;
+  return true;
+}
+
+function markInvoiceApplied(data, invoice, reward) {
   const next = isPlainObject(data) ? { ...data } : {};
   next.paidInvoiceClaims = {
     ...(isPlainObject(next.paidInvoiceClaims) ? next.paidInvoiceClaims : {}),
     [invoice.invoiceId]: {
       itemId: invoice.itemId,
       amountStars: invoice.amountStars,
+      reward: {
+        coins: safeInt(reward.coins, 0),
+        rp: safeInt(reward.rp, 0),
+      },
+      coinsAfter: safeInt(next.coins, -50000),
+      rpAfter: safeInt(next.rp, 0),
       appliedAt: Date.now(),
     },
   };
@@ -95,11 +112,12 @@ async function applyInvoiceRewardIfNeeded(deps, invoice) {
 
   const save = await deps.getSave(invoice.telegramId);
   const currentData = save?.data || {};
-  if (invoiceAlreadyApplied(currentData, invoice.invoiceId)) return currentData;
+  const claim = invoiceClaim(currentData, invoice.invoiceId);
+  if (invoiceRewardLooksApplied(currentData, item.reward, claim)) return currentData;
 
   const economy = await deps.getOrCreateEconomy(invoice.telegramUser, currentData);
   const rewarded = deps.applyRewardToSaveData(currentData, item.reward);
-  const marked = markInvoiceApplied(rewarded, invoice);
+  const marked = markInvoiceApplied(rewarded, invoice, item.reward);
   const nextData = deps.overlayProtectedEconomy(marked, economy);
   await deps.writeSave(invoice.telegramId, invoice.telegramUser, nextData);
   await deps.db.collection("stars_invoices").updateOne(
