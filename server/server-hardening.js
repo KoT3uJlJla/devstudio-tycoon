@@ -1,4 +1,5 @@
-import cors from 'cors';
+import Module from 'node:module';
+import { createRequire } from 'node:module';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://devstudio-tycoon-stat.pages.dev',
@@ -18,10 +19,11 @@ const allowedOrigins = new Set(
     .filter(Boolean),
 );
 
-const originalCors = cors.default || cors;
+const require = createRequire(import.meta.url);
+const originalCors = require('cors');
 
-function buildRestrictedCorsOptions(options = {}) {
-  return {
+function restrictedCors(options = {}) {
+  return originalCors({
     ...options,
     origin(origin, callback) {
       if (!origin || allowedOrigins.has(origin)) {
@@ -31,18 +33,13 @@ function buildRestrictedCorsOptions(options = {}) {
       callback(new Error(`CORS origin blocked: ${origin}`));
     },
     credentials: false,
-  };
-}
-
-function restrictedCors(options) {
-  return originalCors(buildRestrictedCorsOptions(options));
+  });
 }
 
 Object.assign(restrictedCors, originalCors);
 
-try {
-  cors.default = restrictedCors;
-} catch {
-  // Some module namespace objects are read-only. The CommonJS default export
-  // used by Node's ESM bridge is mutable in production, so this is best-effort.
-}
+const originalLoad = Module._load;
+Module._load = function patchedLoad(request, parent, isMain) {
+  if (request === 'cors') return restrictedCors;
+  return originalLoad.call(this, request, parent, isMain);
+};
