@@ -66,6 +66,114 @@ function markInvoiceApplied(data, invoice, reward) {
   return next;
 }
 
+function paidRewardTotals(deps, invoices) {
+  return invoices.reduce((totals, invoice) => {
+    const reward = deps.SHOP_ITEMS[invoice.itemId]?.reward || {};
+    totals.coins += safeInt(reward.coins, 0);
+    totals.rp += safeInt(reward.rp, 0);
+    return totals;
+  }, { coins: 0, rp: 0 });
+}
+
+function publicWalletEconomy(economy) {
+  return {
+    coins: safeInt(economy?.coins, 0, 999999999),
+    rp: safeInt(economy?.rp, 0, 999999999),
+    stars: safeInt(economy?.stars, 0, 9999999),
+    qualifiedReferrals: safeInt(economy?.qualifiedReferrals, 0, 999999),
+    qualifiedSecondLevelReferrals: safeInt(economy?.qualifiedSecondLevelReferrals, 0, 999999),
+    referralMilestoneClaims: isPlainObject(economy?.referralMilestoneClaims) ? economy.referralMilestoneClaims : {},
+    dailyClaimedAt: economy?.dailyClaimedAt || null,
+    lastRating: economy?.lastRating || null,
+  };
+}
+
+function overlayWallet(data, economy) {
+  const wallet = publicWalletEconomy(economy);
+  return {
+    ...(isPlainObject(data) ? data : {}),
+    coins: wallet.coins,
+    rp: wallet.rp,
+    stars: wallet.stars,
+    qualifiedReferrals: wallet.qualifiedReferrals,
+    qualifiedSecondLevelReferrals: wallet.qualifiedSecondLevelReferrals,
+    referralMilestoneClaims: wallet.referralMilestoneClaims,
+    dailyClaimedAt: wallet.dailyClaimedAt,
+  };
+}
+
+async function paidInvoicesForPlayer(deps, telegramId) {
+  return deps.db.collection("stars_invoices")
+    .find({ telegramId, status: "paid" })
+    .sort({ paidAt: 1, createdAt: 1 })
+    .limit(200)
+    .toArray();
+}
+
+async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
+  const telegramId = telegramUser.id;
+  const save = saveData ? { data: saveData } : await deps.getSave(telegramId);
+  let economy = await deps.getOrCreateEconomy(telegramUser, save?.data);
+  const invoices = await paidInvoicesForPlayer(deps, telegramId);
+  const paidTotals = paidRewardTotals(deps, invoices);
+
+  const nextCoins = Math.max(
+    safeInt(economy?.coins, 0),
+    safeInt(save?.data?.coins, 0),
+    paidTotals.coins,
+  );
+  const nextRp = Math.max(
+    safeInt(economy?.rp, 0),
+    safeInt(save?.data?.rp, 0),
+    paidTotals.rp,
+  );
+
+  const setPatch = {};
+  if (safeInt(economy?.coins, -1) !== nextCoins) setPatch.coins = nextCoins;
+  if (safeInt(economy?.rp, -1) !== nextRp) setPatch.rp = nextRp;
+  if (!isPlainObject(economy?.paidInvoiceClaims)) setPatch.paidInvoiceClaims = economy?.paidInvoiceClaims || {};
+
+  if (Object.keys(setPatch).length) {
+    economy = await deps.patchEconomy(telegramId, { $set: setPatch });
+  }
+
+  const protectedData = overlayWallet(save?.data || {}, economy);
+  if (save?.data) await deps.writeSave(telegramId, telegramUser, protectedData);
+  return { data: protectedData, economy };
+}
+
+function moveLatestRouteBeforePrevious(app, path, method) {
+  const stack = app?._router?.stack || app?.router?.stack;
+  if (!Array.isArray(stack)) return;
+  const matches = stack
+    .map((layer, index) => ({ layer, index }))
+    .filter(({ layer }) => layer?.route?.path === path && layer.route.methods?.[method]);
+  if (matches.length < 2) return;
+  const latest = matches[matches.length - 1];
+  const first = matches[0];
+  const [layer] = stack.splice(latest.index, 1);
+  const insertAt = latest.index < first.index ? first.index - 1 : first.index;
+  stack.splice(insertAt, 0, layer);
+}
+
+function registerAuthoritativeSaveGet(app, deps) {
+  app.get("/api/save", deps.requireTelegramUser, async (req, res) => {
+    try {
+      const { data, economy } = await ensureAuthoritativeWallet(deps, req.telegramUser);
+      res.json({
+        ok: true,
+        save: data ? { data, updatedAt: new Date() } : null,
+        economy: publicWalletEconomy(economy),
+        development: data ? null : null,
+      });
+    } catch (error) {
+      console.error("Authoritative wallet save failed:", error);
+      res.status(500).json({ ok: false, error: "wallet_save_failed" });
+    }
+  });
+  moveLatestRouteBeforePrevious(app, "/api/save", "get");
+}
+
 async function botApi(botToken, method, payload) {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
@@ -113,7 +221,10 @@ async function applyInvoiceRewardIfNeeded(deps, invoice) {
   const save = await deps.getSave(invoice.telegramId);
   const currentData = save?.data || {};
   const claim = invoiceClaim(currentData, invoice.invoiceId);
-  if (invoiceRewardLooksApplied(currentData, item.reward, claim)) return currentData;
+  if (invoiceRewardLooksApplied(currentData, item.reward, claim)) {
+    const ensured = await ensureAuthoritativeWallet(deps, invoice.telegramUser, currentData);
+    return ensured.data;
+  }
 
   const economy = await deps.getOrCreateEconomy(invoice.telegramUser, currentData);
   const rewarded = deps.applyRewardToSaveData(currentData, item.reward);
@@ -124,22 +235,21 @@ async function applyInvoiceRewardIfNeeded(deps, invoice) {
     { invoiceId: invoice.invoiceId },
     { $set: { appliedRewardAt: new Date(), updatedAt: new Date() } },
   );
-  return nextData;
+  const ensured = await ensureAuthoritativeWallet(deps, invoice.telegramUser, nextData);
+  return ensured.data;
 }
 
 export async function reconcilePaidInvoiceRewards(deps, telegramUser) {
-  const invoices = await deps.db.collection("stars_invoices")
-    .find({ telegramId: telegramUser.id, status: "paid" })
-    .sort({ paidAt: 1, createdAt: 1 })
-    .limit(50)
-    .toArray();
+  const invoices = await paidInvoicesForPlayer(deps, telegramUser.id);
 
   let latestData = null;
   for (const invoice of invoices) {
     const data = await applyInvoiceRewardIfNeeded(deps, invoice);
     if (data) latestData = data;
   }
-  return latestData;
+
+  const ensured = await ensureAuthoritativeWallet(deps, telegramUser, latestData);
+  return ensured.data;
 }
 
 async function applyPaidInvoice(deps, invoice, payment) {
@@ -188,6 +298,8 @@ async function handleSuccessfulPayment(deps, message) {
 export function registerStarsPaymentRoutes(app, deps) {
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || "";
   const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL || "";
+
+  registerAuthoritativeSaveGet(app, deps);
 
   app.post("/api/stars/invoice", deps.requireTelegramUser, async (req, res) => {
     try {
