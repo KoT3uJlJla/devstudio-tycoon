@@ -7,11 +7,42 @@
     <meta name="referrer" content="no-referrer" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://devstudio-tycoon-api.onrender.com https://telegram.org https://*.telegram.org http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; frame-src https://telegram.org https://*.telegram.org; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests" />
     <title>DevStudio Tycoon</title>
+    <style>
+      :root { color-scheme: dark; --bg:#070812; --ink:#05060d; --paper:#fff0bb; --text:#fffaf2; --muted:#cfd6ff; --cyan:#1df7ff; --pink:#ff3bbd; --yellow:#ffe04e; }
+      * { box-sizing: border-box; }
+      html, body, #root { min-height: 100%; }
+      body { margin: 0; color: var(--text); background: radial-gradient(circle at 12% 8%, rgba(255,59,189,.32), transparent 24%), radial-gradient(circle at 86% 6%, rgba(29,247,255,.28), transparent 22%), linear-gradient(145deg, #05060d, #151342 55%, #05060d); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .boot-shell { min-height: 100vh; display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)); }
+      .boot-card { width: min(100%, 430px); border: 3px solid var(--ink); border-radius: 26px; padding: 22px; background: rgba(15,18,42,.94); box-shadow: 8px 8px 0 #02030a, 11px 11px 0 rgba(255,59,189,.55); overflow: hidden; position: relative; }
+      .boot-card::after { content: ''; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(255,255,255,.13) 0 1px, transparent 1px); background-size: 10px 10px; opacity: .12; }
+      .boot-card > * { position: relative; z-index: 1; }
+      .boot-eyebrow { margin: 0 0 8px; color: var(--cyan); font-size: 11px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+      .boot-title { margin: 0; font-size: clamp(30px, 10vw, 48px); line-height: .94; letter-spacing: -.055em; text-transform: uppercase; font-weight: 950; }
+      .boot-copy { margin: 12px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.45; font-weight: 650; }
+      .boot-bar { height: 16px; border: 3px solid var(--ink); border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.08); }
+      .boot-bar i { display: block; width: 48%; height: 100%; background: linear-gradient(90deg, var(--yellow), var(--pink), var(--cyan)); border-radius: inherit; animation: boot-progress 1.05s ease-in-out infinite alternate; }
+      .boot-offline { display: none; margin-top: 14px; padding: 12px; border: 2px solid rgba(255,224,78,.42); border-radius: 16px; background: rgba(255,224,78,.08); color: var(--paper); line-height: 1.35; font-weight: 750; }
+      body.boot-is-offline .boot-offline { display: block; }
+      body.boot-is-offline .boot-copy { color: var(--paper); }
+      @keyframes boot-progress { from { transform: translateX(-24%); width: 42%; } to { transform: translateX(132%); width: 58%; } }
+    </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/offline-boot.js" defer></script>
     <script type="module" crossorigin src="/assets/index-CaoFUZtP.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-BHtMpX0q.css">
+    <link rel="stylesheet" href="/predeploy-hardening.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="boot-shell" role="status" aria-live="polite">
+        <section class="boot-card">
+          <p class="boot-eyebrow">DevStudio Tycoon</p>
+          <h1 class="boot-title">Студия загружается</h1>
+          <p class="boot-copy">Поднимаем мини‑приложение, сейв и экономику. Первый экран уже готов — игра откроется сразу после загрузки кода.</p>
+          <div class="boot-bar" aria-hidden="true"><i></i></div>
+          <p class="boot-offline">Похоже, сейчас нет интернета. Откроем сохранённую версию, если она уже была загружена на этом устройстве.</p>
+        </section>
+      </main>
+    </div>
   </body>
 </html>
