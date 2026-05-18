@@ -7,13 +7,20 @@ import './v8-ui-patch.css';
 import { installReleaseUiPatch } from './release-ui-patch';
 import { installBackendDevUiPatch } from './backend-dev-ui-patch';
 import { installBackendEconomyUiPatch } from './backend-economy-ui-patch';
+import { reconcileStartupSave } from './startup-save-reconcile';
 
-installReleaseUiPatch();
-installBackendDevUiPatch();
-installBackendEconomyUiPatch();
+async function boot() {
+  await reconcileStartupSave();
 
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+  installReleaseUiPatch();
+  installBackendDevUiPatch();
+  installBackendEconomyUiPatch();
+
+  createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+void boot();
