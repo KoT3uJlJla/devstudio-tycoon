@@ -57,11 +57,20 @@ function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
+function dispatchServerSave(data: unknown) {
+  try {
+    window.dispatchEvent(new CustomEvent('devstudio:server-save', { detail: { data } }));
+  } catch {
+    // best effort
+  }
+}
+
 function persistRawSaveData(data: unknown) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     applyVisibleBalanceFromSave(data);
+    dispatchServerSave(data);
     return true;
   } catch {
     return false;
@@ -131,8 +140,6 @@ async function fetchWalletState() {
 }
 
 async function fetchAuthoritativeSave() {
-  // /api/wallet/state is the authoritative wallet endpoint. It also reconciles
-  // already-spent game Stars ledger entries into coins/RP without reloading the app.
   return fetchWalletState();
 }
 
@@ -188,6 +195,13 @@ async function openStarsInvoice(itemId: string) {
   });
 }
 
+function replayReactHandler(button: HTMLButtonElement) {
+  button.dataset.backendEconomyBypass = '1';
+  button.disabled = false;
+  button.classList.remove('backend-action-pending');
+  window.setTimeout(() => button.click(), 0);
+}
+
 function attachEconomyAction(
   button: HTMLButtonElement,
   key: string,
@@ -197,6 +211,10 @@ function attachEconomyAction(
   if (button.dataset.backendEconomyPatched === key) return;
   button.dataset.backendEconomyPatched = key;
   button.addEventListener('click', async (event) => {
+    if (button.dataset.backendEconomyBypass === '1') {
+      delete button.dataset.backendEconomyBypass;
+      return;
+    }
     if (button.disabled || !canUseBackendEconomy()) {
       event.preventDefault();
       event.stopPropagation();
@@ -213,9 +231,8 @@ function attachEconomyAction(
     button.classList.add('backend-action-pending');
     try {
       await postEconomyAction(endpoint, body);
-      await fetchAuthoritativeSave();
-      // No full page reload: wallet UI patch and devstudio:server-save event update
-      // the visible balance without showing the startup loading screen.
+      await fetchAuthoritativeSave().catch(() => undefined);
+      replayReactHandler(button);
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('not_enough_stars') && endpoint === 'shop/purchase' && typeof body.itemId === 'string') {
@@ -231,8 +248,8 @@ function attachEconomyAction(
       } else {
         showEconomyNotice('Сервер экономики временно недоступен. Товар не выдан, попробуй позже.');
       }
-    } finally {
       button.disabled = false;
+    } finally {
       button.classList.remove('backend-action-pending');
     }
   }, { capture: true });
