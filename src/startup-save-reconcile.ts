@@ -60,7 +60,7 @@ export async function reconcileStartupSave() {
   if (!API_URL || !initData || !isTelegramRuntime()) return;
 
   const payload = await withTimeout(
-    fetch(`${API_URL}/api/stars/reconcile`, {
+    fetch(`${API_URL}/api/wallet/state`, {
       headers: { Authorization: `tma ${initData}` },
     })
       .then((response) => (response.ok ? response.json() : null))
