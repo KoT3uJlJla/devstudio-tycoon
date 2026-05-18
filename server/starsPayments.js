@@ -62,86 +62,6 @@ function invoiceIdFromPayload(payload) {
   return value.startsWith("ds_shop:") ? value.slice("ds_shop:".length) : "";
 }
 
-function invoiceClaim(data, invoiceId) {
-  return isPlainObject(data?.paidInvoiceClaims) && isPlainObject(data.paidInvoiceClaims[invoiceId])
-    ? data.paidInvoiceClaims[invoiceId]
-    : null;
-}
-
-function invoiceRewardLooksApplied(data, reward, claim) {
-  if (!claim) return false;
-  const coinsAfter = Number(claim.coinsAfter);
-  const rpAfter = Number(claim.rpAfter);
-  if (reward.coins && (!Number.isFinite(coinsAfter) || safeInt(data?.coins, -50000) < coinsAfter)) return false;
-  if (reward.rp && (!Number.isFinite(rpAfter) || safeInt(data?.rp, 0) < rpAfter)) return false;
-  return true;
-}
-
-function markInvoiceApplied(data, invoice, reward) {
-  const next = isPlainObject(data) ? { ...data } : {};
-  next.paidInvoiceClaims = {
-    ...(isPlainObject(next.paidInvoiceClaims) ? next.paidInvoiceClaims : {}),
-    [invoice.invoiceId]: {
-      itemId: invoice.itemId,
-      amountStars: invoice.amountStars,
-      reward: {
-        coins: safeInt(reward.coins, 0),
-        rp: safeInt(reward.rp, 0),
-      },
-      coinsAfter: safeInt(next.coins, -50000),
-      rpAfter: safeInt(next.rp, 0),
-      appliedAt: Date.now(),
-    },
-  };
-  next.lastSavedAt = Date.now();
-  return next;
-}
-
-function itemIdFromLedgerEntry(entry) {
-  const reason = String(entry?.reason || "");
-  if (reason.startsWith("invoice:")) return reason.slice("invoice:".length);
-  if (reason.startsWith("shop:")) return reason.slice("shop:".length);
-  return "";
-}
-
-function addRewardTotals(totals, reward) {
-  totals.coins += safeInt(reward?.coins, 0);
-  totals.rp += safeInt(reward?.rp, 0);
-}
-
-function rewardTotalsFromPaidSources(deps, invoices, economy) {
-  const totals = { coins: 0, rp: 0, invoiceIds: new Set(), shopLedgerIds: new Set() };
-
-  for (const invoice of invoices) {
-    const reward = deps.SHOP_ITEMS[invoice.itemId]?.reward || {};
-    addRewardTotals(totals, reward);
-    if (invoice.invoiceId) totals.invoiceIds.add(String(invoice.invoiceId));
-  }
-
-  const ledger = Array.isArray(economy?.ledger) ? economy.ledger : [];
-  for (const entry of ledger) {
-    const kind = String(entry?.kind || "");
-    const invoiceId = String(entry?.meta?.invoiceId || "");
-    if (kind === "telegram_stars_payment") {
-      if (invoiceId && totals.invoiceIds.has(invoiceId)) continue;
-      const itemId = itemIdFromLedgerEntry(entry);
-      addRewardTotals(totals, deps.SHOP_ITEMS[itemId]?.reward || {});
-      if (invoiceId) totals.invoiceIds.add(invoiceId);
-      continue;
-    }
-
-    if (kind === "star_spend" && String(entry?.reason || "").startsWith("shop:")) {
-      const ledgerId = String(entry?.id || `${entry?.reason || ""}:${entry?.createdAt || ""}`);
-      if (totals.shopLedgerIds.has(ledgerId)) continue;
-      totals.shopLedgerIds.add(ledgerId);
-      const itemId = itemIdFromLedgerEntry(entry);
-      addRewardTotals(totals, deps.SHOP_ITEMS[itemId]?.reward || {});
-    }
-  }
-
-  return totals;
-}
-
 function publicWalletEconomy(economy) {
   return {
     coins: safeInt(economy?.coins, 0, 999999999),
@@ -169,51 +89,36 @@ function overlayWallet(data, economy) {
   };
 }
 
-async function paidInvoicesForPlayer(deps, telegramId) {
-  return deps.db.collection("stars_invoices")
-    .find({ telegramId, status: "paid" })
-    .sort({ paidAt: 1, createdAt: 1 })
-    .limit(200)
-    .toArray();
-}
-
 async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
   const telegramId = telegramUser.id;
   const save = saveData ? { data: saveData } : await deps.getSave(telegramId);
   let economy = await deps.getOrCreateEconomy(telegramUser, save?.data);
-  const invoices = await paidInvoicesForPlayer(deps, telegramId);
-  const paidTotals = rewardTotalsFromPaidSources(deps, invoices, economy);
+
+  const saveObject = isPlainObject(save?.data) ? save.data : {};
   const alreadyAuthoritative = economy?.walletAuthoritative === true;
 
   const nextCoins = alreadyAuthoritative
-    ? Math.max(safeInt(economy?.coins, 0), paidTotals.coins)
-    : Math.max(safeInt(economy?.coins, 0), safeInt(save?.data?.coins, 0), paidTotals.coins);
+    ? safeInt(saveObject.coins, safeInt(economy?.coins, 0), 999999999)
+    : Math.max(safeInt(saveObject.coins, 0), safeInt(economy?.coins, 0));
   const nextRp = alreadyAuthoritative
-    ? Math.max(safeInt(economy?.rp, 0), paidTotals.rp)
-    : Math.max(safeInt(economy?.rp, 0), safeInt(save?.data?.rp, 0), paidTotals.rp);
+    ? safeInt(saveObject.rp, safeInt(economy?.rp, 0), 999999999)
+    : Math.max(safeInt(saveObject.rp, 0), safeInt(economy?.rp, 0));
 
-  const setPatch = { walletAuthoritative: true };
-  if (safeInt(economy?.coins, -1) !== nextCoins) setPatch.coins = nextCoins;
-  if (safeInt(economy?.rp, -1) !== nextRp) setPatch.rp = nextRp;
+  const setPatch = { walletAuthoritative: true, coins: nextCoins, rp: nextRp };
   if (!isPlainObject(economy?.paidInvoiceClaims)) setPatch.paidInvoiceClaims = economy?.paidInvoiceClaims || {};
 
-  if (Object.keys(setPatch).length) {
-    economy = await deps.patchEconomy(telegramId, { $set: setPatch });
-  }
+  economy = await deps.patchEconomy(telegramId, { $set: setPatch });
 
-  const protectedData = overlayWallet(save?.data || {}, economy);
+  const protectedData = overlayWallet(saveObject, economy);
   if (save?.data) await deps.writeSave(telegramId, telegramUser, protectedData);
   return {
     data: protectedData,
     economy,
     diagnostics: {
-      saveCoins: safeInt(save?.data?.coins, 0),
-      saveRp: safeInt(save?.data?.rp, 0),
+      saveCoins: safeInt(saveObject.coins, 0),
+      saveRp: safeInt(saveObject.rp, 0),
       economyCoins: safeInt(economy?.coins, 0),
       economyRp: safeInt(economy?.rp, 0),
-      paidInvoiceCount: invoices.length,
-      paidInvoiceCoins: paidTotals.coins,
-      paidInvoiceRp: paidTotals.rp,
       walletAuthoritative: economy?.walletAuthoritative === true,
     },
   };
@@ -259,33 +164,54 @@ async function ensureWebhook(botToken, webhookUrl, secretToken) {
   }
 }
 
+function invoiceClaim(data, invoiceId) {
+  return isPlainObject(data?.paidInvoiceClaims) && isPlainObject(data.paidInvoiceClaims[invoiceId])
+    ? data.paidInvoiceClaims[invoiceId]
+    : null;
+}
+
+function markInvoiceApplied(data, invoice, reward) {
+  const next = isPlainObject(data) ? { ...data } : {};
+  next.paidInvoiceClaims = {
+    ...(isPlainObject(next.paidInvoiceClaims) ? next.paidInvoiceClaims : {}),
+    [invoice.invoiceId]: {
+      itemId: invoice.itemId,
+      amountStars: invoice.amountStars,
+      coinsAfter: safeInt(next.coins, -50000),
+      rpAfter: safeInt(next.rp, 0),
+      appliedAt: Date.now(),
+    },
+  };
+  next.lastSavedAt = Date.now();
+  return next;
+}
+
 async function applyInvoiceRewardIfNeeded(deps, invoice) {
   const item = deps.SHOP_ITEMS[invoice.itemId];
   if (!item) return null;
-
   const save = await deps.getSave(invoice.telegramId);
   const currentData = save?.data || {};
   const claim = invoiceClaim(currentData, invoice.invoiceId);
-  if (invoiceRewardLooksApplied(currentData, item.reward, claim)) {
-    const ensured = await ensureAuthoritativeWallet(deps, invoice.telegramUser, currentData);
-    return ensured.data;
-  }
+  if (claim) return (await ensureAuthoritativeWallet(deps, invoice.telegramUser, currentData)).data;
 
   const economy = await deps.getOrCreateEconomy(invoice.telegramUser, currentData);
-  const rewarded = deps.applyRewardToSaveData(currentData, item.reward);
-  const marked = markInvoiceApplied(rewarded, invoice, item.reward);
+  const rewarded = deps.applyRewardToSaveData(currentData, item.reward || {});
+  const marked = markInvoiceApplied(rewarded, invoice, item.reward || {});
   const nextData = deps.overlayProtectedEconomy(marked, economy);
   await deps.writeSave(invoice.telegramId, invoice.telegramUser, nextData);
   await deps.db.collection("stars_invoices").updateOne(
     { invoiceId: invoice.invoiceId },
     { $set: { appliedRewardAt: new Date(), updatedAt: new Date() } },
   );
-  const ensured = await ensureAuthoritativeWallet(deps, invoice.telegramUser, nextData);
-  return ensured.data;
+  return (await ensureAuthoritativeWallet(deps, invoice.telegramUser, nextData)).data;
 }
 
 export async function reconcilePaidInvoiceRewards(deps, telegramUser) {
-  const invoices = await paidInvoicesForPlayer(deps, telegramUser.id);
+  const invoices = await deps.db.collection("stars_invoices")
+    .find({ telegramId: telegramUser.id, status: "paid" })
+    .sort({ paidAt: 1, createdAt: 1 })
+    .limit(200)
+    .toArray();
 
   let latestData = null;
   for (const invoice of invoices) {
@@ -293,14 +219,12 @@ export async function reconcilePaidInvoiceRewards(deps, telegramUser) {
     if (data) latestData = data;
   }
 
-  const ensured = await ensureAuthoritativeWallet(deps, telegramUser, latestData);
-  return ensured.data;
+  return (await ensureAuthoritativeWallet(deps, telegramUser, latestData)).data;
 }
 
 async function applyPaidInvoice(deps, invoice, payment) {
   const item = deps.SHOP_ITEMS[invoice.itemId];
   if (!item) return null;
-
   const nextData = await applyInvoiceRewardIfNeeded(deps, invoice);
   await deps.patchEconomy(invoice.telegramId, {
     $push: {
@@ -314,7 +238,6 @@ async function applyPaidInvoice(deps, invoice, payment) {
     { invoiceId: invoice.invoiceId, status: { $ne: "paid" } },
     { $set: { status: "paid", paidAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
   );
-  await ensureAuthoritativeWallet(deps, invoice.telegramUser, nextData);
   return nextData;
 }
 
@@ -358,7 +281,8 @@ async function handleResearchUnlock(deps, req, res) {
   const action = String(req.body?.action || "");
   const nodeId = String(req.body?.nodeId || "");
   const save = await deps.getSave(req.telegramUser.id);
-  const data = isPlainObject(save?.data) ? { ...save.data } : {};
+  const ensured = await ensureAuthoritativeWallet(deps, req.telegramUser, save?.data || {});
+  const data = isPlainObject(ensured.data) ? { ...ensured.data } : {};
   const researchIds = uniqueStrings(data.unlockedResearchIds);
   const genreIds = uniqueStrings(data.unlockedGenreIds);
   const themeIds = uniqueStrings(data.unlockedThemeIds);
@@ -394,8 +318,8 @@ async function handleResearchUnlock(deps, req, res) {
 
   const economy = await spendResearchRp(deps, req.telegramUser, cost, `research:${action}`, result);
   if (!economy) {
-    const ensured = await ensureAuthoritativeWallet(deps, req.telegramUser, data);
-    return res.status(402).json({ ok: false, error: "not_enough_rp", economy: publicWalletEconomy(ensured.economy) });
+    const current = await ensureAuthoritativeWallet(deps, req.telegramUser, data);
+    return res.status(402).json({ ok: false, error: "not_enough_rp", economy: publicWalletEconomy(current.economy) });
   }
 
   const protectedData = overlayWallet(nextData, economy);
@@ -428,8 +352,7 @@ export function registerStarsPaymentRoutes(app, deps) {
 
   app.get("/api/debug/wallet", deps.requireTelegramUser, async (req, res) => {
     try {
-      const result = await walletStateResponse(deps, req.telegramUser);
-      res.json(result);
+      res.json(await walletStateResponse(deps, req.telegramUser));
     } catch (error) {
       res.status(500).json({ ok: false, error: "wallet_debug_failed", message: error.message || "" });
     }
