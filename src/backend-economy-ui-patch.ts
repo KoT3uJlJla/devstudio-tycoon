@@ -54,8 +54,7 @@ function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
-function persistServerSave(payload: EconomyPayload | InvoicePayload) {
-  const data = payload?.save?.data;
+function persistRawSaveData(data: unknown) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -63,6 +62,10 @@ function persistServerSave(payload: EconomyPayload | InvoicePayload) {
   } catch {
     return false;
   }
+}
+
+function persistServerSave(payload: EconomyPayload | InvoicePayload) {
+  return persistRawSaveData(payload?.save?.data);
 }
 
 function showEconomyNotice(message: string) {
@@ -100,6 +103,17 @@ async function postJson<T>(url: string, body: Record<string, unknown> = {}, time
   }
 }
 
+async function fetchAuthoritativeSave() {
+  const response = await fetch(`${API_URL}/api/save`, {
+    headers: { Authorization: `tma ${telegramInitData()}` },
+  });
+  const payload = await response.json().catch(() => null) as EconomyPayload | null;
+  if (!response.ok || !payload?.ok || !persistServerSave(payload)) {
+    throw new Error(payload?.error || 'save_refresh_failed');
+  }
+  return payload;
+}
+
 async function getInvoiceStatus(invoiceId: string): Promise<InvoicePayload> {
   const response = await fetch(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, {
     headers: { Authorization: `tma ${telegramInitData()}` },
@@ -124,12 +138,17 @@ function refreshAfterServerState() {
   window.setTimeout(() => window.location.reload(), 120);
 }
 
+async function refreshSaveAndReload() {
+  await fetchAuthoritativeSave();
+  refreshAfterServerState();
+}
+
 async function waitForPaidInvoice(invoiceId: string) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 700));
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
     const status = await getInvoiceStatus(invoiceId).catch(() => null);
     if (status?.invoice?.status === 'paid') {
-      refreshAfterServerState();
+      await refreshSaveAndReload().catch(() => refreshAfterServerState());
       return true;
     }
   }
@@ -149,6 +168,7 @@ async function openStarsInvoice(itemId: string) {
 
   webApp.openInvoice(invoiceLink, (status) => {
     if (status === 'paid') {
+      showEconomyNotice('Оплата прошла. Подтягиваем награду с сервера…');
       void waitForPaidInvoice(invoiceId).then((success) => {
         if (!success) showEconomyNotice('Оплата прошла, но награда ещё подтверждается сервером. Закрой и открой игру через несколько секунд.');
       });
@@ -184,7 +204,7 @@ function attachEconomyAction(
     button.classList.add('backend-action-pending');
     try {
       await postEconomyAction(endpoint, body);
-      refreshAfterServerState();
+      await refreshSaveAndReload();
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('not_enough_stars') && endpoint === 'shop/purchase' && typeof body.itemId === 'string') {
