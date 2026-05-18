@@ -6,6 +6,8 @@ const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const CLOUD_THROTTLE_MS = 15_000;
 const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 2_500;
+const SERVER_LOAD_TIMEOUT_MS = 9_000;
+const LOCAL_SERVER_LOAD_TIMEOUT_MS = 2_800;
 const MAX_SAVE_BYTES = 250_000;
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -111,7 +113,7 @@ async function loadServerSave(): Promise<GameState | null> {
       .then((response) => (response.ok ? response.json() : null))
       .catch(() => null),
     null,
-    2800,
+    isTelegramRuntime() ? SERVER_LOAD_TIMEOUT_MS : LOCAL_SERVER_LOAD_TIMEOUT_MS,
   );
   const rawSave = payload?.save?.data;
   if (!rawSave || !isPlainObject(rawSave)) return null;
