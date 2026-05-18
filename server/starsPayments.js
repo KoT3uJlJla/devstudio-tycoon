@@ -1,5 +1,32 @@
 import crypto from "crypto";
 
+const EXTRA_GENRE_IDS = ["horror", "racing", "fighting", "simulator", "visual-novel", "roguelike", "deckbuilder", "survival", "metroidvania", "sandbox", "battle-royale", "rhythm", "party", "idle", "tower-defense", "moba-lite", "city-builder", "detective-game", "sports-manager", "social-sim"];
+const EXTRA_THEME_IDS = ["detective", "medieval", "sport", "postapoc", "military", "mythology", "underwater", "pirates", "kaiju", "dreams", "office", "food", "music", "ai-revolt", "time-travel"];
+const RESEARCH_NODE_COSTS = {
+  "market-analysis": 22,
+  "fast-prototype": 24,
+  "budget-ops": 30,
+  "pixel-polish": 32,
+  "community-posts": 36,
+  "pocket-play-sdk": 40,
+  "qa-checklist": 42,
+  "game-feel": 48,
+  "micro-influencers": 52,
+  "junior-pipeline": 58,
+  "producer-calendar": 64,
+  "service-model": 72,
+  "sound-lab": 78,
+  "liveops-lite": 86,
+  "game-station-sdk": 96,
+  "viral-hooks": 104,
+  "smart-game-sdk": 116,
+  "cross-platform-tools": 128,
+  "seasonal-pr": 140,
+  "ai-assisted-tools": 155,
+  "publisher-relations": 170,
+};
+const RESEARCH_REQUIRES = { "pocket-play-sdk": "fast-prototype", "game-station-sdk": "pocket-play-sdk" };
+
 function isPlainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -8,6 +35,10 @@ function safeInt(value, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return min;
   return Math.floor(Math.min(max, Math.max(min, parsed)));
+}
+
+function uniqueStrings(values) {
+  return Array.from(new Set(Array.isArray(values) ? values.filter(Boolean).map(String) : []));
 }
 
 function invoicePublic(invoice) {
@@ -138,19 +169,16 @@ async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
   let economy = await deps.getOrCreateEconomy(telegramUser, save?.data);
   const invoices = await paidInvoicesForPlayer(deps, telegramId);
   const paidTotals = rewardTotalsFromPaidSources(deps, invoices, economy);
+  const alreadyAuthoritative = economy?.walletAuthoritative === true;
 
-  const nextCoins = Math.max(
-    safeInt(economy?.coins, 0),
-    safeInt(save?.data?.coins, 0),
-    paidTotals.coins,
-  );
-  const nextRp = Math.max(
-    safeInt(economy?.rp, 0),
-    safeInt(save?.data?.rp, 0),
-    paidTotals.rp,
-  );
+  const nextCoins = alreadyAuthoritative
+    ? Math.max(safeInt(economy?.coins, 0), paidTotals.coins)
+    : Math.max(safeInt(economy?.coins, 0), safeInt(save?.data?.coins, 0), paidTotals.coins);
+  const nextRp = alreadyAuthoritative
+    ? Math.max(safeInt(economy?.rp, 0), paidTotals.rp)
+    : Math.max(safeInt(economy?.rp, 0), safeInt(save?.data?.rp, 0), paidTotals.rp);
 
-  const setPatch = {};
+  const setPatch = { walletAuthoritative: true };
   if (safeInt(economy?.coins, -1) !== nextCoins) setPatch.coins = nextCoins;
   if (safeInt(economy?.rp, -1) !== nextRp) setPatch.rp = nextRp;
   if (!isPlainObject(economy?.paidInvoiceClaims)) setPatch.paidInvoiceClaims = economy?.paidInvoiceClaims || {};
@@ -172,6 +200,7 @@ async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
       paidInvoiceCount: invoices.length,
       paidInvoiceCoins: paidTotals.coins,
       paidInvoiceRp: paidTotals.rp,
+      walletAuthoritative: economy?.walletAuthoritative === true,
     },
   };
 }
@@ -298,6 +327,68 @@ async function handleSuccessfulPayment(deps, message) {
   await applyPaidInvoice(deps, invoice, payment);
 }
 
+async function spendResearchRp(deps, telegramUser, amount, reason, meta) {
+  await ensureAuthoritativeWallet(deps, telegramUser);
+  return deps.db.collection("economy").findOneAndUpdate(
+    { telegramId: telegramUser.id, rp: { $gte: amount } },
+    {
+      $inc: { rp: -amount },
+      $set: { walletAuthoritative: true, updatedAt: new Date() },
+      $push: { ledger: { $each: [{ id: crypto.randomUUID(), kind: "rp_spend", amount: -amount, reason, meta, createdAt: new Date() }], $slice: -100 } },
+    },
+    { returnDocument: "after" },
+  );
+}
+
+async function handleResearchUnlock(deps, req, res) {
+  const action = String(req.body?.action || "");
+  const nodeId = String(req.body?.nodeId || "");
+  const save = await deps.getSave(req.telegramUser.id);
+  const data = isPlainObject(save?.data) ? { ...save.data } : {};
+  const researchIds = uniqueStrings(data.unlockedResearchIds);
+  const genreIds = uniqueStrings(data.unlockedGenreIds);
+  const themeIds = uniqueStrings(data.unlockedThemeIds);
+  let cost = 0;
+  let nextData = data;
+  let result = {};
+
+  if (action === "random_genre") {
+    const locked = EXTRA_GENRE_IDS.filter((id) => !genreIds.includes(id));
+    if (!locked.length) return res.status(409).json({ ok: false, error: "all_genres_unlocked" });
+    const id = locked[crypto.randomInt(0, locked.length)];
+    cost = 24;
+    nextData = { ...data, unlockedGenreIds: [...genreIds, id], dailyResearchUnlocked: safeInt(data.dailyResearchUnlocked, 0) + 1 };
+    result = { kind: "genre", id };
+  } else if (action === "random_theme") {
+    const locked = EXTRA_THEME_IDS.filter((id) => !themeIds.includes(id));
+    if (!locked.length) return res.status(409).json({ ok: false, error: "all_themes_unlocked" });
+    const id = locked[crypto.randomInt(0, locked.length)];
+    cost = 22;
+    nextData = { ...data, unlockedThemeIds: [...themeIds, id], dailyResearchUnlocked: safeInt(data.dailyResearchUnlocked, 0) + 1 };
+    result = { kind: "theme", id };
+  } else if (action === "node") {
+    cost = RESEARCH_NODE_COSTS[nodeId] || 0;
+    if (!cost) return res.status(404).json({ ok: false, error: "unknown_research_node" });
+    if (researchIds.includes(nodeId)) return res.status(409).json({ ok: false, error: "research_already_unlocked" });
+    const required = RESEARCH_REQUIRES[nodeId];
+    if (required && !researchIds.includes(required)) return res.status(403).json({ ok: false, error: "research_requirement_locked" });
+    nextData = { ...data, unlockedResearchIds: [...researchIds, nodeId], dailyResearchUnlocked: safeInt(data.dailyResearchUnlocked, 0) + 1 };
+    result = { kind: "node", id: nodeId };
+  } else {
+    return res.status(400).json({ ok: false, error: "unknown_research_action" });
+  }
+
+  const economy = await spendResearchRp(deps, req.telegramUser, cost, `research:${action}`, result);
+  if (!economy) {
+    const ensured = await ensureAuthoritativeWallet(deps, req.telegramUser, data);
+    return res.status(402).json({ ok: false, error: "not_enough_rp", economy: publicWalletEconomy(ensured.economy) });
+  }
+
+  const protectedData = overlayWallet(nextData, economy);
+  await deps.writeSave(req.telegramUser.id, req.telegramUser, protectedData);
+  res.json({ ok: true, save: { data: protectedData, updatedAt: new Date() }, economy: publicWalletEconomy(economy), research: result, cost });
+}
+
 async function walletStateResponse(deps, telegramUser) {
   const { data, economy, diagnostics } = await ensureAuthoritativeWallet(deps, telegramUser);
   return {
@@ -327,6 +418,15 @@ export function registerStarsPaymentRoutes(app, deps) {
       res.json(result);
     } catch (error) {
       res.status(500).json({ ok: false, error: "wallet_debug_failed", message: error.message || "" });
+    }
+  });
+
+  app.post("/api/research/unlock", deps.requireTelegramUser, async (req, res) => {
+    try {
+      await handleResearchUnlock(deps, req, res);
+    } catch (error) {
+      console.error("Research unlock failed:", error);
+      res.status(500).json({ ok: false, error: "research_unlock_failed" });
     }
   });
 
