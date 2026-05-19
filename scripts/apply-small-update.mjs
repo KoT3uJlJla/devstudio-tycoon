@@ -46,6 +46,8 @@ patchFile('src/App.tsx', [
   ["https://t.me/devstudio_bot?start=ref_demo", "https://t.me/DevTycoon_bot?startapp=ref_demo"],
   ["['$125', '25%'], ['$85', '17%'], ['$65', '13%'], ['$50', '10%'], ['$40', '8%'],\n  ['$35', '7%'], ['$30', '6%'], ['$25', '5%'], ['$25', '5%'], ['$20', '4%'],", "['$70', '35%'], ['$50', '25%'], ['$35', '17.5%'], ['$25', '12.5%'], ['$20', '10%'],"],
   [".sort((a, b) => Number(b[2]) - Number(a[2])).slice(0, 10);", ".sort((a, b) => Number(b[2]) - Number(a[2])).slice(0, 5);"],
+  ["<span>10% от покупок приглашённых друзей</span>", "<span>10% ⭐ от трат твоих друзей</span>"],
+  ["<span>3% от покупок друзей твоих друзей</span>", "<span>3% ⭐ от трат друзей твоих друзей</span>"],
   ["Недельный топ-10", "Недельный топ-5"],
   ["Топ-10 лучших игр недели делят призовой фонд $500.", "Топ-5 лучших игр недели делят призовой фонд $200."],
   ["топ-10", "топ-5"],
@@ -81,8 +83,13 @@ replaceBlock(
 );
 
 patchFile('src/telegram.ts', [
-  ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
-  ["const finalText = isReferralShare ? referralShareText().replace(/\\n\\n.*$/, '') : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
+  ["function referralPreviewUrl() {\n  const code = encodeURIComponent(maskedReferralCode());\n  // Telegram does not attach arbitrary images to t.me/share/url messages.\n  // It renders link previews from Open Graph tags, so we share our own preview\n  // page that has og:image and redirects real users to the bot.\n  return `${window.location.origin}/ref.html?r=${code}&v=2`;\n}\n\n", ""],
+  ["function referralShareText() {\n  return 'У тебя не получится сделать игру лучше моей😼\\nМожешь зайти и убедиться в этом сам';\n}", "function referralShareText(refUrl: string) {\n  return `У тебя не получится сделать игру лучше моей😼\\nМожешь зайти и убедиться в этом сам\\n\\n${refUrl}`;\n}"],
+  ["const shareTargetUrl = isReferralShare ? referralPreviewUrl() : (payload.url ?? OFFICIAL_BOT_URL);", "const shareTargetUrl = isReferralShare ? refUrl : (payload.url ?? OFFICIAL_BOT_URL);"],
+  ["const finalText = isReferralShare ? referralShareText() : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(refUrl) : text.slice(0, 220);"],
+  ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(refUrl) : text.slice(0, 220);"],
+  ["const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(refUrl) : text.slice(0, 220);"],
+  ["const finalText = isReferralShare ? referralShareText().replace(/\\n\\n.*$/, '') : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(refUrl) : text.slice(0, 220);"],
   ["const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/devstudio_bot');", "const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/DevTycoon_bot');"],
 ]);
 
@@ -123,4 +130,30 @@ button:hover:not(:disabled), [role="button"]:hover:not([aria-disabled="true"]) {
   .premium-research-card button { width: 100%; }
   .milestone b { justify-self: start; }
 }
+`);
+
+appendOnce('src/styles.css', 'v7.9 — wallet controls and prize pool polish', `
+/* v7.9 — wallet controls and prize pool polish */
+.ton-wallet-input {
+  width: 100%;
+  min-height: 62px;
+  padding: 0 18px;
+  border: 3px solid var(--ink);
+  border-radius: 22px;
+  color: var(--ink);
+  background: #f5f6fb;
+  box-shadow: 4px 4px 0 rgba(0,0,0,.25);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(16px, 4.3vw, 20px);
+  font-weight: 1000;
+  letter-spacing: -.03em;
+  text-transform: none;
+}
+.ton-wallet-input::placeholder { color: rgba(5,6,13,.48); }
+.ton-wallet-actions { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.ton-wallet-address { display: none !important; }
+.prize-grid[data-prize-pool="200"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.prize-grid[data-prize-pool="200"] .prize-cell { min-height: 96px; display: grid; place-items: center; gap: 4px; }
+.referral-grid span { font-weight: 850; }
+@media (min-width: 431px) { .ton-wallet-actions { grid-template-columns: 1fr auto; } }
 `);
