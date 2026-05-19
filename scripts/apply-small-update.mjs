@@ -30,11 +30,12 @@ patchFile('src/App.tsx', [
 ]);
 
 patchFile('src/gameLogic.ts', [
+  ["project.isTutorial: false", "project.isTutorial"],
   ["coins: 3000,", "coins: 2500,"],
   ["tutorialDone: false,", "tutorialDone: true,"],
   ["tutorialStep: 0,", "tutorialStep: 5,"],
   ["durationSeconds: isTutorial ? 30 : 180,", "durationSeconds: 180,"],
-  ["isTutorial,", "isTutorial: false,"],
+  ["    isTutorial,\n", "    isTutorial: false,\n"],
   ["const nextProgress = clamp(project.progress + 45, 0, 100);", "const nextProgress = clamp(project.progress + 25, 0, 100);"],
   ["}, 'ПРОПУСК +1Ч'),", "}, 'УСКОРЕНИЕ +25%'),"],
 ]);
