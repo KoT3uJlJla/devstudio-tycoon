@@ -33,11 +33,13 @@ function overlayWallet(payload: ReconcilePayload) {
   const data = isPlainObject(payload.save?.data) ? payload.save.data : null;
   if (!data) return null;
   const economy = isPlainObject(payload.economy) ? payload.economy : null;
+  const stars = safeNumber(economy?.stars ?? data.stars);
+
+  // Coins and RP belong to the gameplay save. Old/new economy records can have
+  // coins=0 before the first economy action, so never write those over save data.
   return {
     ...data,
-    ...(safeNumber(economy?.coins ?? data.coins) !== undefined ? { coins: safeNumber(economy?.coins ?? data.coins) } : {}),
-    ...(safeNumber(economy?.rp ?? data.rp) !== undefined ? { rp: safeNumber(economy?.rp ?? data.rp) } : {}),
-    ...(safeNumber(economy?.stars ?? data.stars) !== undefined ? { stars: safeNumber(economy?.stars ?? data.stars) } : {}),
+    ...(stars !== undefined ? { stars } : {}),
   };
 }
 
