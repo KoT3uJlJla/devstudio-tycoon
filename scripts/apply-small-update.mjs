@@ -38,6 +38,18 @@ patchFile('src/App.tsx', [
   ["Ускорить на 1ч ⭐25", "Ускорить на 25% ⭐25"],
   ["https://t.me/devstudio_bot?start=share_release", "https://t.me/DevTycoon_bot?startapp=share_release"],
   ["https://t.me/devstudio_bot?start=ref_demo", "https://t.me/DevTycoon_bot?startapp=ref_demo"],
+  ["['$125', '25%'], ['$85', '17%'], ['$65', '13%'], ['$50', '10%'], ['$40', '8%'],\n  ['$35', '7%'], ['$30', '6%'], ['$25', '5%'], ['$25', '5%'], ['$20', '4%'],", "['$70', '35%'], ['$50', '25%'], ['$35', '17.5%'], ['$25', '12.5%'], ['$20', '10%'],"],
+  [".sort((a, b) => Number(b[2]) - Number(a[2])).slice(0, 10);", ".sort((a, b) => Number(b[2]) - Number(a[2])).slice(0, 5);"],
+  ["Недельный топ-10", "Недельный топ-5"],
+  ["Топ-10 лучших игр недели делят призовой фонд $500.", "Топ-5 лучших игр недели делят призовой фонд $200."],
+  ["топ-10", "топ-5"],
+  ["топ-5", "топ-5"],
+  ["Топ-10", "Топ-5"],
+  ["Пока вне топ-10", "Пока вне топ-5"],
+  ["Призовой фонд $500", "Призовой фонд $200"],
+  ["только топ-10", "только топ-5"],
+  ["$500", "$200"],
+  ["призовую десятку", "призовую пятёрку"],
 ]);
 
 replaceBlock(
@@ -62,16 +74,6 @@ replaceBlock(
   "export function estimateProjectDuration(project: Project, state: GameState) {\n  if (project.isTutorial) return 30;\n  const genre = genres.find((item) => item.id === project.genre);",
   "export function estimateProjectDuration(project: Project, state: GameState) {\n  const releases = Math.max(0, Math.floor(Number(state.gamesReleased) || 0));\n  if (releases === 0) return 5;\n  if (releases === 1) return 30;\n  if (releases === 2) return 60;\n  const genre = genres.find((item) => item.id === project.genre);",
 );
-
-replaceBlock(
-  'src/gameplay-ui-polish.ts',
-  "async function loadBackendTonWallet() {",
-  "async function syncTonWalletUnbindBackend() {\n  backendTonAddress = '';\n  lastSyncedTonAddress = '';\n  writeStoredTonAddress('');\n  setTonUiState('отвязан', '', false);\n  if (!canSyncTonWallet()) return;\n  if (tonSyncInFlight) await tonSyncInFlight.catch(() => undefined);\n  tonSyncInFlight = fetch(`${API_URL}/api/wallet/ton`, {\n    method: 'DELETE',\n    headers: { Authorization: `tma ${telegramInitData()}` },\n  })\n    .then(async (response) => {\n      const payload = await response.json().catch(() => null);\n      if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'ton_wallet_unbind_failed');\n      backendTonAddress = '';\n      lastSyncedTonAddress = '';\n      writeStoredTonAddress('');\n      setTonUiState('не привязан', '', false);\n    })\n    .catch(() => {\n      setTonUiState('ошибка', '', false);\n    })\n    .finally(() => {\n      tonSyncInFlight = null;\n    });\n  await tonSyncInFlight;\n}\n\nasync function loadBackendTonWallet() {",
-);
-
-patchFile('src/gameplay-ui-polish.ts', [
-  ["      const address = currentTonAddress(wallet);\n      updateTonStatus(wallet);\n      if (address) void syncTonWalletToBackend(address);\n      else if (backendTonAddress) { backendTonAddress = ''; writeStoredTonAddress(''); updateTonStatus(); }\n      scheduleTonStatusRefresh();", "      const liveAddress = walletAddress(wallet) || walletAddress(tonConnectUi?.wallet) || walletAddress(tonConnectUi?.account);\n      updateTonStatus(wallet);\n      if (liveAddress) void syncTonWalletToBackend(liveAddress);\n      else void syncTonWalletUnbindBackend();\n      scheduleTonStatusRefresh();"],
-]);
 
 patchFile('src/telegram.ts', [
   ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
