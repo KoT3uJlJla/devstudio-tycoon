@@ -44,6 +44,14 @@ const RELEASE_QUOTES = {
   ],
 };
 
+const prizePool = [
+  ['$70', '35%'],
+  ['$50', '25%'],
+  ['$35', '17.5%'],
+  ['$25', '12.5%'],
+  ['$20', '10%'],
+] as const;
+
 type BackendTonWallet = { address?: string | null } | null;
 
 let backendTonAddress = '';
@@ -82,33 +90,56 @@ function cleanTonAddress(value: string) {
   return value.trim().replace(/\s+/g, '').slice(0, 128);
 }
 
-function shortenAddress(value: string) {
-  return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
+function maskTonAddress(value: string) {
+  const clean = cleanTonAddress(value);
+  if (!clean) return '';
+  return clean.length > 12 ? `${clean.slice(0, 5)}...${clean.slice(-5)}` : clean;
 }
 
-function setTonUiState(label: string, address = '', connected = Boolean(address)) {
+function updateTonWalletActions(panel?: HTMLElement | null) {
+  const root = panel ?? document.querySelector<HTMLElement>('.ton-wallet-panel');
+  if (!root) return;
+  const input = root.querySelector<HTMLInputElement>('.ton-wallet-input');
+  const bindButton = root.querySelector<HTMLButtonElement>('.ton-wallet-bind');
+  const unbindButton = root.querySelector<HTMLButtonElement>('.ton-wallet-unbind');
+  const isDirty = input?.dataset.tonDirty === '1';
+  const candidate = isDirty ? cleanTonAddress(input?.value || '') : '';
+  const canSave = Boolean(isDirty && candidate && candidate !== backendTonAddress && !candidate.includes('...'));
+  if (bindButton) bindButton.disabled = Boolean(tonSyncInFlight) || !canSave;
+  if (unbindButton) unbindButton.disabled = Boolean(tonSyncInFlight) || !backendTonAddress;
+}
+
+function setTonUiState(label: string, address = '', connected = Boolean(address), forceInput = false) {
   const status = document.querySelector<HTMLElement>('.ton-wallet-status');
-  const addressNode = document.querySelector<HTMLElement>('.ton-wallet-address');
   const panel = document.querySelector<HTMLElement>('.ton-wallet-panel');
-  const input = document.querySelector<HTMLInputElement>('.ton-wallet-input');
+  const input = panel?.querySelector<HTMLInputElement>('.ton-wallet-input');
+  const duplicateAddress = panel?.querySelector<HTMLElement>('.ton-wallet-address');
+  duplicateAddress?.remove();
   if (status) status.textContent = label;
-  if (addressNode) addressNode.textContent = address ? shortenAddress(address) : 'Адрес кошелька не указан';
-  if (input && address && input.value !== address) input.value = address;
-  panel?.classList.toggle('ton-wallet-connected', connected);
+  if (panel) {
+    panel.classList.toggle('ton-wallet-connected', connected);
+    panel.dataset.tonAddress = address;
+  }
+  if (input && (forceInput || input.dataset.tonDirty !== '1')) {
+    input.value = address ? maskTonAddress(address) : '';
+    input.title = address || '';
+    input.dataset.tonDirty = '0';
+  }
+  updateTonWalletActions(panel);
 }
 
 async function syncTonWalletToBackend(address: string) {
   const clean = cleanTonAddress(address);
-  if (!clean) {
-    setTonUiState('введите адрес', '', false);
+  if (!clean || clean.includes('...')) {
+    setTonUiState('введите адрес', backendTonAddress, Boolean(backendTonAddress), false);
     return;
   }
   writeStoredTonAddress(clean);
-  setTonUiState('сохраняем…', clean, true);
+  setTonUiState('сохраняем…', clean, true, false);
 
   if (!canSyncTonWallet()) {
     backendTonAddress = clean;
-    setTonUiState('сохранён локально', clean, true);
+    setTonUiState('сохранён локально', clean, true, true);
     return;
   }
 
@@ -127,13 +158,14 @@ async function syncTonWalletToBackend(address: string) {
       const savedAddress = String(payload?.tonWallet?.address || payload?.economy?.tonWallet?.address || clean);
       backendTonAddress = savedAddress;
       writeStoredTonAddress(savedAddress);
-      setTonUiState('привязан', savedAddress, true);
+      setTonUiState('привязан', savedAddress, true, true);
     })
     .catch(() => {
-      setTonUiState('ошибка адреса', clean, true);
+      setTonUiState('ошибка адреса', clean, true, false);
     })
     .finally(() => {
       tonSyncInFlight = null;
+      updateTonWalletActions();
     });
   await tonSyncInFlight;
 }
@@ -141,12 +173,10 @@ async function syncTonWalletToBackend(address: string) {
 async function syncTonWalletUnbindBackend() {
   backendTonAddress = '';
   writeStoredTonAddress('');
-  const input = document.querySelector<HTMLInputElement>('.ton-wallet-input');
-  if (input) input.value = '';
-  setTonUiState('отвязываем…', '', false);
+  setTonUiState('отвязываем…', '', false, true);
 
   if (!canSyncTonWallet()) {
-    setTonUiState('не привязан', '', false);
+    setTonUiState('не привязан', '', false, true);
     return;
   }
 
@@ -160,13 +190,14 @@ async function syncTonWalletUnbindBackend() {
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'ton_wallet_unbind_failed');
       backendTonAddress = '';
       writeStoredTonAddress('');
-      setTonUiState('не привязан', '', false);
+      setTonUiState('не привязан', '', false, true);
     })
     .catch(() => {
-      setTonUiState('ошибка', '', false);
+      setTonUiState('ошибка', '', false, true);
     })
     .finally(() => {
       tonSyncInFlight = null;
+      updateTonWalletActions();
     });
   await tonSyncInFlight;
 }
@@ -174,7 +205,7 @@ async function syncTonWalletUnbindBackend() {
 async function loadBackendTonWallet() {
   if (!canSyncTonWallet()) {
     backendTonAddress = readStoredTonAddress();
-    setTonUiState(backendTonAddress ? 'сохранён локально' : 'не привязан', backendTonAddress, Boolean(backendTonAddress));
+    setTonUiState(backendTonAddress ? 'сохранён локально' : 'не привязан', backendTonAddress, Boolean(backendTonAddress), true);
     return;
   }
   try {
@@ -185,10 +216,12 @@ async function loadBackendTonWallet() {
     const address = String(tonWallet?.address || '');
     backendTonAddress = address;
     if (address) writeStoredTonAddress(address);
-    setTonUiState(address ? 'привязан' : 'не привязан', address, Boolean(address));
+    else writeStoredTonAddress('');
+    setTonUiState(address ? 'привязан' : 'не привязан', address, Boolean(address), true);
   } catch {
     const address = readStoredTonAddress();
-    setTonUiState(address ? 'локальный кэш' : 'не привязан', address, Boolean(address));
+    backendTonAddress = address;
+    setTonUiState(address ? 'локальный кэш' : 'не привязан', address, Boolean(address), true);
   }
 }
 
@@ -200,9 +233,17 @@ function bindManualTonPanel(panel: HTMLElement) {
   const unbindButton = panel.querySelector<HTMLButtonElement>('.ton-wallet-unbind');
   bindButton?.addEventListener('click', () => void syncTonWalletToBackend(input?.value || ''));
   unbindButton?.addEventListener('click', () => void syncTonWalletUnbindBackend());
-  input?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') void syncTonWalletToBackend(input.value);
+  input?.addEventListener('focus', () => {
+    if (input.dataset.tonDirty !== '1' && backendTonAddress) input.select();
   });
+  input?.addEventListener('input', () => {
+    input.dataset.tonDirty = '1';
+    updateTonWalletActions(panel);
+  });
+  input?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !bindButton?.disabled) void syncTonWalletToBackend(input.value);
+  });
+  updateTonWalletActions(panel);
 }
 
 function seededIndex(seed: string, length: number) {
@@ -230,10 +271,10 @@ function replaceTextNode(node: Node) {
     .replace(/полиш/g, 'работа')
     .replace(/\bТоп\b/g, 'Награды')
     .replace(/Недельный топ-10/g, 'Еженедельные награды')
-    .replace(/топ-10/g, 'призовую пятёрку')
-    .replace(/топ-5/g, 'призовую пятёрку')
+    .replace(/топ-10/g, 'топ-5')
     .replace(/\$500/g, '$200')
-    .replace(/Топ-10/g, 'Топ-5');
+    .replace(/Топ-10/g, 'Топ-5')
+    .replace(/призовую десятку/g, 'призовую пятёрку');
   if (next !== node.textContent) node.textContent = next;
 }
 
@@ -241,6 +282,34 @@ function replacePolishWords(root: ParentNode = document) {
   root.querySelectorAll('.dev-pop, .dev-ticker-pop, .dev-ambient span, .bottom-nav button, .rating-hero, .current-prize-card').forEach((element) => {
     element.childNodes.forEach(replaceTextNode);
   });
+}
+
+function rewritePrizePool() {
+  const grid = document.querySelector<HTMLElement>('.prize-grid');
+  if (!grid) return;
+  const panel = grid.closest<HTMLElement>('.panel');
+  const header = panel?.querySelector<HTMLElement>('h3');
+  const pill = panel?.querySelector<HTMLElement>('.pill');
+  if (header && textOf(header) !== 'Призовой фонд $200') header.textContent = 'Призовой фонд $200';
+  if (pill && textOf(pill) !== 'только топ-5') pill.textContent = 'только топ-5';
+  if (grid.dataset.prizePool === '200') return;
+  const currentIndex = Array.from(grid.children).findIndex((child) => child.classList.contains('current'));
+  grid.innerHTML = prizePool.map(([amount, percent], index) => `
+    <div class="${currentIndex === index ? 'prize-cell current' : 'prize-cell'}">
+      <span>#${index + 1}</span>
+      <strong>${amount}</strong>
+      <em>${percent}</em>
+    </div>
+  `).join('');
+  grid.dataset.prizePool = '200';
+}
+
+function rewriteReferralCopy() {
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('.referral-grid article'));
+  const direct = cards[0]?.querySelector<HTMLElement>('span');
+  const second = cards[1]?.querySelector<HTMLElement>('span');
+  if (direct) direct.textContent = '10% ⭐ от трат твоих друзей';
+  if (second) second.textContent = '3% ⭐ от трат друзей твоих друзей';
 }
 
 function hideOfflineDrop() {
@@ -287,10 +356,9 @@ function makeTonWalletPanel() {
     <p class="muted small">Это необходимо для того, чтобы вы могли получить свою еженедельную награду.</p>
     <input class="project-name ton-wallet-input" placeholder="EQ... или 0:..." inputmode="text" autocomplete="off" />
     <div class="inline-actions ton-wallet-actions">
-      <button class="primary ton-wallet-bind" type="button">Сохранить кошелёк</button>
-      <button class="ghost ton-wallet-unbind" type="button">Отвязать</button>
+      <button class="primary ton-wallet-bind" type="button" disabled>Сохранить кошелёк</button>
+      <button class="ghost ton-wallet-unbind" type="button" disabled>Отвязать</button>
     </div>
-    <p class="small muted ton-wallet-address">Адрес кошелька не указан</p>
     <p class="small muted ton-wallet-hint">В игре можно только привязать или отвязать адрес. Транзакции не подписываются.</p>
   `;
   return panel;
@@ -325,6 +393,8 @@ function applyGameplayPolish() {
   hideOfflineDrop();
   hideResetButton();
   replacePolishWords();
+  rewritePrizePool();
+  rewriteReferralCopy();
   rewriteStudioUpgradeText();
   installStaticCatArt();
   installTonWalletPanel();
