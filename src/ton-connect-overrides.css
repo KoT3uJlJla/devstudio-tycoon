@@ -1,0 +1,22 @@
+.ton-wallet-status,
+.ton-wallet-connected .ton-wallet-status {
+  color: #11162a !important;
+  background: linear-gradient(135deg, #fff2b5, #ffd35a) !important;
+  text-shadow: none !important;
+  font-weight: 950 !important;
+}
+
+.ton-connect-root {
+  margin-top: 12px;
+}
+
+.ton-connect-root button,
+.ton-connect-root [role="button"] {
+  max-width: 100%;
+}
+
+.ton-wallet-address {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  margin-bottom: 0;
+}
