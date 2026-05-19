@@ -1,16 +1,16 @@
 {
   "name": "devstudio-tycoon-mvp",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc && vite build",
+    "dev": "node scripts/apply-small-update.mjs && vite --host 0.0.0.0",
+    "build": "node scripts/apply-small-update.mjs && tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "lint": "tsc --noEmit"
+    "lint": "node scripts/apply-small-update.mjs && tsc --noEmit"
   },
   "dependencies": {
     "react": "^19.2.0",
