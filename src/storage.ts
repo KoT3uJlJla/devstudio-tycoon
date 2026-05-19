@@ -24,6 +24,12 @@ type DevelopmentAction = {
 
 type WalletOverlay = { stars?: number };
 
+type BackendSavePayload = {
+  ok?: boolean;
+  save?: { data?: unknown } | null;
+  economy?: { stars?: unknown } | null;
+};
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -78,6 +84,14 @@ function writeLocalStorage(key: string, value: string) {
     localStorage.setItem(key, value);
   } catch {
     // ignore
+  }
+}
+
+function dispatchAuthoritativeSave(state: GameState) {
+  try {
+    window.dispatchEvent(new CustomEvent('devstudio:server-save', { detail: state }));
+  } catch {
+    // best-effort live sync
   }
 }
 
@@ -154,6 +168,24 @@ function applyWalletOverlay(state: GameState, wallet: WalletOverlay | null): Gam
   }));
 }
 
+function stateFromBackendPayload(payload: BackendSavePayload | null): GameState | null {
+  const rawSave = payload?.save?.data;
+  if (!payload?.ok || !rawSave || !isPlainObject(rawSave)) return null;
+  try {
+    const economyStars = safeWalletNumber(payload.economy?.stars);
+    const merged = economyStars !== undefined ? { ...rawSave, stars: economyStars } : rawSave;
+    return syncGlobalState(normalizeState(merged as Partial<GameState>));
+  } catch {
+    return null;
+  }
+}
+
+function rememberAuthoritativeState(state: GameState) {
+  lastActionSnapshot = state;
+  writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+  dispatchAuthoritativeSave(state);
+}
+
 async function fetchServerSave(path: string, timeoutMs: number): Promise<GameState | null> {
   if (!canUseServerSave()) return null;
   const payload = await withTimeout(
@@ -165,13 +197,7 @@ async function fetchServerSave(path: string, timeoutMs: number): Promise<GameSta
     null,
     timeoutMs,
   );
-  const rawSave = payload?.save?.data;
-  if (!rawSave || !isPlainObject(rawSave)) return null;
-  try {
-    return syncGlobalState(normalizeState(rawSave as Partial<GameState>));
-  } catch {
-    return null;
-  }
+  return stateFromBackendPayload(payload as BackendSavePayload | null);
 }
 
 async function loadServerSave(): Promise<GameState | null> {
@@ -188,7 +214,7 @@ async function loadServerSave(): Promise<GameState | null> {
 
 async function saveServerState(state: GameState, keepalive = false) {
   if (!canUseServerSave()) return;
-  await fetch(`${API_URL}/api/save`, {
+  const payload = await fetch(`${API_URL}/api/save`, {
     method: 'POST',
     keepalive,
     headers: {
@@ -196,7 +222,12 @@ async function saveServerState(state: GameState, keepalive = false) {
       Authorization: `tma ${telegramInitData()}`,
     },
     body: JSON.stringify(state),
-  }).catch(() => undefined);
+  })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null) as BackendSavePayload | null;
+
+  const authoritativeState = stateFromBackendPayload(payload);
+  if (authoritativeState) rememberAuthoritativeState(authoritativeState);
 }
 
 async function postDevelopmentAction(action: DevelopmentAction) {
@@ -216,17 +247,8 @@ async function postDevelopmentAction(action: DevelopmentAction) {
     4500,
   );
 
-  const serverSave = payload?.save?.data;
-  if (!serverSave || !isPlainObject(serverSave)) return;
-
-  try {
-    const wallet = await loadWalletOverlay();
-    const normalized = applyWalletOverlay(syncGlobalState(normalizeState(serverSave as Partial<GameState>)), wallet);
-    lastActionSnapshot = normalized;
-    writeLocalStorage(STORAGE_KEY, JSON.stringify(normalized));
-  } catch {
-    // If server payload cannot be normalized, keep the optimistic local state.
-  }
+  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);
+  if (normalized) rememberAuthoritativeState(normalized);
 }
 
 function finalizeLoadedState(state: GameState): GameState {
@@ -386,7 +408,7 @@ function inferDevelopmentAction(previous: GameState | null, current: GameState):
 
   const progressDelta = currentProject.progress - previousProject.progress;
   const starDelta = previous.stars - current.stars;
-  if (progressDelta >= 35 && starDelta >= 20 && currentProject.progress < 100 && !currentProject.pendingDevEvent) {
+  if (progressDelta >= 20 && starDelta >= 20 && currentProject.progress < 100 && !currentProject.pendingDevEvent) {
     return { endpoint: 'skip' };
   }
 
