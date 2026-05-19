@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070812" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="DevStudio Tycoon" />
+    <meta property="og:description" content="У тебя не получится сделать игру лучше моей😼 Можешь зайти и убедиться в этом сам" />
+    <meta property="og:image" content="https://devstudio-tycoon-stat.pages.dev/share-referral.svg?v=2" />
+    <meta property="og:image:secure_url" content="https://devstudio-tycoon-stat.pages.dev/share-referral.svg?v=2" />
+    <meta property="og:image:type" content="image/svg+xml" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://devstudio-tycoon-stat.pages.dev/share-referral.svg?v=2" />
+    <title>DevStudio Tycoon</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; color: #fffaf2; background: radial-gradient(circle at 10% 10%, rgba(255,59,189,.35), transparent 24%), radial-gradient(circle at 85% 15%, rgba(29,247,255,.28), transparent 22%), #070812; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(100%, 430px); border: 3px solid #05060d; border-radius: 28px; padding: 20px; background: rgba(15,18,42,.94); box-shadow: 8px 8px 0 #02030a, 12px 12px 0 #ff3bbd; text-align: center; }
+      img { width: 100%; border-radius: 20px; border: 3px solid #05060d; display: block; }
+      h1 { margin: 16px 0 8px; text-transform: uppercase; font-size: 34px; line-height: .95; }
+      p { margin: 0 0 16px; color: #cfd6ff; font-weight: 700; }
+      a { display: block; padding: 14px 18px; border-radius: 18px; border: 3px solid #05060d; color: #05060d; background: linear-gradient(135deg, #ffe04e, #ff3bbd); text-decoration: none; font-weight: 1000; box-shadow: 5px 5px 0 #1df7ff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/share-referral.svg?v=2" alt="DevStudio Tycoon" />
+      <h1>Сделай игру лучше моей</h1>
+      <p>Открой Mini App в Telegram и докажи, что твоя студия круче.</p>
+      <a id="play" href="https://t.me/DevTycoon_bot">Играть</a>
+    </main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const ref = params.get('r') || '';
+      const link = `https://t.me/DevTycoon_bot${ref ? `?startapp=${encodeURIComponent(ref)}` : ''}`;
+      document.getElementById('play').href = link;
+      const isBotPreview = /TelegramBot|Twitterbot|facebookexternalhit|Slackbot|Discordbot|WhatsApp|SkypeUriPreview/i.test(navigator.userAgent || '');
+      if (!isBotPreview) window.setTimeout(() => { location.href = link; }, 550);
+    </script>
+  </body>
+</html>
