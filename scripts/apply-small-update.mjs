@@ -19,6 +19,12 @@ function replaceBlock(path, from, to) {
   writeFileSync(path, content);
 }
 
+function appendOnce(path, marker, addition) {
+  const content = readFileSync(path, 'utf8');
+  if (content.includes(marker)) return;
+  writeFileSync(path, `${content.trimEnd()}\n\n${addition.trim()}\n`);
+}
+
 patchFile('src/App.tsx', [
   ["['menu', 'Топ', 'rating'],", "['menu', 'Награды', 'rating'],"],
   ["import { loadGame, resetGame, saveGame } from './storage';", "import { loadGame, saveGame } from './storage';"],
@@ -43,7 +49,6 @@ patchFile('src/App.tsx', [
   ["Недельный топ-10", "Недельный топ-5"],
   ["Топ-10 лучших игр недели делят призовой фонд $500.", "Топ-5 лучших игр недели делят призовой фонд $200."],
   ["топ-10", "топ-5"],
-  ["топ-5", "топ-5"],
   ["Топ-10", "Топ-5"],
   ["Пока вне топ-10", "Пока вне топ-5"],
   ["Призовой фонд $500", "Призовой фонд $200"],
@@ -80,3 +85,42 @@ patchFile('src/telegram.ts', [
   ["const finalText = isReferralShare ? referralShareText().replace(/\\n\\n.*$/, '') : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
   ["const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/devstudio_bot');", "const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/DevTycoon_bot');"],
 ]);
+
+appendOnce('src/styles.css', 'v7.8 — restored manual wallet and referral polish', `
+/* v7.8 — restored manual wallet and referral polish */
+.focus-card label { display: grid; grid-template-columns: 92px 1fr 42px; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]), input[type="range"] { transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, border-color .16s ease, background .16s ease; }
+button:hover:not(:disabled), [role="button"]:hover:not([aria-disabled="true"]) { filter: brightness(1.035) saturate(1.025); }
+.employee-metrics { line-height: 1.45; color: rgba(236,239,255,.88); }
+.employee-card.hired .employee-metrics { color: rgba(5,6,13,.72); }
+.premium-research-card { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; border-color: rgba(255,224,78,.7) !important; background: linear-gradient(135deg, rgba(255,224,78,.22), rgba(255,58,190,.13), rgba(29,247,255,.10)) !important; }
+.premium-research-card > div { display: grid; gap: 6px; }
+.premium-research-card strong { font-size: 21px; }
+.premium-research-card button { min-width: 132px; }
+.rating-formula .muted { margin-bottom: 12px; }
+.rating-formula .score-breakdown-list { margin-top: 10px; gap: 9px; }
+.rating-formula .score-line { padding-inline: 14px; cursor: default; }
+.rating-formula .score-line::after { display: none; }
+.referral-panel { display: grid; gap: 14px; }
+.referral-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.referral-grid article { padding: 14px; border: 2px solid rgba(255,255,255,.12); border-radius: 18px; background: rgba(255,255,255,.06); display: grid; gap: 6px; }
+.referral-grid b { color: var(--cyan); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+.referral-grid strong { color: var(--yellow); font-size: 34px; line-height: 1; }
+.referral-grid span { color: var(--muted); font-size: 13px; line-height: 1.35; }
+.referral-note { display: grid; gap: 6px; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+.referral-note strong { color: var(--paper); }
+.referral-note span { color: rgba(236,239,255,.78); font-size: 14px; line-height: 1.45; }
+.milestone-list { display: grid; gap: 8px; }
+.milestone { min-height: 54px; padding: 10px 12px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; text-align: left; border-radius: 18px; background: rgba(255,255,255,.06); color: var(--paper); }
+.milestone b { justify-self: end; color: var(--yellow); }
+.milestone.claimed { opacity: .72; }
+.modal-x { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-size: 30px; line-height: 1; color: var(--paper); background: rgba(255,255,255,.08); box-shadow: none; }
+.momentum-full-modal { position: relative; width: min(100%, 440px); max-height: 90vh; overflow: auto; padding: 26px 22px 24px; }
+.momentum-copy { display: grid; gap: 12px; margin: 12px 0 18px; }
+.momentum-copy p { margin: 0; line-height: 1.55; }
+@media (max-width: 430px) {
+  .premium-research-card, .referral-grid, .milestone { grid-template-columns: 1fr; }
+  .premium-research-card button { width: 100%; }
+  .milestone b { justify-self: start; }
+}
+`);
