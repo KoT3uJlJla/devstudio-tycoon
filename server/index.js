@@ -38,16 +38,11 @@ const client = new MongoClient(mongoUri);
 let db;
 
 const PRIZE_DISTRIBUTION = [
-  { place: 1, amountUsd: 125, percent: 25 },
-  { place: 2, amountUsd: 85, percent: 17 },
-  { place: 3, amountUsd: 65, percent: 13 },
-  { place: 4, amountUsd: 50, percent: 10 },
-  { place: 5, amountUsd: 40, percent: 8 },
-  { place: 6, amountUsd: 35, percent: 7 },
-  { place: 7, amountUsd: 30, percent: 6 },
-  { place: 8, amountUsd: 25, percent: 5 },
-  { place: 9, amountUsd: 25, percent: 5 },
-  { place: 10, amountUsd: 20, percent: 4 },
+  { place: 1, amountUsd: 70, percent: 35 },
+  { place: 2, amountUsd: 50, percent: 25 },
+  { place: 3, amountUsd: 35, percent: 17.5 },
+  { place: 4, amountUsd: 25, percent: 12.5 },
+  { place: 5, amountUsd: 20, percent: 10 },
 ];
 
 const REFERRAL_MILESTONES = [
@@ -234,6 +229,20 @@ async function spendStars(economy, amount, reason, meta = {}) {
   );
 }
 
+async function syncStarSpendFromIncomingSave(economy, incomingData) {
+  const economyStars = safeInt(economy?.stars, 0, 9999999);
+  const incomingStars = safeInt(incomingData?.stars, 0, 9999999);
+  if (incomingStars >= economyStars) return economy;
+
+  const spent = economyStars - incomingStars;
+  const updated = await spendStars(economy, spent, "client_save_spend", {
+    previousStars: economyStars,
+    incomingStars,
+    source: "api_save",
+  });
+  return updated || db.collection("economy").findOne({ telegramId: economy.telegramId });
+}
+
 function ratingBreakdownFromSave(data) {
   const currentDay = safeInt(data?.gameDay, 1, 999999);
   const releaseHistory = Array.isArray(data?.releaseHistory) ? data.releaseHistory : [];
@@ -257,7 +266,7 @@ async function upsertRating(telegramUser, saveData) {
 }
 async function leaderboardForCurrentWeek() {
   const currentWeek = weekKey();
-  const rows = await db.collection("ratings").find({ weekKey: currentWeek }).sort({ score: -1, updatedAt: 1 }).limit(10).toArray();
+  const rows = await db.collection("ratings").find({ weekKey: currentWeek }).sort({ score: -1, updatedAt: 1 }).limit(5).toArray();
   return rows.map((row, index) => ({ place: index + 1, telegramId: row.telegramId, displayName: row.displayName, bestTitle: row.bestTitle, score: row.score, prize: PRIZE_DISTRIBUTION[index] || null }));
 }
 
@@ -272,6 +281,7 @@ async function syncEconomyFromIncomingSave(telegramUser, incomingData, previousD
     economy = await grantStars(economy, 1, "tutorial_release", {});
     economy = await patchEconomy(economy.telegramId, { $set: { tutorialStarClaimed: true } });
   }
+  economy = await syncStarSpendFromIncomingSave(economy, incomingData);
   if (incomingData?.gamesReleased > 0) {
     await upsertRating(telegramUser, incomingData);
     economy = await db.collection("economy").findOne({ telegramId: telegramUser.id });
@@ -349,7 +359,7 @@ async function start() {
     const economy = await syncEconomyFromIncomingSave(req.telegramUser, authoritativeData, previousSave?.data);
     const protectedData = overlayProtectedEconomy(authoritativeData, economy);
     await writeSave(req.telegramUser.id, req.telegramUser, protectedData);
-    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData) });
+    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() } });
   });
 
   app.get("/api/development/status", requireTelegramUser, async (req, res) => {
@@ -388,7 +398,7 @@ async function start() {
     economy = await patchEconomy(economy.telegramId, { $set: { dailyClaimedAt: today } });
     const nextData = overlayProtectedEconomy(applyRewardToSaveData(save?.data, { coins: 500 }), economy);
     await writeSave(req.telegramUser.id, req.telegramUser, nextData);
-    res.json({ ok: true, economy: publicEconomy(economy), reward: { stars: 1, coins: 500 } });
+    res.json({ ok: true, economy: publicEconomy(economy), reward: { stars: 1, coins: 500 }, save: { data: nextData, updatedAt: new Date() } });
   });
   app.post("/api/economy/shop/purchase", requireTelegramUser, async (req, res) => {
     const itemId = String(req.body?.itemId || "");
