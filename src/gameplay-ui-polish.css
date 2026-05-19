@@ -4,13 +4,15 @@ html, body, #root, .app-shell {
   -webkit-touch-callout: none;
 }
 
-input, textarea, [contenteditable="true"], .project-name, .studio-name-input {
+input, textarea, [contenteditable="true"], .project-name, .studio-name-input, .ton-wallet-input {
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
 }
 
-.offline-toast-hidden {
+.offline-toast-hidden,
+.reset-progress-hidden,
+.tutorial-banner {
   display: none !important;
 }
 
@@ -113,6 +115,70 @@ input, textarea, [contenteditable="true"], .project-name, .studio-name-input {
   line-height: 1.38;
 }
 
+.ton-wallet-panel {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(29,247,255,.5) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(29,247,255,.2), transparent 32%),
+    linear-gradient(145deg, rgba(17,22,52,.95), rgba(10,12,28,.98)) !important;
+}
+
+.ton-wallet-panel::after {
+  content: 'TON';
+  position: absolute;
+  right: 16px;
+  bottom: 10px;
+  color: rgba(29,247,255,.1);
+  font-size: 52px;
+  font-weight: 950;
+  letter-spacing: -.08em;
+  pointer-events: none;
+}
+
+.ton-wallet-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ton-wallet-status {
+  color: var(--cyan, #1df7ff);
+}
+
+.ton-wallet-connected .ton-wallet-status {
+  color: var(--yellow, #ffe04e);
+}
+
+.ton-wallet-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 12px;
+}
+
+.ton-wallet-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 3px solid #050711;
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.92);
+  color: #050711;
+  font: inherit;
+  font-weight: 800;
+  outline: none;
+}
+
+.ton-wallet-input:focus {
+  box-shadow: 0 0 0 4px rgba(29,247,255,.24);
+}
+
+.ton-wallet-hint {
+  margin-bottom: 0;
+}
+
 .critic-card em {
   min-height: 42px;
 }
@@ -125,5 +191,15 @@ input, textarea, [contenteditable="true"], .project-name, .studio-name-input {
 @supports not selector(:has(*)) {
   .critic-card.shown {
     transition: background .2s ease, box-shadow .2s ease;
+  }
+}
+
+@media (max-width: 520px) {
+  .ton-wallet-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ton-wallet-form button {
+    width: 100%;
   }
 }
