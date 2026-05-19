@@ -2,11 +2,12 @@ import { applyOfflineReward, initialState, normalizeState } from './gameLogic';
 import { syncGlobalState } from './globalWorld';
 import type { GameState } from './types';
 
-const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
+export const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v3';
+const LEGACY_STORAGE_KEYS = ['devstudio_tycoon_mvp_save_v2', 'devstudio_tycoon_mvp_save_v1'];
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const CLOUD_THROTTLE_MS = 15_000;
-const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 900;
-const SERVER_SAVE_THROTTLE_MS = 900;
+const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 350;
+const SERVER_SAVE_THROTTLE_MS = 350;
 const SERVER_LOAD_TIMEOUT_MS = 9_000;
 const LOCAL_SERVER_LOAD_TIMEOUT_MS = 2_800;
 const MAX_SAVE_BYTES = 250_000;
@@ -29,6 +30,11 @@ type BackendSavePayload = {
   save?: { data?: unknown } | null;
   economy?: { stars?: unknown } | null;
 };
+
+type ServerLoadResult =
+  | { kind: 'loaded'; state: GameState }
+  | { kind: 'empty' }
+  | { kind: 'unavailable' };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -87,6 +93,14 @@ function writeLocalStorage(key: string, value: string) {
   }
 }
 
+function clearLegacyLocalSaves() {
+  try {
+    for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
 function dispatchAuthoritativeSave(state: GameState) {
   try {
     window.dispatchEvent(new CustomEvent('devstudio:server-save', { detail: state }));
@@ -140,8 +154,7 @@ function walletOverlayFromPayload(payload: unknown): WalletOverlay | null {
   const economy = isPlainObject(payload.economy) ? payload.economy : null;
   const save = isPlainObject(payload.save) && isPlainObject(payload.save.data) ? payload.save.data : null;
   return {
-    // Coins/RP are gameplay save resources. Old economy docs may contain 0,
-    // so never overlay them from wallet-state on startup.
+    // Coins/RP are gameplay save resources. Never overlay them from economy.
     stars: safeWalletNumber(economy?.stars ?? save?.stars),
   };
 }
@@ -186,9 +199,9 @@ function rememberAuthoritativeState(state: GameState) {
   dispatchAuthoritativeSave(state);
 }
 
-async function fetchServerSave(path: string, timeoutMs: number): Promise<GameState | null> {
+async function fetchServerPayload(path: string, timeoutMs: number): Promise<BackendSavePayload | null> {
   if (!canUseServerSave()) return null;
-  const payload = await withTimeout(
+  return withTimeout(
     fetch(`${API_URL}${path}`, {
       headers: { Authorization: `tma ${telegramInitData()}` },
     })
@@ -196,20 +209,28 @@ async function fetchServerSave(path: string, timeoutMs: number): Promise<GameSta
       .catch(() => null),
     null,
     timeoutMs,
-  );
-  return stateFromBackendPayload(payload as BackendSavePayload | null);
+  ) as Promise<BackendSavePayload | null>;
 }
 
-async function loadServerSave(): Promise<GameState | null> {
-  if (!canUseServerSave()) return null;
+async function loadServerSave(): Promise<ServerLoadResult> {
+  if (!canUseServerSave()) return { kind: 'unavailable' };
   const timeoutMs = isTelegramRuntime() ? SERVER_LOAD_TIMEOUT_MS : LOCAL_SERVER_LOAD_TIMEOUT_MS;
 
-  // Load the raw gameplay save first. /api/stars/reconcile may overlay old
-  // economy.coins=0 for migrated players, which caused the visible coin bug.
-  const save = await fetchServerSave('/api/save', timeoutMs);
-  if (save) return save;
+  const payload = await fetchServerPayload('/api/save', timeoutMs);
+  if (!payload) return { kind: 'unavailable' };
 
-  return fetchServerSave('/api/stars/reconcile', timeoutMs);
+  const state = stateFromBackendPayload(payload);
+  if (state) return { kind: 'loaded', state };
+
+  // Authenticated Telegram users are server-authoritative. If the backend says
+  // there is no save, old localStorage/CloudStorage must not resurrect progress.
+  if (payload.ok && !payload.save) {
+    const reconciled = await fetchServerPayload('/api/stars/reconcile', 4200);
+    const reconciledState = stateFromBackendPayload(reconciled);
+    return reconciledState ? { kind: 'loaded', state: reconciledState } : { kind: 'empty' };
+  }
+
+  return { kind: 'unavailable' };
 }
 
 async function saveServerState(state: GameState, keepalive = false) {
@@ -264,44 +285,54 @@ function rememberLoadedState(state: GameState) {
   return state;
 }
 
+function initialAuthoritativeState(wallet: WalletOverlay | null): GameState {
+  return applyWalletOverlay(syncGlobalState(initialState), wallet);
+}
+
+async function loadCloudFallback(): Promise<GameState | null> {
+  const cloud = cloudStorage();
+  if (!cloud?.getItem) return null;
+  const cloudSave = await withTimeout(
+    new Promise<string | null>((resolve) => {
+      try {
+        cloud.getItem?.(STORAGE_KEY, (_error, value) => resolve(value ?? null));
+      } catch {
+        resolve(null);
+      }
+    }),
+    null,
+    700,
+  );
+  return parseSave(cloudSave);
+}
+
 export async function loadGame(): Promise<GameState> {
+  clearLegacyLocalSaves();
   try {
-    const fromLocal = parseSave(readLocalStorage(STORAGE_KEY));
-    const serverSave = await loadServerSave();
-    const preferred = newestSave(fromLocal, serverSave);
-    if (preferred) {
-      const wallet = await loadWalletOverlay();
-      const state = finalizeLoadedState(applyWalletOverlay(preferred, wallet));
+    const server = await loadServerSave();
+    if (server.kind === 'loaded') {
+      const state = finalizeLoadedState(server.state);
       writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
-      if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);
       return rememberLoadedState(state);
     }
 
-    const cloud = cloudStorage();
-    if (cloud?.getItem) {
-      const cloudSave = await withTimeout(
-        new Promise<string | null>((resolve) => {
-          try {
-            cloud.getItem?.(STORAGE_KEY, (_error, value) => resolve(value ?? null));
-          } catch {
-            resolve(null);
-          }
-        }),
-        null,
-        700,
-      );
-      const parsedCloud = parseSave(cloudSave);
-      if (parsedCloud) {
-        const wallet = await loadWalletOverlay();
-        const state = finalizeLoadedState(applyWalletOverlay(parsedCloud, wallet));
-        writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
-        if (canUseServerSave()) void saveServerState(state);
-        return rememberLoadedState(state);
-      }
+    if (server.kind === 'empty' && canUseServerSave()) {
+      const state = initialAuthoritativeState(await loadWalletOverlay());
+      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+      // Create a clean server save from the current app version. This replaces
+      // the old behavior where stale localStorage could recreate deleted users.
+      void saveServerState(state);
+      return rememberLoadedState(state);
     }
 
-    const wallet = await loadWalletOverlay();
-    return rememberLoadedState(applyWalletOverlay(syncGlobalState(initialState), wallet));
+    // Offline/dev fallback only. In a reachable Telegram backend session, local
+    // cache is never the source of truth.
+    const fromLocal = parseSave(readLocalStorage(STORAGE_KEY));
+    const fromCloud = !canUseServerSave() ? await loadCloudFallback() : null;
+    const preferred = newestSave(fromLocal, fromCloud);
+    if (preferred) return rememberLoadedState(finalizeLoadedState(preferred));
+
+    return rememberLoadedState(syncGlobalState(initialState));
   } catch {
     return rememberLoadedState(syncGlobalState(initialState));
   }
@@ -334,6 +365,9 @@ function flushCloud() {
 }
 
 function scheduleCloudWrite(payload: string) {
+  // CloudStorage is no longer used as an authoritative source when backend auth
+  // is available, but keep it for offline/dev fallback.
+  if (canUseServerSave()) return;
   pendingCloudPayload = payload;
   const elapsed = Date.now() - lastCloudWriteAt;
   if (elapsed >= CLOUD_THROTTLE_MS) {
@@ -445,6 +479,7 @@ export function saveGame(state: GameState) {
 export function resetGame() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
   } catch {
     // ignore
   }
@@ -461,6 +496,7 @@ export function resetGame() {
   }
   try {
     cloudStorage()?.setItem?.(STORAGE_KEY, '');
+    for (const key of LEGACY_STORAGE_KEYS) cloudStorage()?.setItem?.(key, '');
   } catch {
     // ignore
   }
