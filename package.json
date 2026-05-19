@@ -13,7 +13,7 @@
     "lint": "node scripts/apply-small-update.mjs && tsc --noEmit"
   },
   "dependencies": {
-    "@tonconnect/ui": "^2.3.0",
+    "@tonconnect/ui": "^2.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
