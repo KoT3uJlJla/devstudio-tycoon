@@ -1,4 +1,5 @@
 const TON_WALLET_STORAGE_KEY = 'devstudio_ton_wallet_address';
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 const RELEASE_QUOTES = {
   low: [
@@ -57,11 +58,24 @@ type TonConnectModuleLike = {
   THEME?: { DARK?: string };
 };
 
+type BackendTonWallet = { address?: string | null } | null;
+
 let tonConnectUi: TonConnectUiLike | null = null;
 let tonConnectInitStarted = false;
+let backendTonAddress = '';
+let tonSyncInFlight: Promise<void> | null = null;
+let lastSyncedTonAddress = '';
 
 function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function telegramInitData() {
+  return window.Telegram?.WebApp?.initData || '';
+}
+
+function canSyncTonWallet() {
+  return Boolean(API_URL && telegramInitData());
 }
 
 function readStoredTonAddress() {
@@ -97,35 +111,104 @@ function currentTonAddress(wallet?: unknown) {
   return walletAddress(wallet)
     || walletAddress(tonConnectUi?.wallet)
     || walletAddress(tonConnectUi?.account)
+    || backendTonAddress
     || readStoredTonAddress();
 }
 
-function updateTonStatus(wallet?: unknown) {
+function setTonUiState(label: string, address = '', connected = Boolean(address)) {
   const status = document.querySelector<HTMLElement>('.ton-wallet-status');
   const addressNode = document.querySelector<HTMLElement>('.ton-wallet-address');
   const panel = document.querySelector<HTMLElement>('.ton-wallet-panel');
-  const address = currentTonAddress(wallet);
-  const connected = Boolean(address || tonConnectUi?.connected);
-
-  if (wallet !== undefined || address) {
-    if (address) writeStoredTonAddress(address);
-    else writeStoredTonAddress('');
-  }
-
-  if (status) status.textContent = connected ? 'привязан' : 'не привязан';
+  if (status) status.textContent = label;
   if (addressNode) addressNode.textContent = address ? shortenAddress(address) : 'Выберите кошелёк через TON Connect';
   panel?.classList.toggle('ton-wallet-connected', connected);
 }
 
+function updateTonStatus(wallet?: unknown) {
+  const address = currentTonAddress(wallet);
+  const connected = Boolean(address || tonConnectUi?.connected);
+  if (address) writeStoredTonAddress(address);
+  if (backendTonAddress) {
+    setTonUiState('привязан', backendTonAddress, true);
+  } else if (connected && address) {
+    setTonUiState('сохраняем…', address, true);
+  } else {
+    setTonUiState('не привязан', '', false);
+  }
+}
+
+async function syncTonWalletToBackend(address: string) {
+  if (!address || !canSyncTonWallet()) return;
+  if (address === lastSyncedTonAddress && address === backendTonAddress) return;
+  if (tonSyncInFlight) await tonSyncInFlight.catch(() => undefined);
+  tonSyncInFlight = fetch(`${API_URL}/api/wallet/ton`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `tma ${telegramInitData()}`,
+    },
+    body: JSON.stringify({ address }),
+  })
+    .then(async (response) => {
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'ton_wallet_sync_failed');
+      const savedAddress = String(payload?.tonWallet?.address || payload?.economy?.tonWallet?.address || address);
+      backendTonAddress = savedAddress;
+      lastSyncedTonAddress = savedAddress;
+      writeStoredTonAddress(savedAddress);
+      setTonUiState('привязан', savedAddress, true);
+    })
+    .catch(() => {
+      setTonUiState('ошибка', address, true);
+    })
+    .finally(() => {
+      tonSyncInFlight = null;
+    });
+  await tonSyncInFlight;
+}
+
+async function loadBackendTonWallet() {
+  if (!canSyncTonWallet()) {
+    backendTonAddress = readStoredTonAddress();
+    updateTonStatus();
+    return;
+  }
+  try {
+    const payload = await fetch(`${API_URL}/api/wallet/state`, {
+      headers: { Authorization: `tma ${telegramInitData()}` },
+    }).then((response) => (response.ok ? response.json() : null));
+    const tonWallet = payload?.economy?.tonWallet as BackendTonWallet;
+    const address = String(tonWallet?.address || '');
+    backendTonAddress = address;
+    lastSyncedTonAddress = address;
+    if (address) writeStoredTonAddress(address);
+    updateTonStatus();
+  } catch {
+    updateTonStatus();
+  }
+}
+
 function scheduleTonStatusRefresh() {
-  window.setTimeout(() => updateTonStatus(), 250);
-  window.setTimeout(() => updateTonStatus(), 1000);
-  window.setTimeout(() => updateTonStatus(), 2500);
+  window.setTimeout(() => {
+    const address = currentTonAddress();
+    updateTonStatus();
+    if (address) void syncTonWalletToBackend(address);
+  }, 250);
+  window.setTimeout(() => {
+    const address = currentTonAddress();
+    updateTonStatus();
+    if (address) void syncTonWalletToBackend(address);
+  }, 1000);
+  window.setTimeout(() => {
+    const address = currentTonAddress();
+    updateTonStatus();
+    if (address) void syncTonWalletToBackend(address);
+  }, 2500);
 }
 
 async function ensureTonConnect(buttonRootId: string) {
   if (tonConnectUi) {
-    updateTonStatus();
+    void loadBackendTonWallet();
     scheduleTonStatusRefresh();
     return;
   }
@@ -143,16 +226,19 @@ async function ensureTonConnect(buttonRootId: string) {
       uiPreferences: { theme: darkTheme },
     });
     tonConnectUi.onStatusChange?.((wallet) => {
+      const address = currentTonAddress(wallet);
       updateTonStatus(wallet);
+      if (address) void syncTonWalletToBackend(address);
+      else if (backendTonAddress) { backendTonAddress = ''; writeStoredTonAddress(''); updateTonStatus(); }
       scheduleTonStatusRefresh();
     });
-    window.addEventListener('focus', updateTonStatus);
-    document.addEventListener('visibilitychange', updateTonStatus);
+    window.addEventListener('focus', () => { updateTonStatus(); scheduleTonStatusRefresh(); });
+    document.addEventListener('visibilitychange', () => { updateTonStatus(); scheduleTonStatusRefresh(); });
+    void loadBackendTonWallet();
     updateTonStatus();
     scheduleTonStatusRefresh();
   } catch {
-    const status = document.querySelector<HTMLElement>('.ton-wallet-status');
-    if (status) status.textContent = 'недоступен';
+    setTonUiState('недоступен', '', false);
   }
 }
 
