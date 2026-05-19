@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" role="img" aria-label="DevStudio Tycoon release story artwork">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05061a"/><stop offset=".55" stop-color="#15105a"/><stop offset="1" stop-color="#060712"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe66b"/><stop offset="1" stop-color="#ffb400"/></linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3bbd"/><stop offset="1" stop-color="#7a1dff"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="7" dy="9" stdDeviation="0" flood-color="#05060d"/><feDropShadow dx="12" dy="14" stdDeviation="0" flood-color="#ff3bbd" flood-opacity=".65"/></filter>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="4" cy="4" r="2" fill="#fff" opacity=".15"/></pattern>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#bg)"/>
+  <g opacity=".8"><path d="M0 1710h1080" stroke="#1df7ff" stroke-width="3"/><path d="M120 1920 520 1240 980 1920M-120 1920 380 1240M700 1240 1220 1920" stroke="#5d2dff" stroke-width="4" opacity=".45" fill="none"/></g>
+  <rect x="300" y="48" width="480" height="116" rx="24" fill="#05060d" stroke="#fff0bb" stroke-width="7"/>
+  <text x="540" y="104" text-anchor="middle" font-size="54" font-family="Impact, Arial Black, sans-serif" fill="#1df7ff" stroke="#05060d" stroke-width="2">DEVSTUDIO</text>
+  <text x="540" y="150" text-anchor="middle" font-size="46" font-family="Impact, Arial Black, sans-serif" fill="#ff3bbd" stroke="#05060d" stroke-width="2">TYCOON</text>
+  <rect x="58" y="120" width="185" height="125" rx="18" fill="#0a0b28" stroke="#9b4cff" stroke-width="6"/>
+  <text x="150" y="165" text-anchor="middle" fill="#ff3bbd" font-size="24" font-family="Arial Black">❤ ФАНАТЫ</text><text x="150" y="218" text-anchor="middle" fill="#fff0bb" font-size="50" font-family="Arial Black">120K</text>
+  <rect x="790" y="96" width="220" height="92" rx="18" fill="#0a0b28" stroke="#ff3bbd" stroke-width="7"/><text x="900" y="145" text-anchor="middle" fill="#1df7ff" font-size="38" font-family="Arial Black">INDIE</text><text x="900" y="180" text-anchor="middle" fill="#ff3bbd" font-size="36" font-family="Arial Black">POWER</text>
+  <path d="M82 590 210 270 344 410 500 220 618 392 804 270 780 515 1030 540 805 650 935 850 650 742 540 925 438 742 135 850 262 650Z" fill="url(#pink)" stroke="#05060d" stroke-width="14" filter="url(#shadow)"/>
+  <path d="M82 590 210 270 344 410 500 220 618 392 804 270 780 515 1030 540 805 650 935 850 650 742 540 925 438 742 135 850 262 650Z" fill="url(#dots)"/>
+  <g filter="url(#shadow)">
+    <text x="125" y="510" font-size="120" font-family="Impact, Arial Black, sans-serif" fill="#fff0bb" stroke="#05060d" stroke-width="12">Я ВЫПУСТИЛ</text>
+    <text x="112" y="710" font-size="220" font-family="Impact, Arial Black, sans-serif" fill="url(#gold)" stroke="#05060d" stroke-width="16">ХИТ!</text>
+    <text x="150" y="830" font-size="82" font-family="Impact, Arial Black, sans-serif" fill="#fff0bb" stroke="#05060d" stroke-width="9">СМОЖЕШЬ</text>
+    <text x="590" y="830" font-size="82" font-family="Impact, Arial Black, sans-serif" fill="#ff3bbd" stroke="#05060d" stroke-width="9">ЛУЧШЕ?</text>
+  </g>
+  <rect x="90" y="870" width="900" height="600" rx="34" fill="#0a0b28" stroke="#1df7ff" stroke-width="9"/><rect x="105" y="890" width="870" height="70" rx="20" fill="#fff0bb" stroke="#05060d" stroke-width="8"/>
+  <text x="540" y="942" text-anchor="middle" fill="#05060d" font-size="44" font-family="Arial Black">[НАЗВАНИЕ ИГРЫ]</text>
+  <text x="145" y="1040" fill="#1df7ff" font-size="36" font-family="Arial Black">[ОЦЕНКА]</text><text x="145" y="1185" fill="url(#gold)" stroke="#05060d" stroke-width="6" font-size="150" font-family="Impact, Arial Black">9.4</text><text x="430" y="1185" fill="#fff0bb" stroke="#05060d" stroke-width="5" font-size="70" font-family="Arial Black">/10</text>
+  <text x="145" y="1260" fill="#ffe04e" font-size="56" font-family="Arial Black">★★★★★</text><text x="145" y="1355" fill="#ff3bbd" font-size="36" font-family="Arial Black">[ПРОДАЖИ]</text><text x="145" y="1445" fill="#fff0bb" stroke="#05060d" stroke-width="5" font-size="72" font-family="Arial Black">1.250.000 🪙</text>
+  <rect x="610" y="1010" width="300" height="220" rx="18" fill="#2b174f" stroke="#fff0bb" stroke-width="6"/><path d="M640 1180q100-210 240-60" fill="#a52cff" opacity=".7"/><circle cx="682" cy="1065" r="30" fill="#ffe04e"/><path d="M730 1160h60v40h-60zm82-60h60v100h-60" fill="#ff3bbd"/><path d="M690 1200h210" stroke="#1df7ff" stroke-width="7"/>
+  <path d="M620 1415q120-180 270-250" fill="none" stroke="#ffe04e" stroke-width="16" stroke-linecap="round"/><path d="M870 1160l40 0-12 38" fill="none" stroke="#ffe04e" stroke-width="16" stroke-linecap="round"/>
+  <g transform="translate(85 1320)">
+    <ellipse cx="210" cy="265" rx="150" ry="126" fill="#2a2552" stroke="#05060d" stroke-width="12"/>
+    <path d="M88 188 126 85 170 196M252 196 298 85 330 188" fill="#2a2552" stroke="#05060d" stroke-width="12"/>
+    <path d="M112 180 130 118 160 185M270 185 298 118 318 178" fill="#ff7abf"/>
+    <circle cx="170" cy="248" r="28" fill="#ffe04e" stroke="#05060d" stroke-width="8"/><circle cx="250" cy="248" r="28" fill="#ffe04e" stroke="#05060d" stroke-width="8"/>
+    <path d="M188 294q34 34 78 0" fill="none" stroke="#05060d" stroke-width="8" stroke-linecap="round"/><path d="M215 290h30v28h-30z" fill="#ff3bbd"/>
+    <path d="M94 350h260v120H74v-80q0-40 20-40z" fill="#15162d" stroke="#05060d" stroke-width="12"/><path d="M190 390h28v28h-28zm28 28h28v28h-28zm28-28h28v28h-28" fill="#1df7ff"/>
+    <path d="M44 236q-84-96 20-160" fill="none" stroke="#fff0bb" stroke-width="34" stroke-linecap="round"/>
+    <path d="M360 250h130v95H360z" fill="#ffb400" stroke="#05060d" stroke-width="12"/><path d="M350 245h150v28H350z" fill="#ffe04e" stroke="#05060d" stroke-width="10"/><path d="M380 345h92v45h-92z" fill="#ffb400" stroke="#05060d" stroke-width="10"/>
+  </g>
+  <g transform="translate(752 1455)"><circle cx="0" cy="0" r="40" fill="url(#gold)" stroke="#05060d" stroke-width="8"/><circle cx="72" cy="40" r="36" fill="url(#gold)" stroke="#05060d" stroke-width="8"/><circle cx="130" cy="-10" r="42" fill="url(#gold)" stroke="#05060d" stroke-width="8"/></g>
+  <rect x="130" y="1705" width="820" height="112" rx="36" fill="url(#gold)" stroke="#05060d" stroke-width="12" filter="url(#shadow)"/><text x="540" y="1785" text-anchor="middle" fill="#fff0bb" stroke="#05060d" stroke-width="9" font-size="82" font-family="Impact, Arial Black">Играть!</text>
+  <g fill="#ffe04e"><path d="M42 312h14v40H42zM29 325h40v14H29z"/><path d="M985 300h14v40h-14zM972 313h40v14h-40z"/><path d="M965 690h12v34h-12zM954 701h34v12h-34z"/></g>
+</svg>
