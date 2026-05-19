@@ -12,6 +12,8 @@ function patchFile(path, replacements) {
   if (changed) writeFileSync(path, content);
 }
 
+const walletOverlayHelpers = `\ntype WalletOverlay = { coins?: number; rp?: number; stars?: number };\n\nfunction safeWalletNumber(value: unknown) {\n  const parsed = Number(value);\n  return Number.isFinite(parsed) ? parsed : undefined;\n}\n\nasync function loadWalletOverlay(): Promise<WalletOverlay | null> {\n  if (!canUseServerSave()) return null;\n  const payload = await withTimeout(\n    fetch(\`${API_URL}/api/wallet/state\`, {\n      headers: { Authorization: \`tma ${telegramInitData()}\` },\n    })\n      .then((response) => (response.ok ? response.json() : null))\n      .catch(() => null),\n    null,\n    4200,\n  );\n  if (!payload?.ok) return null;\n  return {\n    coins: safeWalletNumber(payload?.economy?.coins ?? payload?.save?.data?.coins),\n    rp: safeWalletNumber(payload?.economy?.rp ?? payload?.save?.data?.rp),\n    stars: safeWalletNumber(payload?.economy?.stars ?? payload?.save?.data?.stars),\n  };\n}\n\nfunction applyWalletOverlay(state: GameState, wallet: WalletOverlay | null): GameState {\n  if (!wallet) return state;\n  return syncGlobalState(normalizeState({\n    ...state,\n    ...(wallet.coins !== undefined ? { coins: wallet.coins } : {}),\n    ...(wallet.rp !== undefined ? { rp: wallet.rp } : {}),\n    ...(wallet.stars !== undefined ? { stars: wallet.stars } : {}),\n  }));\n}\n`;
+
 patchFile('src/App.tsx', [
   ["['menu', 'Топ', 'rating'],", "['menu', 'Награды', 'rating'],"],
   ["import { loadGame, resetGame, saveGame } from './storage';", "import { loadGame, saveGame } from './storage';"],
@@ -36,6 +38,13 @@ patchFile('src/gameLogic.ts', [
   ["}, 'ПРОПУСК +1Ч'),", "}, 'УСКОРЕНИЕ +25%'),"],
 ]);
 
+patchFile('src/storage.ts', [
+  ["function newestSave(...states: Array<GameState | null>) {\n  return states.filter(Boolean).sort((a, b) => saveTimestamp(b) - saveTimestamp(a))[0] ?? null;\n}\n", "function newestSave(...states: Array<GameState | null>) {\n  return states.filter(Boolean).sort((a, b) => saveTimestamp(b) - saveTimestamp(a))[0] ?? null;\n}\n" + walletOverlayHelpers],
+  ["    if (preferred) {\n      const state = finalizeLoadedState(preferred);\n      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));\n      if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);\n      return rememberLoadedState(state);\n    }", "    if (preferred) {\n      const wallet = await loadWalletOverlay();\n      const state = applyWalletOverlay(finalizeLoadedState(preferred), wallet);\n      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));\n      if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);\n      return rememberLoadedState(state);\n    }"],
+]);
+
 patchFile('src/telegram.ts', [
+  ["function referralShareText(referralUrl: string) {\n  return `У тебя не получится сделать игру лучше моей😼 \\nМожешь зайти и убедиться в этом сам\\n\\n${referralUrl}`;\n}", "function referralShareText() {\n  return 'У тебя не получится сделать игру лучше моей😼\\nМожешь зайти и убедиться в этом сам';\n}"],
+  ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText() : text.slice(0, 220);"],
   ["const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/devstudio_bot');", "const shareUrl = encodeURIComponent(payload.url ?? 'https://t.me/DevTycoon_bot');"],
 ]);
