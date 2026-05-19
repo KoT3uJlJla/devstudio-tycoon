@@ -12,6 +12,13 @@ function patchFile(path, replacements) {
   if (changed) writeFileSync(path, content);
 }
 
+function replaceBlock(path, from, to) {
+  let content = readFileSync(path, 'utf8');
+  if (!content.includes(from) || content.includes(to)) return;
+  content = content.replace(from, to);
+  writeFileSync(path, content);
+}
+
 patchFile('src/App.tsx', [
   ["['menu', 'Топ', 'rating'],", "['menu', 'Награды', 'rating'],"],
   ["import { loadGame, resetGame, saveGame } from './storage';", "import { loadGame, saveGame } from './storage';"],
@@ -24,10 +31,19 @@ patchFile('src/App.tsx', [
   ["<button className=\"danger wide\" onClick={() => { resetGame(); update(() => initialState); }}>Сбросить прогресс</button>", ""],
   ["{project.isTutorial && <span className=\"pill hot\">Туториал 30 сек</span>}", ""],
   ["selectedProject: createProject(true)", "selectedProject: createProject(false), tutorialDone: true, tutorialStep: 5"],
+  ["createProject(!state.tutorialDone)", "createProject(false)"],
+  ["createProject(!current.tutorialDone)", "createProject(false)"],
+  ["Начать с 5000 🪙", "Начать с 2500 🪙"],
   ["Ускорить на 1ч ⭐25", "Ускорить на 25% ⭐25"],
   ["https://t.me/devstudio_bot?start=share_release", "https://t.me/DevTycoon_bot?startapp=share_release"],
   ["https://t.me/devstudio_bot?start=ref_demo", "https://t.me/DevTycoon_bot?startapp=ref_demo"],
 ]);
+
+replaceBlock(
+  'src/App.tsx',
+  "  useEffect(() => {\n    if (!state) return;\n    const timer = window.setTimeout(() => saveGame(state), 1200);\n    return () => window.clearTimeout(timer);\n  }, [state]);",
+  "  useEffect(() => {\n    if (!state) return;\n    saveGame(state);\n  }, [state]);",
+);
 
 patchFile('src/gameLogic.ts', [
   ["project.isTutorial: false", "project.isTutorial"],
@@ -39,6 +55,12 @@ patchFile('src/gameLogic.ts', [
   ["const nextProgress = clamp(project.progress + 45, 0, 100);", "const nextProgress = clamp(project.progress + 25, 0, 100);"],
   ["}, 'ПРОПУСК +1Ч'),", "}, 'УСКОРЕНИЕ +25%'),"],
 ]);
+
+replaceBlock(
+  'src/gameLogic.ts',
+  "export function estimateProjectDuration(project: Project, state: GameState) {\n  if (project.isTutorial) return 30;\n  const genre = genres.find((item) => item.id === project.genre);",
+  "export function estimateProjectDuration(project: Project, state: GameState) {\n  const releases = Math.max(0, Math.floor(Number(state.gamesReleased) || 0));\n  if (releases === 0) return 5;\n  if (releases === 1) return 30;\n  if (releases === 2) return 60;\n  const genre = genres.find((item) => item.id === project.genre);",
+);
 
 patchFile('src/telegram.ts', [
   ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
