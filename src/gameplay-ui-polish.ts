@@ -1,3 +1,5 @@
+const TON_WALLET_STORAGE_KEY = 'devstudio_ton_wallet_address';
+
 const RELEASE_QUOTES = {
   low: [
     'Идея видна, но билд разваливается под руками.',
@@ -60,6 +62,23 @@ function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
+function readStoredTonAddress() {
+  try {
+    return localStorage.getItem(TON_WALLET_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredTonAddress(address: string) {
+  try {
+    if (address) localStorage.setItem(TON_WALLET_STORAGE_KEY, address);
+    else localStorage.removeItem(TON_WALLET_STORAGE_KEY);
+  } catch {
+    // best effort only
+  }
+}
+
 function shortenAddress(value: string) {
   return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
 }
@@ -70,19 +89,36 @@ function walletAddress(wallet: unknown) {
   return typeof data.account?.address === 'string' ? data.account.address : '';
 }
 
+function currentTonAddress(wallet?: unknown) {
+  return walletAddress(wallet)
+    || walletAddress(tonConnectUi?.wallet)
+    || walletAddress(tonConnectUi?.account)
+    || readStoredTonAddress();
+}
+
 function updateTonStatus(wallet?: unknown) {
   const status = document.querySelector<HTMLElement>('.ton-wallet-status');
   const addressNode = document.querySelector<HTMLElement>('.ton-wallet-address');
   const panel = document.querySelector<HTMLElement>('.ton-wallet-panel');
-  const address = walletAddress(wallet) || walletAddress(tonConnectUi?.wallet) || walletAddress(tonConnectUi?.account);
+  const address = currentTonAddress(wallet);
   const connected = Boolean(address || tonConnectUi?.connected);
+
+  if (wallet !== undefined) {
+    if (address) writeStoredTonAddress(address);
+    else writeStoredTonAddress('');
+  }
+
   if (status) status.textContent = connected ? 'привязан' : 'не привязан';
   if (addressNode) addressNode.textContent = address ? shortenAddress(address) : 'Выберите кошелёк через TON Connect';
   panel?.classList.toggle('ton-wallet-connected', connected);
 }
 
 async function ensureTonConnect(buttonRootId: string) {
-  if (tonConnectUi || tonConnectInitStarted) return;
+  if (tonConnectUi) {
+    updateTonStatus();
+    return;
+  }
+  if (tonConnectInitStarted) return;
   tonConnectInitStarted = true;
   try {
     const mod = await import('@tonconnect/ui') as unknown as TonConnectModuleLike;
@@ -96,6 +132,8 @@ async function ensureTonConnect(buttonRootId: string) {
       uiPreferences: { theme: darkTheme },
     });
     tonConnectUi.onStatusChange?.((wallet) => updateTonStatus(wallet));
+    window.setTimeout(() => updateTonStatus(), 250);
+    window.setTimeout(() => updateTonStatus(), 1000);
     updateTonStatus();
   } catch {
     const status = document.querySelector<HTMLElement>('.ton-wallet-status');
@@ -195,6 +233,7 @@ function installTonWalletPanel() {
     panel = makeTonWalletPanel();
     anchor.insertAdjacentElement('afterend', panel);
   }
+  updateTonStatus();
   void ensureTonConnect('ton-connect-root');
 }
 
