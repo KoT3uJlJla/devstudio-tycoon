@@ -62,6 +62,16 @@ replaceBlock(
   "export function estimateProjectDuration(project: Project, state: GameState) {\n  const releases = Math.max(0, Math.floor(Number(state.gamesReleased) || 0));\n  if (releases === 0) return 5;\n  if (releases === 1) return 30;\n  if (releases === 2) return 60;\n  const genre = genres.find((item) => item.id === project.genre);",
 );
 
+replaceBlock(
+  'src/gameplay-ui-polish.ts',
+  "async function loadBackendTonWallet() {",
+  "async function syncTonWalletUnbindBackend() {\n  backendTonAddress = '';\n  lastSyncedTonAddress = '';\n  writeStoredTonAddress('');\n  setTonUiState('отвязан', '', false);\n  if (!canSyncTonWallet()) return;\n  if (tonSyncInFlight) await tonSyncInFlight.catch(() => undefined);\n  tonSyncInFlight = fetch(`${API_URL}/api/wallet/ton`, {\n    method: 'DELETE',\n    headers: { Authorization: `tma ${telegramInitData()}` },\n  })\n    .then(async (response) => {\n      const payload = await response.json().catch(() => null);\n      if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'ton_wallet_unbind_failed');\n      backendTonAddress = '';\n      lastSyncedTonAddress = '';\n      writeStoredTonAddress('');\n      setTonUiState('не привязан', '', false);\n    })\n    .catch(() => {\n      setTonUiState('ошибка', '', false);\n    })\n    .finally(() => {\n      tonSyncInFlight = null;\n    });\n  await tonSyncInFlight;\n}\n\nasync function loadBackendTonWallet() {",
+);
+
+patchFile('src/gameplay-ui-polish.ts', [
+  ["      const address = currentTonAddress(wallet);\n      updateTonStatus(wallet);\n      if (address) void syncTonWalletToBackend(address);\n      else if (backendTonAddress) { backendTonAddress = ''; writeStoredTonAddress(''); updateTonStatus(); }\n      scheduleTonStatusRefresh();", "      const liveAddress = walletAddress(wallet) || walletAddress(tonConnectUi?.wallet) || walletAddress(tonConnectUi?.account);\n      updateTonStatus(wallet);\n      if (liveAddress) void syncTonWalletToBackend(liveAddress);\n      else void syncTonWalletUnbindBackend();\n      scheduleTonStatusRefresh();"],
+]);
+
 patchFile('src/telegram.ts', [
   ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
   ["const finalText = isReferralShare ? referralShareText().replace(/\\n\\n.*$/, '') : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
