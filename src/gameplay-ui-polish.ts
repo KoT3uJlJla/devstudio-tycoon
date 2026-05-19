@@ -233,16 +233,18 @@ function bindManualTonPanel(panel: HTMLElement) {
   const unbindButton = panel.querySelector<HTMLButtonElement>('.ton-wallet-unbind');
   bindButton?.addEventListener('click', () => void syncTonWalletToBackend(input?.value || ''));
   unbindButton?.addEventListener('click', () => void syncTonWalletUnbindBackend());
-  input?.addEventListener('focus', () => {
-    if (input.dataset.tonDirty !== '1' && backendTonAddress) input.select();
-  });
-  input?.addEventListener('input', () => {
-    input.dataset.tonDirty = '1';
-    updateTonWalletActions(panel);
-  });
-  input?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !bindButton?.disabled) void syncTonWalletToBackend(input.value);
-  });
+  if (input) {
+    input.addEventListener('focus', () => {
+      if (input.dataset.tonDirty !== '1' && backendTonAddress) input.select();
+    });
+    input.addEventListener('input', () => {
+      input.dataset.tonDirty = '1';
+      updateTonWalletActions(panel);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !bindButton?.disabled) void syncTonWalletToBackend(input.value);
+    });
+  }
   updateTonWalletActions(panel);
 }
 
