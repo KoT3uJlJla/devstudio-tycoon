@@ -26,7 +26,6 @@ patchFile('src/App.tsx', [
   ["Ускорить на 1ч ⭐25", "Ускорить на 25% ⭐25"],
   ["https://t.me/devstudio_bot?start=share_release", "https://t.me/DevTycoon_bot?startapp=share_release"],
   ["https://t.me/devstudio_bot?start=ref_demo", "https://t.me/DevTycoon_bot?startapp=ref_demo"],
-  ["Заходи в DevStudio Tycoon и запускай свои хиты вместе со мной!", "У тебя не получится сделать игру лучше моей😼 \\nМожешь зайти и убедиться в этом сам"],
 ]);
 
 patchFile('src/gameLogic.ts', [
