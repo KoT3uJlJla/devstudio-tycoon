@@ -5,7 +5,8 @@ import type { GameState } from './types';
 const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v2';
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const CLOUD_THROTTLE_MS = 15_000;
-const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 2_500;
+const ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS = 900;
+const SERVER_SAVE_THROTTLE_MS = 900;
 const SERVER_LOAD_TIMEOUT_MS = 9_000;
 const LOCAL_SERVER_LOAD_TIMEOUT_MS = 2_800;
 const MAX_SAVE_BYTES = 250_000;
@@ -104,6 +105,15 @@ function parseSave(raw: string | null): GameState | null {
   }
 }
 
+function saveTimestamp(state: GameState | null) {
+  const value = Number((state as unknown as { lastSavedAt?: unknown } | null)?.lastSavedAt);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function newestSave(...states: Array<GameState | null>) {
+  return states.filter(Boolean).sort((a, b) => saveTimestamp(b) - saveTimestamp(a))[0] ?? null;
+}
+
 async function fetchServerSave(path: string, timeoutMs: number): Promise<GameState | null> {
   if (!canUseServerSave()) return null;
   const payload = await withTimeout(
@@ -191,15 +201,15 @@ function rememberLoadedState(state: GameState) {
 
 export async function loadGame(): Promise<GameState> {
   try {
+    const fromLocal = parseSave(readLocalStorage(STORAGE_KEY));
     const serverSave = await loadServerSave();
-    if (serverSave) {
-      const state = finalizeLoadedState(serverSave);
+    const preferred = newestSave(fromLocal, serverSave);
+    if (preferred) {
+      const state = finalizeLoadedState(preferred);
       writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+      if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);
       return rememberLoadedState(state);
     }
-
-    const fromLocal = parseSave(readLocalStorage(STORAGE_KEY));
-    if (fromLocal) return rememberLoadedState(finalizeLoadedState(fromLocal));
 
     const cloud = cloudStorage();
     if (cloud?.getItem) {
@@ -278,7 +288,7 @@ function flushServer(keepalive = false) {
 function scheduleServerWrite(state: GameState) {
   if (!canUseServerSave()) return;
   pendingServerState = state;
-  const throttleMs = isActiveDevelopmentSave(state) ? ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS : CLOUD_THROTTLE_MS;
+  const throttleMs = isActiveDevelopmentSave(state) ? ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS : SERVER_SAVE_THROTTLE_MS;
   const elapsed = Date.now() - lastServerWriteAt;
   if (elapsed >= throttleMs) {
     flushServer();
