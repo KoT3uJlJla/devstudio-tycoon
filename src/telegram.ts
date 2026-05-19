@@ -45,7 +45,6 @@ declare global {
 }
 
 const OFFICIAL_BOT_URL = 'https://t.me/DevTycoon_bot';
-const SHARE_REFERRAL_IMAGE = '/share-referral.svg';
 const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.svg';
 
 function absoluteAssetUrl(path: string) {
@@ -70,6 +69,14 @@ function maskedReferralCode() {
 
 function referralUrl() {
   return `${OFFICIAL_BOT_URL}?startapp=${maskedReferralCode()}`;
+}
+
+function referralPreviewUrl() {
+  const code = encodeURIComponent(maskedReferralCode());
+  // Telegram does not attach arbitrary images to t.me/share/url messages.
+  // It renders link previews from Open Graph tags, so we share our own preview
+  // page that has og:image and redirects real users to the bot.
+  return `${window.location.origin}/ref.html?r=${code}&v=2`;
 }
 
 function referralShareText() {
@@ -126,7 +133,7 @@ export function shareRelease(text: string, payload: SharePayload = {}) {
     return;
   }
 
-  const shareTargetUrl = isReferralShare ? refUrl : (payload.url ?? OFFICIAL_BOT_URL);
+  const shareTargetUrl = isReferralShare ? referralPreviewUrl() : (payload.url ?? OFFICIAL_BOT_URL);
   const finalText = isReferralShare ? referralShareText() : text.slice(0, 220);
   const safeText = encodeURIComponent(finalText);
   const shareUrl = encodeURIComponent(shareTargetUrl);
