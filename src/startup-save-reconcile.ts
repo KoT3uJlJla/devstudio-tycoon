@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://devstudio-tycoon-api.on
 type ReconcilePayload = {
   ok?: boolean;
   save?: { data?: unknown } | null;
+  economy?: { coins?: unknown; rp?: unknown; stars?: unknown } | null;
 };
 
 function telegramInitData() {
@@ -17,6 +18,27 @@ function isTelegramRuntime() {
     | { initData?: string; initDataUnsafe?: { user?: unknown; start_param?: unknown } }
     | undefined;
   return Boolean(webApp?.initData || webApp?.initDataUnsafe?.user || webApp?.initDataUnsafe?.start_param);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function safeNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function overlayWallet(payload: ReconcilePayload) {
+  const data = isPlainObject(payload.save?.data) ? payload.save.data : null;
+  if (!data) return null;
+  const economy = isPlainObject(payload.economy) ? payload.economy : null;
+  return {
+    ...data,
+    ...(safeNumber(economy?.coins ?? data.coins) !== undefined ? { coins: safeNumber(economy?.coins ?? data.coins) } : {}),
+    ...(safeNumber(economy?.rp ?? data.rp) !== undefined ? { rp: safeNumber(economy?.rp ?? data.rp) } : {}),
+    ...(safeNumber(economy?.stars ?? data.stars) !== undefined ? { stars: safeNumber(economy?.stars ?? data.stars) } : {}),
+  };
 }
 
 function persistSaveData(data: unknown) {
@@ -70,7 +92,8 @@ export async function reconcileStartupSave() {
   );
 
   if (payload?.ok && payload.save?.data) {
-    persistSaveData(payload.save.data);
-    window.setTimeout(() => applyVisibleBalanceFromSave(payload.save?.data), 0);
+    const data = overlayWallet(payload) || payload.save.data;
+    persistSaveData(data);
+    window.setTimeout(() => applyVisibleBalanceFromSave(data), 0);
   }
 }
