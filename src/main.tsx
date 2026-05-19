@@ -7,21 +7,9 @@ import './v8-ui-patch.css';
 import './predeploy-hardening.css';
 import './gameplay-ui-polish.css';
 import './ton-connect-overrides.css';
-import { installReleaseUiPatch } from './release-ui-patch';
-import { installGameplayUiPolish } from './gameplay-ui-polish';
-import { reconcileStartupSave } from './startup-save-reconcile';
 
-async function boot() {
-  await reconcileStartupSave();
-
-  installReleaseUiPatch();
-  installGameplayUiPolish();
-
-  createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
-}
-
-void boot();
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
