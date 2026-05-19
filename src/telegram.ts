@@ -5,7 +5,7 @@ declare global {
         ready?: () => void;
         expand?: () => void;
         close?: () => void;
-        shareToStory?: (mediaUrl: string, params?: Record<string, string>) => void;
+        shareToStory?: (mediaUrl: string, params?: { text?: string; widget_link?: { url: string; name?: string } }) => void;
         openTelegramLink?: (url: string) => void;
         showPopup?: (params: { title?: string; message: string; buttons?: Array<{ type: string; text?: string }> }) => void;
         HapticFeedback?: {
@@ -45,7 +45,13 @@ declare global {
 }
 
 const OFFICIAL_BOT_URL = 'https://t.me/DevTycoon_bot';
-const SHARE_IMAGE_PLACEHOLDER = '';
+const SHARE_REFERRAL_IMAGE = '/share-referral.webp';
+const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.webp';
+
+function absoluteAssetUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`;
+}
 
 function safeTelegramCall(callback: () => void) {
   try {
@@ -62,14 +68,18 @@ function maskedReferralCode() {
   return `r_${mixed.toString(36)}`;
 }
 
-function referralShareText(referralUrl: string) {
-  return `У тебя не получится сделать игру лучше моей😼 \nМожешь зайти и убедиться в этом сам\n\n${referralUrl}`;
+function referralUrl() {
+  return `${OFFICIAL_BOT_URL}?startapp=${maskedReferralCode()}`;
 }
 
-function showStoryPlaceholder(text: string) {
+function referralShareText() {
+  return 'У тебя не получится сделать игру лучше моей😼\nМожешь зайти и убедиться в этом сам';
+}
+
+function showStoryPlaceholder(text: string, refUrl: string) {
   safeTelegramCall(() => window.Telegram?.WebApp?.showPopup?.({
     title: 'История релиза',
-    message: `Скоро здесь появится публикация истории с картинкой.\n\n${text.slice(0, 140)}`,
+    message: `Скоро здесь появится публикация истории с картинкой.\n\n${text.slice(0, 120)}\n${refUrl}`,
     buttons: [{ type: 'ok' }],
   }));
 }
@@ -101,21 +111,23 @@ export type SharePayload = {
 export function shareRelease(text: string, payload: SharePayload = {}) {
   const isReferralShare = payload.url?.includes('ref_demo') || text.includes('лучше моей');
   const isStoryShare = payload.url?.includes('share_release') || Boolean(payload.storyText && !isReferralShare);
+  const refUrl = referralUrl();
 
   if (isStoryShare) {
-    if (payload.imageUrl || SHARE_IMAGE_PLACEHOLDER) {
-      const mediaUrl = payload.imageUrl || SHARE_IMAGE_PLACEHOLDER;
-      safeTelegramCall(() => window.Telegram?.WebApp?.shareToStory?.(mediaUrl, { text: payload.storyText ?? text.slice(0, 180) }));
+    const mediaUrl = absoluteAssetUrl(payload.imageUrl || SHARE_RELEASE_STORY_IMAGE);
+    if (window.Telegram?.WebApp?.shareToStory) {
+      safeTelegramCall(() => window.Telegram?.WebApp?.shareToStory?.(mediaUrl, {
+        text: payload.storyText ?? text.slice(0, 180),
+        widget_link: { url: refUrl, name: 'Играть' },
+      }));
       return;
     }
-    showStoryPlaceholder(payload.storyText ?? text);
+    showStoryPlaceholder(payload.storyText ?? text, refUrl);
     return;
   }
 
-  const shareTargetUrl = isReferralShare
-    ? `${OFFICIAL_BOT_URL}?startapp=${maskedReferralCode()}`
-    : (payload.url ?? OFFICIAL_BOT_URL);
-  const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);
+  const shareTargetUrl = isReferralShare ? refUrl : (payload.url ?? OFFICIAL_BOT_URL);
+  const finalText = isReferralShare ? referralShareText() : text.slice(0, 220);
   const safeText = encodeURIComponent(finalText);
   const shareUrl = encodeURIComponent(shareTargetUrl);
   const url = `https://t.me/share/url?url=${shareUrl}&text=${safeText}`;
