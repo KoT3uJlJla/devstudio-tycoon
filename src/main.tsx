@@ -7,7 +7,6 @@ import './v8-ui-patch.css';
 import './predeploy-hardening.css';
 import './gameplay-ui-polish.css';
 import { installReleaseUiPatch } from './release-ui-patch';
-import { installAuthoritativeWalletUiPatch } from './authoritative-wallet-ui-patch';
 import { installGameplayUiPolish } from './gameplay-ui-polish';
 import { reconcileStartupSave } from './startup-save-reconcile';
 
@@ -15,7 +14,6 @@ async function boot() {
   await reconcileStartupSave();
 
   installReleaseUiPatch();
-  installAuthoritativeWalletUiPatch();
   installGameplayUiPolish();
 
   createRoot(document.getElementById('root')!).render(
