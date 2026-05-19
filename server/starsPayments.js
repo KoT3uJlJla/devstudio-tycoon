@@ -64,8 +64,6 @@ function invoiceIdFromPayload(payload) {
 
 function publicWalletEconomy(economy) {
   return {
-    coins: safeInt(economy?.coins, 0, 999999999),
-    rp: safeInt(economy?.rp, 0, 999999999),
     stars: safeInt(economy?.stars, 0, 9999999),
     qualifiedReferrals: safeInt(economy?.qualifiedReferrals, 0, 999999),
     qualifiedSecondLevelReferrals: safeInt(economy?.qualifiedSecondLevelReferrals, 0, 999999),
@@ -79,8 +77,9 @@ function overlayWallet(data, economy) {
   const wallet = publicWalletEconomy(economy);
   return {
     ...(isPlainObject(data) ? data : {}),
-    coins: wallet.coins,
-    rp: wallet.rp,
+    // Gameplay resources live in saves.data. Do not mirror them from economy:
+    // migrated/new economy records may have coins/rp=0, and that was wiping
+    // player balances on every /api/wallet/state call.
     stars: wallet.stars,
     qualifiedReferrals: wallet.qualifiedReferrals,
     qualifiedSecondLevelReferrals: wallet.qualifiedSecondLevelReferrals,
@@ -93,21 +92,11 @@ async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
   const telegramId = telegramUser.id;
   const save = saveData ? { data: saveData } : await deps.getSave(telegramId);
   let economy = await deps.getOrCreateEconomy(telegramUser, save?.data);
-
   const saveObject = isPlainObject(save?.data) ? save.data : {};
-  const alreadyAuthoritative = economy?.walletAuthoritative === true;
 
-  const nextCoins = alreadyAuthoritative
-    ? safeInt(saveObject.coins, safeInt(economy?.coins, 0), 999999999)
-    : Math.max(safeInt(saveObject.coins, 0), safeInt(economy?.coins, 0));
-  const nextRp = alreadyAuthoritative
-    ? safeInt(saveObject.rp, safeInt(economy?.rp, 0), 999999999)
-    : Math.max(safeInt(saveObject.rp, 0), safeInt(economy?.rp, 0));
-
-  const setPatch = { walletAuthoritative: true, coins: nextCoins, rp: nextRp };
+  const setPatch = {};
   if (!isPlainObject(economy?.paidInvoiceClaims)) setPatch.paidInvoiceClaims = economy?.paidInvoiceClaims || {};
-
-  economy = await deps.patchEconomy(telegramId, { $set: setPatch });
+  if (Object.keys(setPatch).length) economy = await deps.patchEconomy(telegramId, { $set: setPatch });
 
   const protectedData = overlayWallet(saveObject, economy);
   if (save?.data) await deps.writeSave(telegramId, telegramUser, protectedData);
@@ -117,9 +106,9 @@ async function ensureAuthoritativeWallet(deps, telegramUser, saveData = null) {
     diagnostics: {
       saveCoins: safeInt(saveObject.coins, 0),
       saveRp: safeInt(saveObject.rp, 0),
-      economyCoins: safeInt(economy?.coins, 0),
-      economyRp: safeInt(economy?.rp, 0),
-      walletAuthoritative: economy?.walletAuthoritative === true,
+      economyCoinsDeprecated: safeInt(economy?.coins, 0),
+      economyRpDeprecated: safeInt(economy?.rp, 0),
+      walletAuthoritative: false,
     },
   };
 }
@@ -197,7 +186,7 @@ async function applyInvoiceRewardIfNeeded(deps, invoice) {
   const economy = await deps.getOrCreateEconomy(invoice.telegramUser, currentData);
   const rewarded = deps.applyRewardToSaveData(currentData, item.reward || {});
   const marked = markInvoiceApplied(rewarded, invoice, item.reward || {});
-  const nextData = deps.overlayProtectedEconomy(marked, economy);
+  const nextData = overlayWallet(marked, economy);
   await deps.writeSave(invoice.telegramId, invoice.telegramUser, nextData);
   await deps.db.collection("stars_invoices").updateOne(
     { invoiceId: invoice.invoiceId },
@@ -264,17 +253,14 @@ async function handleSuccessfulPayment(deps, message) {
   await applyPaidInvoice(deps, invoice, payment);
 }
 
-async function spendResearchRp(deps, telegramUser, amount, reason, meta) {
-  await ensureAuthoritativeWallet(deps, telegramUser);
-  return deps.db.collection("economy").findOneAndUpdate(
-    { telegramId: telegramUser.id, rp: { $gte: amount } },
-    {
-      $inc: { rp: -amount },
-      $set: { walletAuthoritative: true, updatedAt: new Date() },
-      $push: { ledger: { $each: [{ id: crypto.randomUUID(), kind: "rp_spend", amount: -amount, reason, meta, createdAt: new Date() }], $slice: -100 } },
-    },
-    { returnDocument: "after" },
-  );
+function canSpendRp(data, amount) {
+  return safeInt(data?.rp, 0) >= amount;
+}
+
+async function appendResearchLedger(deps, telegramUser, amount, reason, meta) {
+  await deps.patchEconomy(telegramUser.id, {
+    $push: { ledger: { $each: [{ id: crypto.randomUUID(), kind: "rp_spend", amount: -amount, reason, meta, createdAt: new Date() }], $slice: -100 } },
+  });
 }
 
 async function handleResearchUnlock(deps, req, res) {
@@ -316,15 +302,15 @@ async function handleResearchUnlock(deps, req, res) {
     return res.status(400).json({ ok: false, error: "unknown_research_action" });
   }
 
-  const economy = await spendResearchRp(deps, req.telegramUser, cost, `research:${action}`, result);
-  if (!economy) {
-    const current = await ensureAuthoritativeWallet(deps, req.telegramUser, data);
-    return res.status(402).json({ ok: false, error: "not_enough_rp", economy: publicWalletEconomy(current.economy) });
+  if (!canSpendRp(data, cost)) {
+    return res.status(402).json({ ok: false, error: "not_enough_rp", economy: publicWalletEconomy(ensured.economy) });
   }
 
-  const protectedData = overlayWallet(nextData, economy);
+  nextData = { ...nextData, rp: safeInt(data.rp, 0) - cost, lastSavedAt: Date.now() };
+  await appendResearchLedger(deps, req.telegramUser, cost, `research:${action}`, result);
+  const protectedData = overlayWallet(nextData, ensured.economy);
   await deps.writeSave(req.telegramUser.id, req.telegramUser, protectedData);
-  res.json({ ok: true, save: { data: protectedData, updatedAt: new Date() }, economy: publicWalletEconomy(economy), research: result, cost });
+  res.json({ ok: true, save: { data: protectedData, updatedAt: new Date() }, economy: publicWalletEconomy(ensured.economy), research: result, cost });
 }
 
 async function walletStateResponse(deps, telegramUser) {
