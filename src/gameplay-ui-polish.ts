@@ -1,3 +1,5 @@
+import { claimBackendDailyReward, claimBackendReferralMilestone, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
+
 const TON_WALLET_STORAGE_KEY = 'devstudio_ton_wallet_address';
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -52,10 +54,21 @@ const prizePool = [
   ['$20', '10%'],
 ] as const;
 
+const referralMilestoneByLabel: Record<string, string> = {
+  '1 активный друг': 'm1',
+  '3 активных друга': 'm3',
+  '5 активных друзей': 'm5',
+  '10 активных друзей': 'm10',
+  '25 активных друзей': 'm25',
+};
+
 type BackendTonWallet = { address?: string | null } | null;
+type SecureAction = { label: string; run: () => Promise<unknown> };
 
 let backendTonAddress = '';
 let tonSyncInFlight: Promise<void> | null = null;
+let secureStarInterceptorsInstalled = false;
+let secureActionInFlight = false;
 
 function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -248,6 +261,116 @@ function bindManualTonPanel(panel: HTMLElement) {
   updateTonWalletActions(panel);
 }
 
+function secureShopAction(button: HTMLButtonElement): SecureAction | null {
+  const label = textOf(button);
+  const shopCard = button.closest<HTMLElement>('.shop-card');
+  const title = textOf(shopCard?.querySelector('h3') ?? null);
+  const offer = button.closest<HTMLElement>('.offer');
+
+  if (offer && label.includes('Купить ⭐100')) return { label: 'Покупаем…', run: () => purchaseBackendItem('starter_pack') };
+
+  if (title === 'Стартовый набор') return { label: 'Покупаем…', run: () => purchaseBackendItem('starter_pack') };
+  if (title === 'Малый набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_small') };
+  if (title === 'Средний набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_medium') };
+  if (title === 'Ускорение науки') return { label: 'Покупаем…', run: () => purchaseBackendItem('research_boost') };
+
+  // Rename already subtracts stars locally and still needs a modal in the current React tree,
+  // so it is left alone until the source App handler is fully migrated.
+  return null;
+}
+
+function secureResearchAction(button: HTMLButtonElement): SecureAction | null {
+  const label = textOf(button);
+  if (label.includes('Открыть за ⭐450')) return { label: 'Открываем…', run: () => purchaseBackendItem('product_instinct') };
+  return null;
+}
+
+function secureDevelopmentAction(button: HTMLButtonElement): SecureAction | null {
+  const label = textOf(button);
+  if (label.includes('Ускорить') && label.includes('⭐25')) return { label: 'Ускоряем…', run: () => runBackendDevelopmentAction('skip') };
+  if (label.includes('Продвижение ⭐35')) return { label: 'Продвигаем…', run: () => runBackendDevelopmentAction('promote') };
+  return null;
+}
+
+function secureDailyAction(button: HTMLButtonElement): SecureAction | null {
+  const label = textOf(button);
+  if (button.classList.contains('daily-card') && label.includes('ЕЖЕДНЕВНЫЙ ВХОД')) return { label: 'Забираем…', run: claimBackendDailyReward };
+  return null;
+}
+
+function secureReferralMilestoneAction(button: HTMLButtonElement): SecureAction | null {
+  if (!button.classList.contains('milestone')) return null;
+  const label = textOf(button.querySelector('span'));
+  const milestoneId = referralMilestoneByLabel[label];
+  if (!milestoneId) return null;
+  return { label: 'Забираем…', run: () => claimBackendReferralMilestone(milestoneId) };
+}
+
+function secureRefreshHiresAction(button: HTMLButtonElement): SecureAction | null {
+  const label = textOf(button);
+  if (label.startsWith('Обновить кандидатов ⭐10')) return { label: 'Обновляем…', run: () => purchaseBackendItem('refresh_hires') };
+  return null;
+}
+
+function secureActionForButton(button: HTMLButtonElement): SecureAction | null {
+  if (button.disabled || button.dataset.secureStarAction === '1') return null;
+  return secureShopAction(button)
+    || secureResearchAction(button)
+    || secureDevelopmentAction(button)
+    || secureDailyAction(button)
+    || secureReferralMilestoneAction(button)
+    || secureRefreshHiresAction(button);
+}
+
+async function runSecureAction(button: HTMLButtonElement, action: SecureAction) {
+  if (secureActionInFlight) return;
+  secureActionInFlight = true;
+  const originalText = button.textContent || '';
+  button.dataset.secureStarAction = '1';
+  button.disabled = true;
+  button.textContent = action.label;
+  try {
+    const result = await action.run();
+    if (!result) {
+      button.textContent = 'Ошибка / не хватает ⭐';
+      window.setTimeout(() => {
+        button.textContent = originalText;
+        button.disabled = false;
+        delete button.dataset.secureStarAction;
+      }, 1400);
+      return;
+    }
+    button.textContent = 'Готово';
+    window.setTimeout(() => window.location.reload(), 180);
+  } catch {
+    button.textContent = 'Ошибка';
+    window.setTimeout(() => {
+      button.textContent = originalText;
+      button.disabled = false;
+      delete button.dataset.secureStarAction;
+    }, 1400);
+  } finally {
+    secureActionInFlight = false;
+  }
+}
+
+function installSecureStarActionInterceptors() {
+  if (secureStarInterceptorsInstalled) return;
+  secureStarInterceptorsInstalled = true;
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest<HTMLButtonElement>('button');
+    if (!button) return;
+    const action = secureActionForButton(button);
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    void runSecureAction(button, action);
+  }, true);
+}
+
 function seededIndex(seed: string, length: number) {
   let hash = 2166136261;
   for (let index = 0; index < seed.length; index += 1) {
@@ -400,6 +523,7 @@ function applyGameplayPolish() {
   rewriteStudioUpgradeText();
   installStaticCatArt();
   installTonWalletPanel();
+  installSecureStarActionInterceptors();
   document.querySelectorAll('.time-skip-button').forEach((button) => {
     if (textOf(button).includes('1ч')) button.textContent = button.textContent?.replace('на 1ч', 'на 25%') || 'Ускорить на 25% ⭐25';
   });
