@@ -9,6 +9,10 @@ function safeNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function hasFiniteNumber(value: unknown) {
+  return Number.isFinite(Number(value));
+}
+
 function money(value: unknown) {
   return Math.round(safeNumber(value)).toLocaleString('ru-RU');
 }
@@ -36,9 +40,11 @@ export function applyVisibleBalanceFromSave(data: unknown) {
   const wallet = document.querySelector<HTMLElement>('.compact-wallet');
   if (!wallet) return true;
   const spans = Array.from(wallet.querySelectorAll<HTMLElement>('span'));
-  setSpanValue(spans[0], money(balance.coins));
-  setSpanValue(spans[1], money(balance.rp));
-  setSpanValue(spans[2], String(Math.round(safeNumber(balance.stars))));
+  // Do not write fallback zeroes when a partial backend payload misses gameplay
+  // fields. Coins/RP live in save.data; only update them when finite values exist.
+  if (hasFiniteNumber(balance.coins)) setSpanValue(spans[0], money(balance.coins));
+  if (hasFiniteNumber(balance.rp)) setSpanValue(spans[1], money(balance.rp));
+  if (hasFiniteNumber(balance.stars)) setSpanValue(spans[2], String(Math.round(safeNumber(balance.stars))));
   return true;
 }
 
