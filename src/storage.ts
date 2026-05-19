@@ -22,6 +22,8 @@ type DevelopmentAction = {
   body?: Record<string, unknown>;
 };
 
+type WalletOverlay = { coins?: number; rp?: number; stars?: number };
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -110,8 +112,48 @@ function saveTimestamp(state: GameState | null) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function safeWalletNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function newestSave(...states: Array<GameState | null>) {
   return states.filter(Boolean).sort((a, b) => saveTimestamp(b) - saveTimestamp(a))[0] ?? null;
+}
+
+function walletOverlayFromPayload(payload: unknown): WalletOverlay | null {
+  if (!isPlainObject(payload) || !payload.ok) return null;
+  const economy = isPlainObject(payload.economy) ? payload.economy : null;
+  const save = isPlainObject(payload.save) && isPlainObject(payload.save.data) ? payload.save.data : null;
+  return {
+    coins: safeWalletNumber(economy?.coins ?? save?.coins),
+    rp: safeWalletNumber(economy?.rp ?? save?.rp),
+    stars: safeWalletNumber(economy?.stars ?? save?.stars),
+  };
+}
+
+async function loadWalletOverlay(): Promise<WalletOverlay | null> {
+  if (!canUseServerSave()) return null;
+  const payload = await withTimeout(
+    fetch(`${API_URL}/api/wallet/state`, {
+      headers: { Authorization: `tma ${telegramInitData()}` },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null),
+    null,
+    4200,
+  );
+  return walletOverlayFromPayload(payload);
+}
+
+function applyWalletOverlay(state: GameState, wallet: WalletOverlay | null): GameState {
+  if (!wallet) return state;
+  return syncGlobalState(normalizeState({
+    ...state,
+    ...(wallet.coins !== undefined ? { coins: wallet.coins } : {}),
+    ...(wallet.rp !== undefined ? { rp: wallet.rp } : {}),
+    ...(wallet.stars !== undefined ? { stars: wallet.stars } : {}),
+  }));
 }
 
 async function fetchServerSave(path: string, timeoutMs: number): Promise<GameState | null> {
@@ -178,7 +220,8 @@ async function postDevelopmentAction(action: DevelopmentAction) {
   if (!serverSave || !isPlainObject(serverSave)) return;
 
   try {
-    const normalized = syncGlobalState(normalizeState(serverSave as Partial<GameState>));
+    const wallet = await loadWalletOverlay();
+    const normalized = applyWalletOverlay(syncGlobalState(normalizeState(serverSave as Partial<GameState>)), wallet);
     lastActionSnapshot = normalized;
     writeLocalStorage(STORAGE_KEY, JSON.stringify(normalized));
   } catch {
@@ -205,7 +248,8 @@ export async function loadGame(): Promise<GameState> {
     const serverSave = await loadServerSave();
     const preferred = newestSave(fromLocal, serverSave);
     if (preferred) {
-      const state = finalizeLoadedState(preferred);
+      const wallet = await loadWalletOverlay();
+      const state = finalizeLoadedState(applyWalletOverlay(preferred, wallet));
       writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
       if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);
       return rememberLoadedState(state);
@@ -226,14 +270,16 @@ export async function loadGame(): Promise<GameState> {
       );
       const parsedCloud = parseSave(cloudSave);
       if (parsedCloud) {
-        const state = finalizeLoadedState(parsedCloud);
+        const wallet = await loadWalletOverlay();
+        const state = finalizeLoadedState(applyWalletOverlay(parsedCloud, wallet));
         writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
         if (canUseServerSave()) void saveServerState(state);
         return rememberLoadedState(state);
       }
     }
 
-    return rememberLoadedState(syncGlobalState(initialState));
+    const wallet = await loadWalletOverlay();
+    return rememberLoadedState(applyWalletOverlay(syncGlobalState(initialState), wallet));
   } catch {
     return rememberLoadedState(syncGlobalState(initialState));
   }
