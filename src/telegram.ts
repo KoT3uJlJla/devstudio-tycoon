@@ -45,8 +45,8 @@ declare global {
 }
 
 const OFFICIAL_BOT_URL = 'https://t.me/DevTycoon_bot';
-const SHARE_REFERRAL_IMAGE = '/share-referral.webp';
-const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.webp';
+const SHARE_REFERRAL_IMAGE = '/share-referral.svg';
+const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.svg';
 
 function absoluteAssetUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
