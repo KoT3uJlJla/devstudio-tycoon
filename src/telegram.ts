@@ -71,16 +71,8 @@ function referralUrl() {
   return `${OFFICIAL_BOT_URL}?startapp=${maskedReferralCode()}`;
 }
 
-function referralPreviewUrl() {
-  const code = encodeURIComponent(maskedReferralCode());
-  // Telegram does not attach arbitrary images to t.me/share/url messages.
-  // It renders link previews from Open Graph tags, so we share our own preview
-  // page that has og:image and redirects real users to the bot.
-  return `${window.location.origin}/ref.html?r=${code}&v=2`;
-}
-
-function referralShareText() {
-  return 'У тебя не получится сделать игру лучше моей😼\nМожешь зайти и убедиться в этом сам';
+function referralShareText(refUrl: string) {
+  return `У тебя не получится сделать игру лучше моей😼\nМожешь зайти и убедиться в этом сам\n\n${refUrl}`;
 }
 
 function showStoryPlaceholder(text: string, refUrl: string) {
@@ -133,8 +125,11 @@ export function shareRelease(text: string, payload: SharePayload = {}) {
     return;
   }
 
-  const shareTargetUrl = isReferralShare ? referralPreviewUrl() : (payload.url ?? OFFICIAL_BOT_URL);
-  const finalText = isReferralShare ? referralShareText() : text.slice(0, 220);
+  // For referral shares the visible link must be the real bot startapp link.
+  // Telegram will not attach our custom OG image to a t.me link, but this keeps
+  // the referral destination clear and avoids the confusing intermediate URL.
+  const shareTargetUrl = isReferralShare ? refUrl : (payload.url ?? OFFICIAL_BOT_URL);
+  const finalText = isReferralShare ? referralShareText(refUrl) : text.slice(0, 220);
   const safeText = encodeURIComponent(finalText);
   const shareUrl = encodeURIComponent(shareTargetUrl);
   const url = `https://t.me/share/url?url=${shareUrl}&text=${safeText}`;
