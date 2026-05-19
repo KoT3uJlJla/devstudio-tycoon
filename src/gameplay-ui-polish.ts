@@ -48,6 +48,11 @@ type TonConnectUiLike = {
   account?: { address?: string } | null;
 };
 
+type TonConnectModuleLike = {
+  TonConnectUI?: new (options: Record<string, unknown>) => TonConnectUiLike;
+  THEME?: { DARK?: string };
+};
+
 let tonConnectUi: TonConnectUiLike | null = null;
 let tonConnectInitStarted = false;
 
@@ -80,16 +85,15 @@ async function ensureTonConnect(buttonRootId: string) {
   if (tonConnectUi || tonConnectInitStarted) return;
   tonConnectInitStarted = true;
   try {
-    const mod = await import('@tonconnect/ui');
-    const TonConnectUI = (mod as { TonConnectUI?: new (options: Record<string, unknown>) => TonConnectUiLike; default?: new (options: Record<string, unknown>) => TonConnectUiLike }).TonConnectUI
-      || (mod as { default?: new (options: Record<string, unknown>) => TonConnectUiLike }).default;
-    const THEME = (mod as { THEME?: Record<string, string> }).THEME || { DARK: 'DARK' };
+    const mod = await import('@tonconnect/ui') as unknown as TonConnectModuleLike;
+    const TonConnectUI = mod.TonConnectUI;
+    const darkTheme = mod.THEME?.DARK || 'DARK';
     if (!TonConnectUI || !document.getElementById(buttonRootId)) return;
     tonConnectUi = new TonConnectUI({
       manifestUrl: `${window.location.origin}/tonconnect-manifest.json`,
       buttonRootId,
       language: 'ru',
-      uiPreferences: { theme: THEME.DARK },
+      uiPreferences: { theme: darkTheme },
     });
     tonConnectUi.onStatusChange?.((wallet) => updateTonStatus(wallet));
     updateTonStatus();
