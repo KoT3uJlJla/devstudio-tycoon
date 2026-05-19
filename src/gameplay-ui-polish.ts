@@ -43,11 +43,13 @@ const RELEASE_QUOTES = {
   ],
 };
 
+type TonAccountLike = { address?: string };
+type TonWalletLike = { account?: TonAccountLike | null };
 type TonConnectUiLike = {
   onStatusChange?: (callback: (wallet: unknown) => void) => (() => void) | void;
   connected?: boolean;
-  wallet?: { account?: { address?: string } } | null;
-  account?: { address?: string } | null;
+  wallet?: TonWalletLike | null;
+  account?: TonAccountLike | null;
 };
 
 type TonConnectModuleLike = {
@@ -85,8 +87,10 @@ function shortenAddress(value: string) {
 
 function walletAddress(wallet: unknown) {
   if (!wallet || typeof wallet !== 'object') return '';
-  const data = wallet as { account?: { address?: unknown } };
-  return typeof data.account?.address === 'string' ? data.account.address : '';
+  const data = wallet as { address?: unknown; account?: { address?: unknown } };
+  if (typeof data.address === 'string') return data.address;
+  if (typeof data.account?.address === 'string') return data.account.address;
+  return '';
 }
 
 function currentTonAddress(wallet?: unknown) {
@@ -103,7 +107,7 @@ function updateTonStatus(wallet?: unknown) {
   const address = currentTonAddress(wallet);
   const connected = Boolean(address || tonConnectUi?.connected);
 
-  if (wallet !== undefined) {
+  if (wallet !== undefined || address) {
     if (address) writeStoredTonAddress(address);
     else writeStoredTonAddress('');
   }
@@ -113,9 +117,16 @@ function updateTonStatus(wallet?: unknown) {
   panel?.classList.toggle('ton-wallet-connected', connected);
 }
 
+function scheduleTonStatusRefresh() {
+  window.setTimeout(() => updateTonStatus(), 250);
+  window.setTimeout(() => updateTonStatus(), 1000);
+  window.setTimeout(() => updateTonStatus(), 2500);
+}
+
 async function ensureTonConnect(buttonRootId: string) {
   if (tonConnectUi) {
     updateTonStatus();
+    scheduleTonStatusRefresh();
     return;
   }
   if (tonConnectInitStarted) return;
@@ -131,10 +142,14 @@ async function ensureTonConnect(buttonRootId: string) {
       language: 'ru',
       uiPreferences: { theme: darkTheme },
     });
-    tonConnectUi.onStatusChange?.((wallet) => updateTonStatus(wallet));
-    window.setTimeout(() => updateTonStatus(), 250);
-    window.setTimeout(() => updateTonStatus(), 1000);
+    tonConnectUi.onStatusChange?.((wallet) => {
+      updateTonStatus(wallet);
+      scheduleTonStatusRefresh();
+    });
+    window.addEventListener('focus', updateTonStatus);
+    document.addEventListener('visibilitychange', updateTonStatus);
     updateTonStatus();
+    scheduleTonStatusRefresh();
   } catch {
     const status = document.querySelector<HTMLElement>('.ton-wallet-status');
     if (status) status.textContent = 'недоступен';
