@@ -28,6 +28,7 @@ function appendOnce(path, marker, addition) {
 patchFile('src/App.tsx', [
   ["['menu', 'Топ', 'rating'],", "['menu', 'Награды', 'rating'],"],
   ["import { loadGame, resetGame, saveGame } from './storage';", "import { loadGame, saveGame } from './storage';"],
+  ["import { haptic, initTelegram, shareRelease } from './telegram';", "import { haptic, initTelegram, shareRelease } from './telegram';\nimport { claimBackendDailyReward, claimBackendReferralMilestone, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';"],
   ["  initialState,\n", ""],
   ["      <TutorialBanner state={state} onAction={startNewProject} onSkip={() => update((current) => ({ ...current, tutorialDone: true }))} />\n", ""],
   ["      {false && <TutorialBanner state={state} onAction={startNewProject} onSkip={() => update((current) => ({ ...current, tutorialDone: true }))} />}\n", ""],
@@ -57,7 +58,41 @@ patchFile('src/App.tsx', [
   ["только топ-10", "только топ-5"],
   ["$500", "$200"],
   ["призовую десятку", "призовую пятёрку"],
+  ["{dailyReady && <button className=\"daily-card comic-card\" onClick={() => update((current) => ({ ...current, stars: current.stars + 1, coins: current.coins + 500, dailyClaimedAt: todayKey() }))}><span>ЕЖЕДНЕВНЫЙ ВХОД</span> Забрать +1 ⭐ и +500 🪙</button>}", "{dailyReady && <button className=\"daily-card comic-card\" onClick={() => void claimBackendDailyReward()}><span>ЕЖЕДНЕВНЫЙ ВХОД</span> Забрать +1 ⭐ и +500 🪙</button>}"],
+  ["<button className=\"primary\" onClick={() => update(promoteProject)} disabled={state.stars < 35 || Boolean(project.promotionUsed)}>{project.promotionUsed ? `Продвижение +${(project.promotionBoost ?? 0).toFixed(1)}` : 'Продвижение ⭐35'}</button>", "<button className=\"primary\" onClick={() => void runBackendDevelopmentAction('promote')} disabled={state.stars < 35 || Boolean(project.promotionUsed)}>{project.promotionUsed ? `Продвижение +${(project.promotionBoost ?? 0).toFixed(1)}` : 'Продвижение ⭐35'}</button>"],
+  ["{project.progress < 100 && <button className=\"time-skip-button\" disabled={!canSkip} onClick={() => update(timeSkipProject)}>Ускорить на 1ч ⭐25</button>}", "{project.progress < 100 && <button className=\"time-skip-button\" disabled={!canSkip} onClick={() => void runBackendDevelopmentAction('skip')}>Ускорить на 25% ⭐25</button>}"],
+  ["<button className=\"primary\" onClick={() => update((current) => ({ ...current, coins: current.coins + 5000, rp: current.rp + 50, offerSeen: true }))}>Купить ⭐100</button>", "<button className=\"primary\" onClick={() => void purchaseBackendItem('starter_pack')}>Купить ⭐100</button>"],
 ]);
+
+replaceBlock(
+  'src/App.tsx',
+  "  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n  }, []);",
+  "  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n  }, []);\n\n  useEffect(() => {\n    const onServerSave = (event: Event) => {\n      const detail = (event as CustomEvent<GameState>).detail;\n      if (detail && typeof detail === 'object') setState(detail);\n    };\n    window.addEventListener('devstudio:server-save', onServerSave);\n    return () => window.removeEventListener('devstudio:server-save', onServerSave);\n  }, []);",
+);
+
+replaceBlock(
+  'src/App.tsx',
+  "  const unlockProductInstinct = () => update((current) => {\n    if (current.unlockedResearchIds.includes('product-instinct')) return current;\n    if ((current.qualifiedReferrals ?? 0) >= referralTarget) {\n      haptic('success');\n      return { ...current, unlockedResearchIds: ['product-instinct', ...current.unlockedResearchIds], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 };\n    }\n    if (current.stars < productStarCost) return current;\n    haptic('success');\n    return { ...current, stars: current.stars - productStarCost, unlockedResearchIds: ['product-instinct', ...current.unlockedResearchIds], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 };\n  });",
+  "  const unlockProductInstinct = () => {\n    if (productUnlocked) return;\n    if (qualifiedReferrals >= referralTarget) {\n      update((current) => {\n        if (current.unlockedResearchIds.includes('product-instinct')) return current;\n        haptic('success');\n        return { ...current, unlockedResearchIds: ['product-instinct', ...current.unlockedResearchIds], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 };\n      });\n      return;\n    }\n    if (state.stars < productStarCost) return;\n    haptic('success');\n    void purchaseBackendItem('product_instinct');\n  };",
+);
+
+replaceBlock(
+  'src/App.tsx',
+  "function ShopScreen({ state, update, onRenameStudio }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; onRenameStudio: () => void }) {\n  const renameCost = 25;\n  const sku = [\n    ['Стартовый набор', '5000 монет, 50 очков науки и офлайн-буст на 24 ч', '⭐100', () => update((current) => ({ ...current, coins: current.coins + 5000, rp: current.rp + 50, offerSeen: true }))],\n    ['Малый набор монет', '+3000 монет', '⭐50', () => update((current) => ({ ...current, coins: current.coins + 3000 }))],\n    ['Средний набор монет', '+18000 монет', '⭐250', () => update((current) => ({ ...current, coins: current.coins + 18000 }))],\n    ['Ускорение науки', '+100 очков исследований', '⭐75', () => update((current) => ({ ...current, rp: current.rp + 100 }))],\n  ] as const;\n  return <div className=\"stack\"><div className=\"section-head hero-title\"><div><p className=\"eyebrow\">Звёзды</p><h2>Магазин студии</h2></div><span className=\"pill\">полезные улучшения</span></div><p className=\"muted\">Здесь можно обменять Звёзды на усиления для студии. Пропуск времени доступен только во время активной разработки.</p><article className=\"shop-card comic-card\"><div><h3>Переименовать студию</h3><p>Сейчас: {state.studioName || 'Без названия'}. Позволяет выбрать новое имя для студии.</p></div><button disabled={state.stars < renameCost} onClick={() => { update((current) => { if (current.stars < renameCost) return current; return { ...current, stars: current.stars - renameCost }; }); onRenameStudio(); }}>⭐{renameCost}</button></article><div className=\"shop-list\">{sku.map(([title, desc, price, action]) => <article className=\"shop-card comic-card\" key={title}><div><h3>{title}</h3><p>{desc}</p></div><button onClick={action}>{price}</button></article>)}</div></div>;\n}",
+  "function ShopScreen({ state, onRenameStudio }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; onRenameStudio: () => void }) {\n  const renameCost = 25;\n  const sku = [\n    ['starter_pack', 'Стартовый набор', '5000 монет, 50 очков науки и офлайн-буст на 24 ч', '⭐100'],\n    ['coins_small', 'Малый набор монет', '+3000 монет', '⭐50'],\n    ['coins_medium', 'Средний набор монет', '+18000 монет', '⭐250'],\n    ['research_boost', 'Ускорение науки', '+100 очков исследований', '⭐75'],\n  ] as const;\n  return <div className=\"stack\"><div className=\"section-head hero-title\"><div><p className=\"eyebrow\">Звёзды</p><h2>Магазин студии</h2></div><span className=\"pill\">полезные улучшения</span></div><p className=\"muted\">Здесь можно обменять Звёзды на усиления для студии. Все списания проходят через сервер и сразу синхронизируют save/economy.</p><article className=\"shop-card comic-card\"><div><h3>Переименовать студию</h3><p>Сейчас: {state.studioName || 'Без названия'}. Позволяет выбрать новое имя для студии.</p></div><button disabled={state.stars < renameCost} onClick={() => { void purchaseBackendItem('rename_studio').then((next) => { if (next) onRenameStudio(); }); }}>⭐{renameCost}</button></article><div className=\"shop-list\">{sku.map(([id, title, desc, price]) => <article className=\"shop-card comic-card\" key={title}><div><h3>{title}</h3><p>{desc}</p></div><button onClick={() => void purchaseBackendItem(id)}>{price}</button></article>)}</div></div>;\n}",
+);
+
+replaceBlock(
+  'src/App.tsx',
+  "  const refreshPool = () => {\n    if (!canRefresh) { haptic('warning'); return; }\n    update((current) => ({ ...current, stars: Math.max(0, current.stars - 10) }));\n    setPoolOffset((value) => value + Math.max(1, Math.floor(allCandidates.length / 2)));\n    haptic('success');\n  };",
+  "  const refreshPool = () => {\n    if (!canRefresh) { haptic('warning'); return; }\n    void purchaseBackendItem('refresh_hires').then((next) => {\n      if (!next) return;\n      setPoolOffset((value) => value + Math.max(1, Math.floor(allCandidates.length / 2)));\n      haptic('success');\n    });\n  };",
+);
+
+replaceBlock(
+  'src/App.tsx',
+  "  const claimMilestone = (id: string) => update((current) => {\n    const milestone = REFERRAL_MILESTONES.find((item) => item.id === id);\n    if (!milestone || current.referralMilestoneClaims?.[id] || (current.qualifiedReferrals ?? 0) < milestone.target) return current;\n    haptic('success');\n    return {\n      ...current,\n      coins: current.coins + milestone.reward.coins,\n            rp: current.rp + milestone.reward.rp,\n      referralMilestoneClaims: { ...(current.referralMilestoneClaims ?? {}), [id]: true },\n    };\n  });",
+  "  const claimMilestone = (id: string) => {\n    haptic('success');\n    void claimBackendReferralMilestone(id);\n  };",
+);
 
 replaceBlock(
   'src/App.tsx',
