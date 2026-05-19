@@ -12,66 +12,6 @@ function patchFile(path, replacements) {
   if (changed) writeFileSync(path, content);
 }
 
-function patchStorageWalletOverlay() {
-  const path = 'src/storage.ts';
-  let content = readFileSync(path, 'utf8');
-  let changed = false;
-
-  const walletOverlayHelpers = [
-    '',
-    'type WalletOverlay = { coins?: number; rp?: number; stars?: number };',
-    '',
-    'function safeWalletNumber(value: unknown) {',
-    '  const parsed = Number(value);',
-    '  return Number.isFinite(parsed) ? parsed : undefined;',
-    '}',
-    '',
-    'async function loadWalletOverlay(): Promise<WalletOverlay | null> {',
-    '  if (!canUseServerSave()) return null;',
-    '  const payload = await withTimeout(',
-    "    fetch(API_URL + '/api/wallet/state', {",
-    "      headers: { Authorization: 'tma ' + telegramInitData() },",
-    '    })',
-    '      .then((response) => (response.ok ? response.json() : null))',
-    '      .catch(() => null),',
-    '    null,',
-    '    4200,',
-    '  );',
-    '  if (!payload?.ok) return null;',
-    '  return {',
-    '    coins: safeWalletNumber(payload?.economy?.coins ?? payload?.save?.data?.coins),',
-    '    rp: safeWalletNumber(payload?.economy?.rp ?? payload?.save?.data?.rp),',
-    '    stars: safeWalletNumber(payload?.economy?.stars ?? payload?.save?.data?.stars),',
-    '  };',
-    '}',
-    '',
-    'function applyWalletOverlay(state: GameState, wallet: WalletOverlay | null): GameState {',
-    '  if (!wallet) return state;',
-    '  return syncGlobalState(normalizeState({',
-    '    ...state,',
-    '    ...(wallet.coins !== undefined ? { coins: wallet.coins } : {}),',
-    '    ...(wallet.rp !== undefined ? { rp: wallet.rp } : {}),',
-    '    ...(wallet.stars !== undefined ? { stars: wallet.stars } : {}),',
-    '  }));',
-    '}',
-  ].join('\n');
-
-  const newestBlock = "function newestSave(...states: Array<GameState | null>) {\n  return states.filter(Boolean).sort((a, b) => saveTimestamp(b) - saveTimestamp(a))[0] ?? null;\n}\n";
-  if (!content.includes('type WalletOverlay =') && content.includes(newestBlock)) {
-    content = content.replace(newestBlock, newestBlock + walletOverlayHelpers);
-    changed = true;
-  }
-
-  const oldLoadBlock = "    if (preferred) {\n      const state = finalizeLoadedState(preferred);\n      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));\n      if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);\n      return rememberLoadedState(state);\n    }";
-  const newLoadBlock = "    if (preferred) {\n      const wallet = await loadWalletOverlay();\n      const state = applyWalletOverlay(finalizeLoadedState(preferred), wallet);\n      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));\n      if (canUseServerSave() && preferred === fromLocal) void saveServerState(state);\n      return rememberLoadedState(state);\n    }";
-  if (content.includes(oldLoadBlock)) {
-    content = content.replace(oldLoadBlock, newLoadBlock);
-    changed = true;
-  }
-
-  if (changed) writeFileSync(path, content);
-}
-
 patchFile('src/App.tsx', [
   ["['menu', 'Топ', 'rating'],", "['menu', 'Награды', 'rating'],"],
   ["import { loadGame, resetGame, saveGame } from './storage';", "import { loadGame, saveGame } from './storage';"],
@@ -90,13 +30,14 @@ patchFile('src/App.tsx', [
 ]);
 
 patchFile('src/gameLogic.ts', [
+  ["coins: 3000,", "coins: 2500,"],
   ["tutorialDone: false,", "tutorialDone: true,"],
+  ["tutorialStep: 0,", "tutorialStep: 5,"],
   ["durationSeconds: isTutorial ? 30 : 180,", "durationSeconds: 180,"],
+  ["isTutorial,", "isTutorial: false,"],
   ["const nextProgress = clamp(project.progress + 45, 0, 100);", "const nextProgress = clamp(project.progress + 25, 0, 100);"],
   ["}, 'ПРОПУСК +1Ч'),", "}, 'УСКОРЕНИЕ +25%'),"],
 ]);
-
-patchStorageWalletOverlay();
 
 patchFile('src/telegram.ts', [
   ["const finalText = isReferralShare ? referralShareText(shareTargetUrl) : text.slice(0, 220);", "const finalText = isReferralShare ? referralShareText(shareTargetUrl).replace(/\\n\\n.*$/, '') : text.slice(0, 220);"],
