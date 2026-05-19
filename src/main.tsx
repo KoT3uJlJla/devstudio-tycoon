@@ -6,6 +6,7 @@ import './mobile-topbar.css';
 import './v8-ui-patch.css';
 import './predeploy-hardening.css';
 import './gameplay-ui-polish.css';
+import './ton-connect-overrides.css';
 import { installReleaseUiPatch } from './release-ui-patch';
 import { installGameplayUiPolish } from './gameplay-ui-polish';
 import { reconcileStartupSave } from './startup-save-reconcile';
