@@ -1,5 +1,3 @@
-const TON_WALLET_KEY = 'devstudio_ton_wallet_address';
-
 const RELEASE_QUOTES = {
   low: [
     'Идея видна, но билд разваливается под руками.',
@@ -43,34 +41,62 @@ const RELEASE_QUOTES = {
   ],
 };
 
+type TonConnectUiLike = {
+  onStatusChange?: (callback: (wallet: unknown) => void) => (() => void) | void;
+  connected?: boolean;
+  wallet?: { account?: { address?: string } } | null;
+  account?: { address?: string } | null;
+};
+
+let tonConnectUi: TonConnectUiLike | null = null;
+let tonConnectInitStarted = false;
+
 function textOf(element: Element | null) {
   return (element?.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
-function readTonWallet() {
-  try {
-    return localStorage.getItem(TON_WALLET_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
-function writeTonWallet(value: string) {
-  try {
-    if (value) localStorage.setItem(TON_WALLET_KEY, value);
-    else localStorage.removeItem(TON_WALLET_KEY);
-  } catch {
-    // best effort only
-  }
-}
-
-function shortenWallet(value: string) {
+function shortenAddress(value: string) {
   return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
 }
 
-function isPlausibleTonAddress(value: string) {
-  const clean = value.trim();
-  return /^(EQ|UQ)[A-Za-z0-9_-]{46,}$/.test(clean) || /^0:[a-fA-F0-9]{64}$/.test(clean);
+function walletAddress(wallet: unknown) {
+  if (!wallet || typeof wallet !== 'object') return '';
+  const data = wallet as { account?: { address?: unknown } };
+  return typeof data.account?.address === 'string' ? data.account.address : '';
+}
+
+function updateTonStatus(wallet?: unknown) {
+  const status = document.querySelector<HTMLElement>('.ton-wallet-status');
+  const addressNode = document.querySelector<HTMLElement>('.ton-wallet-address');
+  const panel = document.querySelector<HTMLElement>('.ton-wallet-panel');
+  const address = walletAddress(wallet) || walletAddress(tonConnectUi?.wallet) || walletAddress(tonConnectUi?.account);
+  const connected = Boolean(address || tonConnectUi?.connected);
+  if (status) status.textContent = connected ? 'привязан' : 'не привязан';
+  if (addressNode) addressNode.textContent = address ? shortenAddress(address) : 'Выберите кошелёк через TON Connect';
+  panel?.classList.toggle('ton-wallet-connected', connected);
+}
+
+async function ensureTonConnect(buttonRootId: string) {
+  if (tonConnectUi || tonConnectInitStarted) return;
+  tonConnectInitStarted = true;
+  try {
+    const mod = await import('@tonconnect/ui');
+    const TonConnectUI = (mod as { TonConnectUI?: new (options: Record<string, unknown>) => TonConnectUiLike; default?: new (options: Record<string, unknown>) => TonConnectUiLike }).TonConnectUI
+      || (mod as { default?: new (options: Record<string, unknown>) => TonConnectUiLike }).default;
+    const THEME = (mod as { THEME?: Record<string, string> }).THEME || { DARK: 'DARK' };
+    if (!TonConnectUI || !document.getElementById(buttonRootId)) return;
+    tonConnectUi = new TonConnectUI({
+      manifestUrl: `${window.location.origin}/tonconnect-manifest.json`,
+      buttonRootId,
+      language: 'ru',
+      uiPreferences: { theme: THEME.DARK },
+    });
+    tonConnectUi.onStatusChange?.((wallet) => updateTonStatus(wallet));
+    updateTonStatus();
+  } catch {
+    const status = document.querySelector<HTMLElement>('.ton-wallet-status');
+    if (status) status.textContent = 'недоступен';
+  }
 }
 
 function seededIndex(seed: string, length: number) {
@@ -150,61 +176,22 @@ function makeTonWalletPanel() {
       <span class="pill ton-wallet-status">не привязан</span>
     </div>
     <p class="muted small">Это необходимо для того, чтобы вы могли получить свою еженедельную награду.</p>
-    <div class="ton-wallet-form">
-      <input class="ton-wallet-input" inputmode="text" autocomplete="off" spellcheck="false" placeholder="EQ… или 0:…" />
-      <button class="primary ton-wallet-bind" type="button">Привязать</button>
-      <button class="ghost ton-wallet-unbind" type="button">Отвязать</button>
-    </div>
-    <p class="small muted ton-wallet-hint">Мы только сохраняем адрес в игре. Подписывать транзакции и отправлять TON здесь нельзя.</p>
+    <div class="ton-connect-root" id="ton-connect-root"></div>
+    <p class="small muted ton-wallet-address">Выберите кошелёк через TON Connect</p>
+    <p class="small muted ton-wallet-hint">Здесь можно только привязать или отвязать кошелёк. Транзакции в игре не подписываются.</p>
   `;
   return panel;
 }
 
-function refreshTonPanel(panel: HTMLElement) {
-  const wallet = readTonWallet();
-  const input = panel.querySelector<HTMLInputElement>('.ton-wallet-input');
-  const status = panel.querySelector<HTMLElement>('.ton-wallet-status');
-  const unbind = panel.querySelector<HTMLButtonElement>('.ton-wallet-unbind');
-  if (input && document.activeElement !== input) input.value = wallet;
-  if (status) status.textContent = wallet ? `привязан ${shortenWallet(wallet)}` : 'не привязан';
-  if (unbind) unbind.disabled = !wallet;
-  panel.classList.toggle('ton-wallet-connected', Boolean(wallet));
-}
-
 function installTonWalletPanel() {
   const anchor = document.querySelector<HTMLElement>('.referral-panel');
-  if (!anchor || document.querySelector('.ton-wallet-panel')) return;
-  const panel = makeTonWalletPanel();
-  anchor.insertAdjacentElement('afterend', panel);
-
-  const input = panel.querySelector<HTMLInputElement>('.ton-wallet-input');
-  const bind = panel.querySelector<HTMLButtonElement>('.ton-wallet-bind');
-  const unbind = panel.querySelector<HTMLButtonElement>('.ton-wallet-unbind');
-
-  bind?.addEventListener('click', () => {
-    const value = (input?.value || '').trim();
-    if (!isPlausibleTonAddress(value)) {
-      window.Telegram?.WebApp?.showPopup?.({ title: 'TON-кошелёк', message: 'Проверь адрес кошелька. Поддерживаются адреса EQ…, UQ… или raw 0:…', buttons: [{ type: 'ok' }] });
-      input?.focus();
-      return;
-    }
-    writeTonWallet(value);
-    refreshTonPanel(panel);
-    window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
-  });
-
-  unbind?.addEventListener('click', () => {
-    writeTonWallet('');
-    if (input) input.value = '';
-    refreshTonPanel(panel);
-    window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
-  });
-
-  input?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') bind?.click();
-  });
-
-  refreshTonPanel(panel);
+  if (!anchor) return;
+  let panel = document.querySelector<HTMLElement>('.ton-wallet-panel');
+  if (!panel) {
+    panel = makeTonWalletPanel();
+    anchor.insertAdjacentElement('afterend', panel);
+  }
+  void ensureTonConnect('ton-connect-root');
 }
 
 function tuneReleaseQuotes() {
