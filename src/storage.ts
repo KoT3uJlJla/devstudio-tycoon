@@ -22,7 +22,7 @@ type DevelopmentAction = {
   body?: Record<string, unknown>;
 };
 
-type WalletOverlay = { coins?: number; rp?: number; stars?: number };
+type WalletOverlay = { stars?: number };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -126,8 +126,8 @@ function walletOverlayFromPayload(payload: unknown): WalletOverlay | null {
   const economy = isPlainObject(payload.economy) ? payload.economy : null;
   const save = isPlainObject(payload.save) && isPlainObject(payload.save.data) ? payload.save.data : null;
   return {
-    coins: safeWalletNumber(economy?.coins ?? save?.coins),
-    rp: safeWalletNumber(economy?.rp ?? save?.rp),
+    // Coins/RP are gameplay save resources. Old economy docs may contain 0,
+    // so never overlay them from wallet-state on startup.
     stars: safeWalletNumber(economy?.stars ?? save?.stars),
   };
 }
@@ -150,8 +150,6 @@ function applyWalletOverlay(state: GameState, wallet: WalletOverlay | null): Gam
   if (!wallet) return state;
   return syncGlobalState(normalizeState({
     ...state,
-    ...(wallet.coins !== undefined ? { coins: wallet.coins } : {}),
-    ...(wallet.rp !== undefined ? { rp: wallet.rp } : {}),
     ...(wallet.stars !== undefined ? { stars: wallet.stars } : {}),
   }));
 }
@@ -180,10 +178,12 @@ async function loadServerSave(): Promise<GameState | null> {
   if (!canUseServerSave()) return null;
   const timeoutMs = isTelegramRuntime() ? SERVER_LOAD_TIMEOUT_MS : LOCAL_SERVER_LOAD_TIMEOUT_MS;
 
-  const reconciledSave = await fetchServerSave('/api/stars/reconcile', timeoutMs);
-  if (reconciledSave) return reconciledSave;
+  // Load the raw gameplay save first. /api/stars/reconcile may overlay old
+  // economy.coins=0 for migrated players, which caused the visible coin bug.
+  const save = await fetchServerSave('/api/save', timeoutMs);
+  if (save) return save;
 
-  return fetchServerSave('/api/save', timeoutMs);
+  return fetchServerSave('/api/stars/reconcile', timeoutMs);
 }
 
 async function saveServerState(state: GameState, keepalive = false) {
