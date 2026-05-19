@@ -41,6 +41,27 @@ function uniqueStrings(values) {
   return Array.from(new Set(Array.isArray(values) ? values.filter(Boolean).map(String) : []));
 }
 
+function cleanTonAddress(value) {
+  return String(value || "").trim().slice(0, 128);
+}
+
+function isValidTonAddress(value) {
+  const address = cleanTonAddress(value);
+  return /^0:[a-fA-F0-9]{64}$/.test(address) || /^(EQ|UQ)[A-Za-z0-9_-]{46,}$/.test(address);
+}
+
+function publicTonWallet(economy) {
+  const raw = isPlainObject(economy?.tonWallet) ? economy.tonWallet : null;
+  const address = cleanTonAddress(raw?.address);
+  if (!address) return null;
+  return {
+    address,
+    connectedAt: raw?.connectedAt || null,
+    updatedAt: raw?.updatedAt || null,
+    source: raw?.source || "tonconnect",
+  };
+}
+
 function invoicePublic(invoice) {
   if (!invoice) return null;
   return {
@@ -70,6 +91,7 @@ function publicWalletEconomy(economy) {
     referralMilestoneClaims: isPlainObject(economy?.referralMilestoneClaims) ? economy.referralMilestoneClaims : {},
     dailyClaimedAt: economy?.dailyClaimedAt || null,
     lastRating: economy?.lastRating || null,
+    tonWallet: publicTonWallet(economy),
   };
 }
 
@@ -323,6 +345,34 @@ async function walletStateResponse(deps, telegramUser) {
   };
 }
 
+async function handleTonWalletBind(deps, req, res) {
+  const address = cleanTonAddress(req.body?.address);
+  if (!isValidTonAddress(address)) return res.status(400).json({ ok: false, error: "invalid_ton_address" });
+  const save = await deps.getSave(req.telegramUser.id);
+  let economy = await deps.getOrCreateEconomy(req.telegramUser, save?.data);
+  economy = await deps.patchEconomy(req.telegramUser.id, {
+    $set: {
+      tonWallet: {
+        address,
+        source: "tonconnect",
+        connectedAt: economy?.tonWallet?.connectedAt || new Date(),
+        updatedAt: new Date(),
+      },
+    },
+    $push: { ledger: { $each: [{ id: crypto.randomUUID(), kind: "ton_wallet_bind", amount: 0, reason: "ton_wallet", meta: { address }, createdAt: new Date() }], $slice: -80 } },
+  });
+  res.json({ ok: true, economy: publicWalletEconomy(economy), tonWallet: publicTonWallet(economy) });
+}
+
+async function handleTonWalletUnbind(deps, req, res) {
+  let economy = await deps.getOrCreateEconomy(req.telegramUser, null);
+  economy = await deps.patchEconomy(req.telegramUser.id, {
+    $unset: { tonWallet: "" },
+    $push: { ledger: { $each: [{ id: crypto.randomUUID(), kind: "ton_wallet_unbind", amount: 0, reason: "ton_wallet", meta: {}, createdAt: new Date() }], $slice: -80 } },
+  });
+  res.json({ ok: true, economy: publicWalletEconomy(economy), tonWallet: null });
+}
+
 export function registerStarsPaymentRoutes(app, deps) {
   const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || "";
   const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL || "";
@@ -333,6 +383,24 @@ export function registerStarsPaymentRoutes(app, deps) {
     } catch (error) {
       console.error("Wallet state failed:", error);
       res.status(500).json({ ok: false, error: "wallet_state_failed" });
+    }
+  });
+
+  app.put("/api/wallet/ton", deps.requireTelegramUser, async (req, res) => {
+    try {
+      await handleTonWalletBind(deps, req, res);
+    } catch (error) {
+      console.error("TON wallet bind failed:", error);
+      res.status(500).json({ ok: false, error: "ton_wallet_bind_failed" });
+    }
+  });
+
+  app.delete("/api/wallet/ton", deps.requireTelegramUser, async (req, res) => {
+    try {
+      await handleTonWalletUnbind(deps, req, res);
+    } catch (error) {
+      console.error("TON wallet unbind failed:", error);
+      res.status(500).json({ ok: false, error: "ton_wallet_unbind_failed" });
     }
   });
 
