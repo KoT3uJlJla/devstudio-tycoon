@@ -241,21 +241,45 @@
   text-shadow: none !important;
 }
 
-/* Release results v8.6: tappable score modifier explanations. */
+/* Release results v8.7: one aligned question-mark help control per modifier. */
 .score-breakdown-list .score-line {
   position: relative;
-  grid-template-columns: 1fr auto auto;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto 44px !important;
   align-items: center;
+  gap: 12px;
+  width: 100%;
   text-align: left;
   cursor: pointer;
+}
+
+.score-breakdown-list .score-line::before,
+.score-breakdown-list .score-line::after,
+.score-breakdown-list .score-line > span::before,
+.score-breakdown-list .score-line > span::after,
+.score-breakdown-list .score-line > b::before,
+.score-breakdown-list .score-line > b::after {
+  display: none !important;
+  content: none !important;
+}
+
+.score-breakdown-list .score-line > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.score-breakdown-list .score-line > b {
+  white-space: nowrap;
+  justify-self: end;
 }
 
 .score-line-info {
   display: grid;
   place-items: center;
+  justify-self: end;
   width: 36px;
   height: 36px;
-  margin-left: 8px;
+  margin: 0 !important;
   border: 3px solid rgba(5, 6, 13, 0.35);
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.42);
