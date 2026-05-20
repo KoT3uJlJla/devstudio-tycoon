@@ -13,11 +13,11 @@ function patchServerIndexRewards() {
 
   const prizeDistribution = [
     'const PRIZE_DISTRIBUTION = [',
-    '  { place: 1, amountUsd: 175, percent: 35 },',
-    '  { place: 2, amountUsd: 125, percent: 25 },',
-    '  { place: 3, amountUsd: 90, percent: 18 },',
-    '  { place: 4, amountUsd: 60, percent: 12 },',
-    '  { place: 5, amountUsd: 50, percent: 10 },',
+    '  { place: 1, amountUsd: 70, percent: 35 },',
+    '  { place: 2, amountUsd: 50, percent: 25 },',
+    '  { place: 3, amountUsd: 35, percent: 17.5 },',
+    '  { place: 4, amountUsd: 25, percent: 12.5 },',
+    '  { place: 5, amountUsd: 20, percent: 10 },',
     '];',
   ].join('\n');
 
