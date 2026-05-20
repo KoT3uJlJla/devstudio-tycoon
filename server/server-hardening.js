@@ -1,6 +1,9 @@
 import Module from 'node:module';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://devstudio-tycoon-stat.pages.dev',
@@ -35,6 +38,73 @@ const originalExpress = require('express');
 const originalExpressJson = originalExpress.json.bind(originalExpress);
 const rateBuckets = new Map();
 const requestQueues = new Map();
+
+function patchServerIndexForDevelopmentInvoices() {
+  const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
+  let source = '';
+  try {
+    source = readFileSync(indexPath, 'utf8');
+  } catch {
+    return;
+  }
+  if (source.includes('consumeDevelopmentInvoice')) return;
+
+  const next = source.replace(
+    /async function spendActionStars\(req, res, action, amount\) \{[\s\S]*?\n\}\nasync function runDevelopmentAction/,
+    `function developmentInvoiceItemId(action) {
+  if (action === "skip") return "time_skip";
+  if (action === "promote") return "promotion";
+  return "";
+}
+async function consumeDevelopmentInvoice(req, action, amount) {
+  const invoiceId = sanitizeText(req.body?.invoiceId || "", "");
+  const itemId = developmentInvoiceItemId(action);
+  if (!invoiceId || !itemId) return false;
+  const consumed = await db.collection("stars_invoices").findOneAndUpdate(
+    {
+      invoiceId,
+      telegramId: req.telegramUser.id,
+      itemId,
+      amountStars: safeInt(amount, 1, 100000),
+      status: "paid",
+      actionConsumedAt: { $exists: false },
+    },
+    { $set: { actionConsumedAt: new Date(), actionConsumedFor: \\`development:\\${action}\\`, updatedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  if (!consumed) return false;
+  await patchEconomy(req.telegramUser.id, {
+    $push: { ledger: { $each: [buildLedgerEntry("telegram_stars_action", -safeInt(amount, 1, 100000), \\`development:\\${action}\\`, { action, invoiceId, itemId })], $slice: -80 } },
+  });
+  return true;
+}
+async function spendActionStars(req, res, action, amount) {
+  const save = await getSave(req.telegramUser.id);
+  const economy = await getOrCreateEconomy(req.telegramUser, save?.data);
+  const updated = await spendStars(economy, amount, \\`development:\\${action}\\`, { action });
+  if (updated) return { save, economy: updated };
+  if (await consumeDevelopmentInvoice(req, action, amount)) {
+    const refreshedEconomy = await getOrCreateEconomy(req.telegramUser, save?.data);
+    return { save, economy: refreshedEconomy };
+  }
+  res.status(402).json({ ok: false, error: "not_enough_stars", economy: publicEconomy(economy) });
+  return null;
+}
+async function runDevelopmentAction`
+  );
+
+  if (next === source) {
+    console.warn('server-hardening: development invoice patch was not applied');
+    return;
+  }
+  try {
+    writeFileSync(indexPath, next);
+  } catch (error) {
+    console.warn('server-hardening: failed to write development invoice patch', error?.message || error);
+  }
+}
+
+patchServerIndexForDevelopmentInvoices();
 
 function stableHash(value) {
   return createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
