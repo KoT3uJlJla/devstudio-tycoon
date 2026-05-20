@@ -190,6 +190,57 @@
   z-index: 1;
 }
 
+/* Release results v8.5: final score card wins over any tone-color rule. */
+.release-modal.animated-release .release-score-top,
+.release-modal.animated-release .release-score-top.critic-score-bad,
+.release-modal.animated-release .release-score-top.critic-score-low,
+.release-modal.animated-release .release-score-top.critic-score-mid,
+.release-modal.animated-release .release-score-top.critic-score-good,
+.release-modal.animated-release .release-score-top.critic-score-luxury {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+
+.release-modal.animated-release .release-score-top > .score-stage,
+.release-modal.animated-release .release-score-top.critic-score-bad > .score-stage,
+.release-modal.animated-release .release-score-top.critic-score-low > .score-stage,
+.release-modal.animated-release .release-score-top.critic-score-mid > .score-stage,
+.release-modal.animated-release .release-score-top.critic-score-good > .score-stage,
+.release-modal.animated-release .release-score-top.critic-score-luxury > .score-stage,
+.release-modal.animated-release .release-score-top .score-stage.critic-score-bad,
+.release-modal.animated-release .release-score-top .score-stage.critic-score-low,
+.release-modal.animated-release .release-score-top .score-stage.critic-score-mid,
+.release-modal.animated-release .release-score-top .score-stage.critic-score-good,
+.release-modal.animated-release .release-score-top .score-stage.critic-score-luxury {
+  border: 3px solid rgba(116, 120, 150, 0.42) !important;
+  background: rgba(30, 32, 51, 0.92) !important;
+  background-image: none !important;
+  box-shadow:
+    0 0 0 1px rgba(7, 9, 20, 0.86),
+    0 18px 34px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+  color: rgba(238, 241, 255, 0.92) !important;
+}
+
+.release-modal.animated-release .release-score-top > .score-stage .big-score {
+  color: #fff363 !important;
+  text-shadow:
+    4px 5px 0 #ff3bc8,
+    7px 8px 0 rgba(0, 0, 0, 0.92) !important;
+}
+
+.release-modal.animated-release .release-score-top > .score-stage .quality {
+  color: #8ffcff !important;
+  text-shadow: none !important;
+}
+
+.release-modal.animated-release .release-score-top > .score-stage .critic-average-note {
+  color: rgba(238, 241, 255, 0.92) !important;
+  text-shadow: none !important;
+}
+
 @media (max-width: 380px) {
   .release-modal .critic-grid.release-critic-grid-2x2,
   .release-modal .critic-grid.animated-critics {
