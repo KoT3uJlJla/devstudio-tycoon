@@ -6,7 +6,7 @@ const GENRES = { arcade:.85, platformer:.95, rpg:1.28, strategy:1.18, puzzle:.88
 const PLATFORMS = { micro_pc:{t:1,u:1,l:1}, pocket_play:{t:1.08,u:1.25,l:2}, game_station:{t:1.22,u:1.45,l:4}, smart_game:{t:1.35,u:1.62,l:7} };
 const COMBOS = { "arcade:cyberpunk":"Great", "arcade:sport":"Great", "platformer:fantasy":"Great", "platformer:food":"Great", "rpg:fantasy":"Great", "rpg:cyberpunk":"Great", "rpg:medieval":"Great", "rpg:mythology":"Great", "strategy:space":"Great", "strategy:military":"Great", "puzzle:school":"Great", "puzzle:detective":"Great", "horror:zombie":"Great", "horror:space":"Great", "racing:sport":"Great", "simulator:office":"Great", "visual-novel:school":"Great", "visual-novel:dreams":"Great", "deckbuilder:fantasy":"Great", "survival:zombie":"Great", "survival:postapoc":"Great", "metroidvania:space":"Great", "sandbox:kaiju":"Great", "battle-royale:military":"Great", "rhythm:music":"Great", "party:food":"Great", "idle:office":"Great", "tower-defense:medieval":"Great", "tower-defense:kaiju":"Great", "moba-lite:mythology":"Great", "city-builder:space":"Great", "detective-game:detective":"Great", "sports-manager:sport":"Great", "social-sim:school":"Great", "social-sim:office":"Great" };
 const CRITICS = ["Пиксель Сегодня", "Инди Радар", "Отчёт об ошибках", "Игровая неделя"];
-const STAR_COSTS = { skip:25, promote:35 };
+const STAR_COSTS = { skip:15, promote:35 };
 
 function isObj(v){ return Boolean(v && typeof v === "object" && !Array.isArray(v)); }
 function arr(v){ return Array.isArray(v) ? v : []; }
@@ -65,8 +65,8 @@ export function startDevelopmentAction(saveData,draft){
 export function skipDevelopmentAction(saveData){
   const data=normalize(saveData), p=projectOf(data);
   if(!p.startedAt||p.progress>=100||p.pendingDevEvent) throw actionError("skip_not_available");
-  const progress=n((Number(p.progress)||0)+45,0,100);
-  return normalize({...data,selectedProject:{...p,progress,startedAt:startedAt(p,data,progress),devEventId:id(),devEventText:"ПРОПУСК +1Ч",devEventTone:"normal",serverActionAt:Date.now()},lastSavedAt:Date.now()});
+  const progress=n((Number(p.progress)||0)+25,0,100);
+  return normalize({...data,selectedProject:{...p,progress,startedAt:startedAt(p,data,progress),devEventId:id(),devEventText:"УСКОРЕНИЕ +25%",devEventTone:"normal",serverActionAt:Date.now()},lastSavedAt:Date.now()});
 }
 
 export function promoteDevelopmentAction(saveData){
