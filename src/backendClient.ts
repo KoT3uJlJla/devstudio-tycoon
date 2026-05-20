@@ -14,6 +14,10 @@ type InvoicePayload = {
   invoice?: { invoiceId?: string; status?: string };
 };
 
+type TelegramWebAppWithInvoice = NonNullable<Window['Telegram']>['WebApp'] & {
+  openInvoice?: (url: string, callback: (status: string) => void) => void;
+};
+
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 function initData() {
@@ -59,7 +63,7 @@ async function postJson(path: string, body: Record<string, unknown> = {}) {
 
 function openInvoice(link: string): Promise<string> {
   return new Promise((resolve) => {
-    const webApp = window.Telegram?.WebApp as typeof window.Telegram.WebApp & { openInvoice?: (url: string, callback: (status: string) => void) => void } | undefined;
+    const webApp = window.Telegram?.WebApp as TelegramWebAppWithInvoice | undefined;
     try {
       if (webApp?.openInvoice) {
         webApp.openInvoice(link, (status) => resolve(status || 'closed'));
