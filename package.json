@@ -7,10 +7,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "node scripts/apply-small-update.mjs && node scripts/fix-app-imports.mjs && node scripts/fix-gameplay-ui-polish.mjs && node scripts/apply-release-results-update.mjs && node scripts/apply-development-skip-update.mjs && node scripts/apply-score-breakdown-help.mjs && node scripts/apply-player-facing-copy-fix.mjs && node scripts/apply-audience-development-update.mjs && vite --host 0.0.0.0",
-    "build": "node scripts/apply-small-update.mjs && node scripts/fix-app-imports.mjs && node scripts/fix-gameplay-ui-polish.mjs && node scripts/apply-release-results-update.mjs && node scripts/apply-development-skip-update.mjs && node scripts/apply-score-breakdown-help.mjs && node scripts/apply-player-facing-copy-fix.mjs && node scripts/apply-audience-development-update.mjs && tsc && vite build",
+    "dev": "node scripts/apply-small-update.mjs && node scripts/fix-app-imports.mjs && node scripts/fix-gameplay-ui-polish.mjs && node scripts/apply-release-results-update.mjs && node scripts/apply-development-skip-update.mjs && node scripts/apply-score-breakdown-help.mjs && node scripts/apply-player-facing-copy-fix.mjs && node scripts/apply-audience-development-update.mjs && node scripts/apply-rewards-copy-polish.mjs && vite --host 0.0.0.0",
+    "build": "node scripts/apply-small-update.mjs && node scripts/fix-app-imports.mjs && node scripts/fix-gameplay-ui-polish.mjs && node scripts/apply-release-results-update.mjs && node scripts/apply-development-skip-update.mjs && node scripts/apply-score-breakdown-help.mjs && node scripts/apply-player-facing-copy-fix.mjs && node scripts/apply-audience-development-update.mjs && node scripts/apply-rewards-copy-polish.mjs && tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "lint": "node scripts/apply-small-update.mjs && node scripts/fix-app-imports.mjs && node scripts/fix-gameplay-ui-polish.mjs && node scripts/apply-release-results-update.mjs && node scripts/apply-development-skip-update.mjs && node scripts/apply-score-breakdown-help.mjs && node scripts/apply-player-facing-copy-fix.mjs && node scripts/apply-audience-development-update.mjs && tsc --noEmit"
+    "lint": "node scripts/apply-small-update.mjs && node scripts/fix-app-imports.mjs && node scripts/fix-gameplay-ui-polish.mjs && node scripts/apply-release-results-update.mjs && node scripts/apply-development-skip-update.mjs && node scripts/apply-score-breakdown-help.mjs && node scripts/apply-player-facing-copy-fix.mjs && node scripts/apply-audience-development-update.mjs && node scripts/apply-rewards-copy-polish.mjs && tsc --noEmit"
   },
   "dependencies": {
     "react": "^19.2.0",
