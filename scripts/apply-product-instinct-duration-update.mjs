@@ -86,16 +86,28 @@ export function activateProductInstinct(state: GameState, startedAt = Date.now()
     next = next.replace('export function ensureDailyState(state: GameState): GameState {', `${helpers}export function ensureDailyState(state: GameState): GameState {`);
   }
   if (!next.includes('const legacyProductInstinctUnlocked')) {
+    const migration = [
+      '  const legacyProductInstinctUnlocked = unlockedResearchIds.includes(PRODUCT_INSTINCT_ID);',
+      '  const rawProductInstinctExpiresAt = Number((merged as unknown as { productInstinctExpiresAt?: unknown }).productInstinctExpiresAt);',
+      '  const migratedProductInstinctExpiresAt = rawProductInstinctExpiresAt > 0 ? rawProductInstinctExpiresAt : legacyProductInstinctUnlocked ? productInstinctExpiresAtFrom(PRODUCT_INSTINCT_PATCH_STARTED_AT) : null;',
+      '  const productInstinctActive = Boolean(migratedProductInstinctExpiresAt && migratedProductInstinctExpiresAt > Date.now());',
+      '  const researchIdsWithoutProductInstinct = unlockedResearchIds.filter((id) => id !== PRODUCT_INSTINCT_ID);',
+      '  const normalizedResearchIds = productInstinctActive ? [PRODUCT_INSTINCT_ID, ...researchIdsWithoutProductInstinct] : researchIdsWithoutProductInstinct;',
+      '',
+    ].join('\n');
     next = next.replace(
-      "  const unlockedResearchIds = safeArray<string>(merged.unlockedResearchIds).filter((id) => typeof id === 'string').slice(0, 100);\n",
-      "  const unlockedResearchIds = safeArray<string>(merged.unlockedResearchIds).filter((id) => typeof id === 'string').slice(0, 100);\n  const legacyProductInstinctUnlocked = unlockedResearchIds.includes(PRODUCT_INSTINCT_ID);\n  const rawProductInstinctExpiresAt = Number((merged as unknown as { productInstinctExpiresAt?: unknown }).productInstinctExpiresAt);\n  const migratedProductInstinctExpiresAt = rawProductInstinctExpiresAt > 0 ? rawProductInstinctExpiresAt : legacyProductInstinctUnlocked ? productInstinctExpiresAtFrom(PRODUCT_INSTINCT_PATCH_STARTED_AT) : null;\n  const productInstinctActive = Boolean(migratedProductInstinctExpiresAt && migratedProductInstinctExpiresAt > Date.now());\n  const researchIdsWithoutProductInstinct = unlockedResearchIds.filter((id) => id !== PRODUCT_INSTINCT_ID);\n  const normalizedResearchIds = productInstinctActive ? [PRODUCT_INSTINCT_ID, ...researchIdsWithoutProductInstinct] : researchIdsWithoutProductInstinct;\n",
+      /(\n\s*const\s+unlockedResearchIds\s*=\s*safeArray<string>\(merged\.unlockedResearchIds\)\.filter\(\(id\)\s*=>\s*typeof\s+id\s*===\s*['"]string['"]\)\.slice\(0,\s*100\);\r?\n)/,
+      `$1${migration}`,
     );
   }
   if (!next.includes('const legacyProductInstinctUnlocked')) {
     throw new Error('product-instinct-duration: failed to add product instinct migration in normalizeState');
   }
-  if (next.includes('    unlockedResearchIds,\n    unlockedGenreIds:')) {
-    next = next.replace('    unlockedResearchIds,\n    unlockedGenreIds:', '    unlockedResearchIds: Array.from(new Set(normalizedResearchIds)),\n    productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,\n    unlockedGenreIds:');
+  if (!next.includes('productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,')) {
+    next = next.replace(
+      /(\n\s*)unlockedResearchIds,\r?\n(\s*)unlockedGenreIds:/,
+      '$1unlockedResearchIds: Array.from(new Set(normalizedResearchIds)),\n$2productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,\n$2unlockedGenreIds:',
+    );
   }
   if (!next.includes('productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,')) {
     throw new Error('product-instinct-duration: failed to normalize productInstinctExpiresAt');
