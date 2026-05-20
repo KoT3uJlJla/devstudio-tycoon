@@ -23,15 +23,24 @@ patchFile('src/App.tsx', (source) => {
 });
 
 patchFile('src/gameLogic.ts', (source) => {
-  let next = source.replace(
-    "import { baseGenreIds, baseThemeIds, comboMatrix, critics, developmentEventScenarios, gameNameParts, genres, negativeMarketEvents, platforms, positiveMarketEvents, themes } from './gameData';",
-    "import { baseGenreIds, baseThemeIds, comboMatrix, developmentEventScenarios, gameNameParts, genres, negativeMarketEvents, platforms, positiveMarketEvents, themes } from './gameData';\nimport { criticOutlets, getPressComment } from './pressData';"
-  );
+  let next = source.replace(/import \{([^}]+)\} from '\.\/gameData';/, (match, names) => {
+    const cleaned = names
+      .split(',')
+      .map((name) => name.trim())
+      .filter((name) => name && name !== 'critics')
+      .join(', ');
+    return `import { ${cleaned} } from './gameData';`;
+  });
 
-  const criticOld = "  const criticResults = critics.map((critic) => ({\n    name: critic.name,\n    quote: critic.quote,\n    score: Number(clamp(score + Math.random() * 2.2 - 1.1 + audienceScore * 0.18 + marketScore * 0.15, 1, 10).toFixed(1)),\n  }));";
+  if (!next.includes("from './pressData'")) {
+    next = next.replace("import type { AudienceState", "import { criticOutlets, getPressComment } from './pressData';\nimport type { AudienceState");
+  }
+
   const criticNew = "  const shuffledCritics = [...criticOutlets].sort(() => Math.random() - 0.5).slice(0, 4);\n  const criticResults = shuffledCritics.map((criticName) => {\n    const criticScore = Number(clamp(score + Math.random() * 2.2 - 1.1 + audienceScore * 0.18 + marketScore * 0.15, 1, 10).toFixed(1));\n    return {\n      name: `«${criticName}»`,\n      quote: getPressComment(criticScore),\n      score: criticScore,\n    };\n  });";
-  if (next.includes(criticOld)) {
-    next = next.replace(criticOld, criticNew);
+
+  const criticBlockPattern = /  const criticResults = critics\.map\(\(critic\) => \(\{[\s\S]*?\n  \}\)\);/;
+  if (criticBlockPattern.test(next)) {
+    next = next.replace(criticBlockPattern, criticNew);
   }
 
   return next;
