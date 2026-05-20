@@ -1,6 +1,17 @@
-/* Release results v8.1: final score first, 2x2 press grid, score-aware tiles. */
+/* Release results v8.2: flat score-aware tiles and fixed modal scrolling. */
+.release-backdrop {
+  align-items: start !important;
+  place-items: start center !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(28px, env(safe-area-inset-bottom)) !important;
+}
+
 .release-modal.animated-release {
-  overflow: hidden;
+  max-height: none !important;
+  min-height: auto;
+  overflow: visible !important;
+  padding-bottom: 22px !important;
 }
 
 .release-modal .cover-art {
@@ -21,20 +32,31 @@
   isolation: isolate;
   padding: 18px 16px;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  background:
-    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.88), transparent 34%),
-    linear-gradient(135deg, rgba(255, 250, 232, 0.95), rgba(255, 229, 150, 0.86) 48%, rgba(255, 252, 240, 0.92));
-  box-shadow:
-    0 18px 42px rgba(118, 82, 17, 0.20),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  background: rgba(242, 244, 255, 0.92) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  color: rgba(20, 22, 34, 0.96) !important;
+}
+
+.release-score-top .score-stage .big-score,
+.release-score-top .score-stage .quality,
+.release-score-top .score-stage .critic-average-note {
+  color: inherit !important;
+  text-shadow: none !important;
+}
+
+.release-score-top .score-stage .big-score {
+  display: block;
+  font-size: clamp(48px, 15vw, 76px);
+  line-height: 0.95;
+  letter-spacing: -0.08em;
 }
 
 .release-score-top .score-suspense {
   padding: 16px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px dashed rgba(70, 60, 94, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px dashed rgba(255, 255, 255, 0.28);
   text-align: center;
   font-weight: 900;
 }
@@ -51,12 +73,12 @@
   min-height: 132px;
   justify-content: space-between;
   border-radius: 22px;
-  border: 1px solid rgba(38, 31, 58, 0.12);
+  border: 1px solid rgba(38, 31, 58, 0.16);
   transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 
 .release-modal .critic-card.shown {
-  transform: translateY(0) scale(1);
+  transform: translateY(0) scale(1) !important;
 }
 
 .release-modal .critic-card > span {
@@ -68,54 +90,54 @@
   line-height: 1;
 }
 
-.release-modal .critic-score-bad {
-  background:
-    linear-gradient(145deg, rgba(255, 238, 236, 0.98), rgba(249, 196, 190, 0.88));
-  border-color: rgba(188, 82, 72, 0.24);
-  box-shadow: 0 12px 24px rgba(171, 67, 58, 0.12);
+.release-modal .critic-score-bad,
+.release-score-top .critic-score-bad {
+  background: rgba(255, 206, 213, 0.92) !important;
+  border-color: rgba(190, 76, 92, 0.34) !important;
+  box-shadow: 0 12px 24px rgba(171, 67, 84, 0.14) !important;
+  color: #56242e !important;
 }
 
-.release-modal .critic-score-low {
-  background:
-    linear-gradient(145deg, rgba(255, 242, 224, 0.98), rgba(251, 203, 144, 0.88));
-  border-color: rgba(206, 121, 34, 0.24);
-  box-shadow: 0 12px 24px rgba(186, 104, 25, 0.12);
+.release-modal .critic-score-low,
+.release-score-top .critic-score-low {
+  background: rgba(255, 213, 160, 0.92) !important;
+  border-color: rgba(205, 123, 35, 0.34) !important;
+  box-shadow: 0 12px 24px rgba(186, 104, 25, 0.14) !important;
+  color: #5a3410 !important;
 }
 
-.release-modal .critic-score-mid {
-  background:
-    linear-gradient(145deg, rgba(232, 243, 255, 0.98), rgba(176, 212, 244, 0.88));
-  border-color: rgba(66, 123, 181, 0.22);
-  box-shadow: 0 12px 24px rgba(52, 105, 162, 0.12);
+.release-modal .critic-score-mid,
+.release-score-top .critic-score-mid {
+  background: rgba(190, 221, 249, 0.92) !important;
+  border-color: rgba(66, 123, 181, 0.30) !important;
+  box-shadow: 0 12px 24px rgba(52, 105, 162, 0.14) !important;
+  color: #173757 !important;
 }
 
-.release-modal .critic-score-good {
-  background:
-    linear-gradient(145deg, rgba(233, 250, 236, 0.98), rgba(172, 226, 179, 0.88));
-  border-color: rgba(54, 148, 76, 0.24);
-  box-shadow: 0 12px 24px rgba(42, 138, 70, 0.14);
+.release-modal .critic-score-good,
+.release-score-top .critic-score-good {
+  background: rgba(185, 232, 194, 0.92) !important;
+  border-color: rgba(54, 148, 76, 0.32) !important;
+  box-shadow: 0 12px 24px rgba(42, 138, 70, 0.15) !important;
+  color: #173f22 !important;
 }
 
-.release-modal .critic-score-luxury {
+.release-modal .critic-score-luxury,
+.release-score-top .critic-score-luxury {
   position: relative;
   overflow: hidden;
-  background:
-    linear-gradient(125deg, rgba(255, 252, 239, 0.96), rgba(255, 224, 116, 0.92) 36%, rgba(255, 255, 255, 0.98) 55%, rgba(227, 196, 104, 0.94));
-  border-color: rgba(173, 126, 30, 0.44);
+  background: rgba(238, 211, 117, 0.96) !important;
+  border-color: rgba(181, 129, 24, 0.48) !important;
   box-shadow:
     0 18px 34px rgba(153, 103, 18, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -18px 42px rgba(255, 255, 255, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -14px 38px rgba(255, 255, 255, 0.16) !important;
+  color: #3f2b05 !important;
 }
 
-.release-modal .critic-score-luxury::after {
-  content: "";
-  position: absolute;
-  inset: -45% -70%;
-  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.72) 48%, transparent 62%);
-  transform: rotate(10deg);
-  animation: luxury-sheen 3.2s ease-in-out infinite;
-  pointer-events: none;
+.release-modal .critic-score-luxury::after,
+.release-score-top .critic-score-luxury::after {
+  display: none !important;
 }
 
 .release-modal .critic-score-luxury > * {
@@ -123,10 +145,22 @@
   z-index: 1;
 }
 
-@keyframes luxury-sheen {
-  0%, 35% { translate: -35% 0; opacity: 0; }
-  52% { opacity: 0.95; }
-  78%, 100% { translate: 35% 0; opacity: 0; }
+.release-actions {
+  position: static !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.release-modal .reward-row,
+.release-modal .life-result,
+.release-modal .bonus-list,
+.release-modal .score-breakdown {
+  position: relative;
+  z-index: 1;
 }
 
 @media (max-width: 380px) {
