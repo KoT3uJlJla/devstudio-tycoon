@@ -79,9 +79,9 @@ const researchScreenBlock = `function formatProductInstinctTime(ms: number) {
   const safe = Math.max(0, Math.floor(ms));
   const days = Math.floor(safe / 86_400_000);
   const hours = Math.floor((safe % 86_400_000) / 3_600_000);
-  if (days > 0) return \`${days} д. ${hours} ч.\`;
+  if (days > 0) return days + ' д. ' + hours + ' ч.';
   const minutes = Math.max(1, Math.floor((safe % 3_600_000) / 60_000));
-  return hours > 0 ? \`${hours} ч. ${minutes} мин.\` : \`${minutes} мин.\`;
+  return hours > 0 ? hours + ' ч. ' + minutes + ' мин.' : minutes + ' мин.';
 }
 
 function ResearchScreen({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -128,18 +128,18 @@ function ResearchScreen({ state, update }: { state: GameState; update: (fn: (sta
           <p className="eyebrow">Премиальный навык · 7 дней</p>
           <strong>{productActive ? '✅ ' : ''}{productInstinct.title}</strong>
           <span>{productInstinct.description}</span>
-          <em>{productActive ? \`Активно ещё ${formatProductInstinctTime(productRemaining)}\` : \`⭐ ${productStarCost} или ${referralTarget} друзей с релизом 6.5+ · сейчас ${qualifiedReferrals}/${referralTarget}\`}</em>
+          <em>{productActive ? 'Активно ещё ' + formatProductInstinctTime(productRemaining) : '⭐ ' + productStarCost + ' или ' + referralTarget + ' друзей с релизом 6.5+ · сейчас ' + qualifiedReferrals + '/' + referralTarget}</em>
         </div>
         {productActive ? (
           <button className="primary" disabled>Активно</button>
         ) : canUnlockByReferrals ? (
           <button className="primary" disabled={productPending} onClick={activateProductByReferrals}>Активировать за друзей</button>
         ) : (
-          <button className="primary" disabled={productPending} onClick={activateProductByPayment}>{productPending ? 'Активируем…' : \`Активировать за ⭐${productStarCost}\`}</button>
+          <button className="primary" disabled={productPending} onClick={activateProductByPayment}>{productPending ? 'Активируем…' : 'Активировать за ⭐' + productStarCost}</button>
         )}
       </article>
-      <div className="unlock-grid"><button className="unlock-card comic-card" disabled={state.rp < 24 || lockedGenres.length === 0} onClick={unlockRandomGenre}><strong><Icon name="genre" /> Новый случайный жанр</strong><span>{lockedGenres.length ? \`Осталось: ${lockedGenres.length}\` : 'Все жанры открыты'}</span><em>🧪 24</em></button><button className="unlock-card comic-card" disabled={state.rp < 22 || lockedThemes.length === 0} onClick={unlockRandomTheme}><strong><Icon name="theme" /> Новый случайный сеттинг</strong><span>{lockedThemes.length ? \`Осталось: ${lockedThemes.length}\` : 'Все сеттинги открыты'}</span><em>🧪 22</em></button></div>
-      <div className="research-grid">{otherResearch.map((node) => { const unlocked = state.unlockedResearchIds.includes(node.id); const lockedByRequirement = node.requires ? !state.unlockedResearchIds.includes(node.requires) : false; return <button key={node.id} className={unlocked ? 'research-node unlocked comic-card' : 'research-node comic-card'} disabled={unlocked || lockedByRequirement || state.rp < node.cost} onClick={() => update((current) => { if (current.rp < node.cost || current.unlockedResearchIds.includes(node.id)) return current; haptic('success'); return { ...current, rp: current.rp - node.cost, unlockedResearchIds: [...current.unlockedResearchIds, node.id], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 }; })}><strong>{unlocked ? '✅ ' : ''}{node.title}</strong><span>{lockedByRequirement ? 'Сначала нужно предыдущее исследование.' : node.description}</span><em>{unlocked ? node.effect : \`🧪 ${node.cost}\`}</em></button>; })}</div>
+      <div className="unlock-grid"><button className="unlock-card comic-card" disabled={state.rp < 24 || lockedGenres.length === 0} onClick={unlockRandomGenre}><strong><Icon name="genre" /> Новый случайный жанр</strong><span>{lockedGenres.length ? 'Осталось: ' + lockedGenres.length : 'Все жанры открыты'}</span><em>🧪 24</em></button><button className="unlock-card comic-card" disabled={state.rp < 22 || lockedThemes.length === 0} onClick={unlockRandomTheme}><strong><Icon name="theme" /> Новый случайный сеттинг</strong><span>{lockedThemes.length ? 'Осталось: ' + lockedThemes.length : 'Все сеттинги открыты'}</span><em>🧪 22</em></button></div>
+      <div className="research-grid">{otherResearch.map((node) => { const unlocked = state.unlockedResearchIds.includes(node.id); const lockedByRequirement = node.requires ? !state.unlockedResearchIds.includes(node.requires) : false; return <button key={node.id} className={unlocked ? 'research-node unlocked comic-card' : 'research-node comic-card'} disabled={unlocked || lockedByRequirement || state.rp < node.cost} onClick={() => update((current) => { if (current.rp < node.cost || current.unlockedResearchIds.includes(node.id)) return current; haptic('success'); return { ...current, rp: current.rp - node.cost, unlockedResearchIds: [...current.unlockedResearchIds, node.id], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 }; })}><strong>{unlocked ? '✅ ' : ''}{node.title}</strong><span>{lockedByRequirement ? 'Сначала нужно предыдущее исследование.' : node.description}</span><em>{unlocked ? node.effect : '🧪 ' + node.cost}</em></button>; })}</div>
     </div>
   );
 }`;
@@ -152,10 +152,10 @@ patchFile('src/App.tsx', (source) => {
       next = next.replace('  nextStudioUpgradeCost,\n} from \'./gameLogic\';', `  nextStudioUpgradeCost,\n  ${name},\n} from './gameLogic';`);
     }
   }
-  if (!next.includes("purchaseShopItem")) {
+  if (!next.includes('purchaseShopItem')) {
     next = next.replace("import { haptic, initTelegram, shareRelease } from './telegram';", "import { haptic, initTelegram, shareRelease } from './telegram';\nimport { purchaseShopItem } from './backendClient';");
   }
-  next = next.replace('  const hasProductInstinct = state.unlockedResearchIds.includes(\'product-instinct\');', '  const hasProductInstinct = isProductInstinctActive(state);');
+  next = next.replace("  const hasProductInstinct = state.unlockedResearchIds.includes('product-instinct');", '  const hasProductInstinct = isProductInstinctActive(state);');
   next = replaceBetween(next, 'function ResearchScreen(', 'function ShopScreen(', researchScreenBlock);
   return next;
 });
