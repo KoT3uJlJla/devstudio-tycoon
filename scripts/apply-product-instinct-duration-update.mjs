@@ -14,10 +14,20 @@ function replaceBetween(source, startNeedle, endNeedle, replacement) {
   return source.slice(0, start) + replacement.trimEnd() + '\n\n' + source.slice(end);
 }
 
+function ensureGameLogicImport(source, name) {
+  if (source.match(new RegExp(`\\b${name}\\b[\\s,]*`, 'm')) && source.slice(0, source.indexOf("} from './gameLogic';")).includes(name)) return source;
+  const marker = "  nextStudioUpgradeCost,\n} from './gameLogic';";
+  if (!source.includes(marker)) throw new Error(`product-instinct-duration: failed to add ${name} import`);
+  return source.replace(marker, `  nextStudioUpgradeCost,\n  ${name},\n} from './gameLogic';`);
+}
+
 patchFile('src/types.ts', (source) => {
   let next = source;
   if (!next.includes('productInstinctExpiresAt: number | null;')) {
     next = next.replace('  unlockedResearchIds: string[];\n  unlockedGenreIds:', '  unlockedResearchIds: string[];\n  productInstinctExpiresAt: number | null;\n  unlockedGenreIds:');
+  }
+  if (!next.includes('productInstinctExpiresAt: number | null;')) {
+    throw new Error('product-instinct-duration: failed to patch productInstinctExpiresAt in src/types.ts');
   }
   return next;
 });
@@ -29,14 +39,20 @@ patchFile('src/gameData.ts', (source) => source.replace(
 
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
-  if (!next.includes('PRODUCT_INSTINCT_DURATION_MS')) {
+  if (!next.includes('export const PRODUCT_INSTINCT_DURATION_MS =')) {
     next = next.replace(
       'export const GAME_DAY_MS = 72_000;\n',
       "export const GAME_DAY_MS = 72_000;\nexport const PRODUCT_INSTINCT_ID = 'product-instinct';\nexport const PRODUCT_INSTINCT_DURATION_MS = 7 * 24 * 60 * 60 * 1000;\nexport const PRODUCT_INSTINCT_PATCH_STARTED_AT = Date.parse('2026-05-21T00:00:00.000Z');\n",
     );
   }
+  if (!next.includes('export const PRODUCT_INSTINCT_DURATION_MS =')) {
+    throw new Error('product-instinct-duration: failed to add product instinct constants in src/gameLogic.ts');
+  }
   if (!next.includes('productInstinctExpiresAt: null,')) {
     next = next.replace('  unlockedResearchIds: [],\n  unlockedGenreIds:', '  unlockedResearchIds: [],\n  productInstinctExpiresAt: null,\n  unlockedGenreIds:');
+  }
+  if (!next.includes('productInstinctExpiresAt: null,')) {
+    throw new Error('product-instinct-duration: failed to add productInstinctExpiresAt to initialState');
   }
   if (!next.includes('export function isProductInstinctActive')) {
     const helpers = `export function productInstinctExpiresAtFrom(startedAt = Date.now()) {
@@ -67,11 +83,19 @@ export function activateProductInstinct(state: GameState, startedAt = Date.now()
   }
   if (!next.includes('const legacyProductInstinctUnlocked')) {
     next = next.replace(
-      '  const unlockedResearchIds = safeArray<string>(merged.unlockedResearchIds).filter((id) => typeof id === \'string\').slice(0, 100);\n',
+      "  const unlockedResearchIds = safeArray<string>(merged.unlockedResearchIds).filter((id) => typeof id === 'string').slice(0, 100);\n",
       "  const unlockedResearchIds = safeArray<string>(merged.unlockedResearchIds).filter((id) => typeof id === 'string').slice(0, 100);\n  const legacyProductInstinctUnlocked = unlockedResearchIds.includes(PRODUCT_INSTINCT_ID);\n  const rawProductInstinctExpiresAt = Number((merged as unknown as { productInstinctExpiresAt?: unknown }).productInstinctExpiresAt);\n  const migratedProductInstinctExpiresAt = rawProductInstinctExpiresAt > 0 ? rawProductInstinctExpiresAt : legacyProductInstinctUnlocked ? productInstinctExpiresAtFrom(PRODUCT_INSTINCT_PATCH_STARTED_AT) : null;\n  const productInstinctActive = Boolean(migratedProductInstinctExpiresAt && migratedProductInstinctExpiresAt > Date.now());\n  const researchIdsWithoutProductInstinct = unlockedResearchIds.filter((id) => id !== PRODUCT_INSTINCT_ID);\n  const normalizedResearchIds = productInstinctActive ? [PRODUCT_INSTINCT_ID, ...researchIdsWithoutProductInstinct] : researchIdsWithoutProductInstinct;\n",
     );
   }
-  next = next.replace('    unlockedResearchIds,\n    unlockedGenreIds:', '    unlockedResearchIds: Array.from(new Set(normalizedResearchIds)),\n    productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,\n    unlockedGenreIds:');
+  if (!next.includes('const legacyProductInstinctUnlocked')) {
+    throw new Error('product-instinct-duration: failed to add product instinct migration in normalizeState');
+  }
+  if (next.includes('    unlockedResearchIds,\n    unlockedGenreIds:')) {
+    next = next.replace('    unlockedResearchIds,\n    unlockedGenreIds:', '    unlockedResearchIds: Array.from(new Set(normalizedResearchIds)),\n    productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,\n    unlockedGenreIds:');
+  }
+  if (!next.includes('productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,')) {
+    throw new Error('product-instinct-duration: failed to normalize productInstinctExpiresAt');
+  }
   return next;
 });
 
@@ -146,17 +170,17 @@ function ResearchScreen({ state, update }: { state: GameState; update: (fn: (sta
 
 patchFile('src/App.tsx', (source) => {
   let next = source;
-  const newImports = ['activateProductInstinct', 'isProductInstinctActive', 'productInstinctRemainingMs'];
-  for (const name of newImports) {
-    if (!next.includes(`${name},`)) {
-      next = next.replace('  nextStudioUpgradeCost,\n} from \'./gameLogic\';', `  nextStudioUpgradeCost,\n  ${name},\n} from './gameLogic';`);
-    }
+  for (const name of ['activateProductInstinct', 'isProductInstinctActive', 'productInstinctRemainingMs']) {
+    next = ensureGameLogicImport(next, name);
   }
-  if (!next.includes('purchaseShopItem')) {
+  if (!next.includes("import { purchaseShopItem } from './backendClient';") && !next.includes('purchaseShopItem,')) {
     next = next.replace("import { haptic, initTelegram, shareRelease } from './telegram';", "import { haptic, initTelegram, shareRelease } from './telegram';\nimport { purchaseShopItem } from './backendClient';");
   }
   next = next.replace("  const hasProductInstinct = state.unlockedResearchIds.includes('product-instinct');", '  const hasProductInstinct = isProductInstinctActive(state);');
   next = replaceBetween(next, 'function ResearchScreen(', 'function ShopScreen(', researchScreenBlock);
+  if (!next.includes('activateProductInstinct,') || !next.includes('isProductInstinctActive,') || !next.includes('productInstinctRemainingMs,')) {
+    throw new Error('product-instinct-duration: failed to add gameLogic imports in src/App.tsx');
+  }
   return next;
 });
 
