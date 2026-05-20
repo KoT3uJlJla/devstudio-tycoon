@@ -5,7 +5,7 @@ type BackendStatePayload = {
   ok?: boolean;
   error?: string;
   save?: { data?: unknown } | null;
-  economy?: { stars?: unknown } | null;
+  economy?: { stars?: unknown; tonWalletAddress?: unknown } | null;
 };
 
 type InvoicePayload = {
@@ -75,6 +75,30 @@ async function postJson(path: string, body: Record<string, unknown> = {}) {
       return data && typeof data === 'object' ? data as BackendStatePayload : null;
     })
     .catch(() => null);
+}
+
+async function fetchJson(path: string) {
+  if (!canUseBackend()) return null;
+  return fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `tma ${initData()}` },
+  })
+    .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
+    .catch(() => null) as Promise<BackendStatePayload | null>;
+}
+
+async function deleteJson(path: string) {
+  if (!canUseBackend()) return null;
+  return fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `tma ${initData()}` },
+  })
+    .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
+    .catch(() => null) as Promise<BackendStatePayload | null>;
+}
+
+function economyWallet(payload: BackendStatePayload | null) {
+  const wallet = payload?.economy?.tonWalletAddress;
+  return typeof wallet === 'string' ? wallet : '';
 }
 
 function openInvoice(link: string): Promise<string> {
@@ -192,6 +216,21 @@ export async function purchaseShopItem(itemId: string, onStatus?: (status: ShopP
 
   onStatus?.('failed');
   return null;
+}
+
+export async function getTonWallet() {
+  const payload = await fetchJson('/api/economy/ton-wallet');
+  return economyWallet(payload);
+}
+
+export async function saveTonWallet(address: string) {
+  const payload = await postJson('/api/economy/ton-wallet', { address });
+  return payload?.ok ? economyWallet(payload) : '';
+}
+
+export async function unlinkTonWallet() {
+  const payload = await deleteJson('/api/economy/ton-wallet');
+  return Boolean(payload?.ok);
 }
 
 export function hasBackendSession() {
