@@ -18,7 +18,10 @@ type TelegramWebAppWithInvoice = NonNullable<Window['Telegram']>['WebApp'] & {
   openInvoice?: (url: string, callback: (status: string) => void) => void;
 };
 
+type DevelopmentEndpoint = 'start' | 'skip' | 'promote' | 'release' | 'resolve-event';
+
 const API_URL = import.meta.env.VITE_API_URL ?? '';
+const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 
 function initData() {
   return window.Telegram?.WebApp?.initData || '';
@@ -32,13 +35,23 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function stateFromPayload(payload: BackendStatePayload | null): GameState | null {
+function markDirectBackendAction(endpoint: DevelopmentEndpoint) {
+  try {
+    sessionStorage.setItem(BACKEND_UI_ACTION_KEY, endpoint);
+  } catch {
+    // SessionStorage is only used to avoid duplicate best-effort action sync.
+  }
+}
+
+function stateFromPayload(payload: BackendStatePayload | null, endpoint?: DevelopmentEndpoint): GameState | null {
   const rawSave = payload?.save?.data;
   if (!payload?.ok || !isObject(rawSave)) return null;
   const stars = Number(payload.economy?.stars);
   const merged = Number.isFinite(stars) ? { ...rawSave, stars } : rawSave;
   try {
-    return normalizeState(merged as Partial<GameState>);
+    const state = normalizeState(merged as Partial<GameState>);
+    if (endpoint) markDirectBackendAction(endpoint);
+    return state;
   } catch {
     return null;
   }
@@ -95,22 +108,21 @@ async function createInvoice(itemId: string) {
     .catch(() => null);
 }
 
-async function pollInvoice(invoiceId: string, attempts = 18) {
-  if (!canUseBackend()) return null;
+async function pollInvoicePaid(invoiceId: string, attempts = 18) {
+  if (!canUseBackend()) return false;
   for (let index = 0; index < attempts; index += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, index < 4 ? 900 : 1500));
     const payload = await fetch(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, {
       headers: { Authorization: `tma ${initData()}` },
     })
       .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
-      .catch(() => null) as BackendStatePayload & InvoicePayload | null;
+      .catch(() => null) as InvoicePayload | null;
 
-    const state = stateFromPayload(payload);
-    if (state) return state;
     const status = payload?.invoice?.status;
-    if (status && status !== 'pending') return null;
+    if (status === 'paid') return true;
+    if (status && status !== 'pending') return false;
   }
-  return null;
+  return false;
 }
 
 async function payWithTelegramStars(itemId: string) {
@@ -121,20 +133,20 @@ async function payWithTelegramStars(itemId: string) {
   }
   const status = await openInvoice(invoice.invoiceLink);
   if (status === 'cancelled' || status === 'failed') return null;
-  return pollInvoice(invoice.invoiceId);
+  const paid = await pollInvoicePaid(invoice.invoiceId);
+  return paid ? invoice.invoiceId : null;
 }
 
-export async function runDevelopmentAction(endpoint: 'start' | 'skip' | 'promote' | 'release' | 'resolve-event', body: Record<string, unknown> = {}, invoiceItemId?: string) {
+export async function runDevelopmentAction(endpoint: DevelopmentEndpoint, body: Record<string, unknown> = {}, invoiceItemId?: string) {
   const payload = await postJson(`/api/development/${endpoint}`, body);
-  const state = stateFromPayload(payload);
+  const state = stateFromPayload(payload, endpoint);
   if (state) return state;
 
   if (payload?.error === 'not_enough_stars' && invoiceItemId) {
-    const paidState = await payWithTelegramStars(invoiceItemId);
-    if (paidState) return paidState;
-    // Some backends only credit the wallet after the invoice; retry action once.
-    const retryPayload = await postJson(`/api/development/${endpoint}`, body);
-    return stateFromPayload(retryPayload);
+    const invoiceId = await payWithTelegramStars(invoiceItemId);
+    if (!invoiceId) return null;
+    const retryPayload = await postJson(`/api/development/${endpoint}`, { ...body, invoiceId });
+    return stateFromPayload(retryPayload, endpoint);
   }
 
   return null;
