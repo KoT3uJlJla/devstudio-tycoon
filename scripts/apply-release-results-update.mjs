@@ -34,7 +34,7 @@ patchFile('src/App.tsx', (source) => {
     next = next.replace(finalScoreBlock, '\n');
 
     const scoreTop = `
-        <div className={\`release-score-top ${showFinal ? criticToneClass(result.score) : ''}\`}>
+        <div className={\`release-score-top \${showFinal ? criticToneClass(result.score) : ''}\`}>
           {showFinal ? (
             <div className="score-stage">
               <ConfettiBurst />
@@ -96,10 +96,10 @@ patchFile('src/App.tsx', (source) => {
   return (
     <div className="panel active-dev comic-card solo-dev-card">
       <div className="section-head compact"><div><p className="eyebrow">Активная разработка</p><h3>{project.name}</h3></div></div>
-      <div className="progress-fx active-progress-fx"><ProgressBar value={project.progress} label={\`${Math.floor(project.progress)}%\`} />{project.progress < 100 && <DevelopmentAmbientFx />}{project.progress < 100 && <DevelopmentTicker project={project} />}<DevPop project={project} />{project.devEventText?.startsWith('ПРОМО') && <PromotionBurst trigger={project.devEventId ?? 'promo'} />}</div>
+      <div className="progress-fx active-progress-fx"><ProgressBar value={project.progress} label={\`\${Math.floor(project.progress)}%\`} />{project.progress < 100 && <DevelopmentAmbientFx />}{project.progress < 100 && <DevelopmentTicker project={project} />}<DevPop project={project} />{project.devEventText?.startsWith('ПРОМО') && <PromotionBurst trigger={project.devEventId ?? 'promo'} />}</div>
       <div className="dev-tools-row">
         {project.progress >= 100 ? (
-          <button className="primary" onClick={() => runBackendOrLocal('promote')} disabled={!canTryPromote || busyAction === 'promote' || (!backendReady && state.stars < 35)}>{project.promotionUsed ? \`Продвижение +${(project.promotionBoost ?? 0).toFixed(1)}\` : busyAction === 'promote' ? 'Открываем…' : 'Продвижение ⭐35'}</button>
+          <button className="primary" onClick={() => runBackendOrLocal('promote')} disabled={!canTryPromote || busyAction === 'promote' || (!backendReady && state.stars < 35)}>{project.promotionUsed ? \`Продвижение +\${(project.promotionBoost ?? 0).toFixed(1)}\` : busyAction === 'promote' ? 'Открываем…' : 'Продвижение ⭐35'}</button>
         ) : (
           <span className="dev-status-pill">Идёт разработка</span>
         )}
