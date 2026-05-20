@@ -16,6 +16,12 @@ type InvoicePayload = {
 
 type InvoiceStatePayload = InvoicePayload & BackendStatePayload;
 
+export type TonWalletResult = {
+  ok: boolean;
+  address: string;
+  error?: 'invalid' | 'auth' | 'backend' | 'unknown';
+};
+
 type TelegramWebAppWithInvoice = NonNullable<Window['Telegram']>['WebApp'] & {
   openInvoice?: (url: string, callback: (status: string) => void) => void;
 };
@@ -77,28 +83,43 @@ async function postJson(path: string, body: Record<string, unknown> = {}) {
     .catch(() => null);
 }
 
-async function fetchJson(path: string) {
-  if (!canUseBackend()) return null;
+async function requestJson(path: string, init: RequestInit = {}) {
+  if (!canUseBackend()) return { status: 0, payload: null as BackendStatePayload | null };
   return fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `tma ${initData()}` },
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      Authorization: `tma ${initData()}`,
+    },
   })
-    .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
-    .catch(() => null) as Promise<BackendStatePayload | null>;
+    .then(async (response) => {
+      const data = await response.json().catch(() => null);
+      return { status: response.status, payload: data && typeof data === 'object' ? data as BackendStatePayload : null };
+    })
+    .catch(() => ({ status: 0, payload: null as BackendStatePayload | null }));
+}
+
+async function fetchJson(path: string) {
+  const result = await requestJson(path);
+  return result.status >= 200 && result.status < 300 ? result.payload : null;
 }
 
 async function deleteJson(path: string) {
-  if (!canUseBackend()) return null;
-  return fetch(`${API_URL}${path}`, {
-    method: 'DELETE',
-    headers: { Authorization: `tma ${initData()}` },
-  })
-    .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
-    .catch(() => null) as Promise<BackendStatePayload | null>;
+  const result = await requestJson(path, { method: 'DELETE' });
+  return result.status >= 200 && result.status < 300 ? result.payload : null;
 }
 
 function economyWallet(payload: BackendStatePayload | null) {
   const wallet = payload?.economy?.tonWalletAddress;
   return typeof wallet === 'string' ? wallet : '';
+}
+
+function tonWalletError(status: number, payload: BackendStatePayload | null): TonWalletResult['error'] {
+  if (payload?.error === 'invalid_ton_wallet' || payload?.error === 'invalid_ton_address') return 'invalid';
+  if (status === 400) return 'invalid';
+  if (status === 401 || payload?.error === 'telegram_auth_failed') return 'auth';
+  if (status === 0 || status === 404 || status >= 500) return 'backend';
+  return 'unknown';
 }
 
 function openInvoice(link: string): Promise<string> {
@@ -223,9 +244,16 @@ export async function getTonWallet() {
   return economyWallet(payload);
 }
 
-export async function saveTonWallet(address: string) {
-  const payload = await postJson('/api/economy/ton-wallet', { address });
-  return payload?.ok ? economyWallet(payload) : '';
+export async function saveTonWallet(address: string): Promise<TonWalletResult> {
+  const result = await requestJson('/api/economy/ton-wallet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address }),
+  });
+  if (result.status >= 200 && result.status < 300 && result.payload?.ok) {
+    return { ok: true, address: economyWallet(result.payload) };
+  }
+  return { ok: false, address: '', error: tonWalletError(result.status, result.payload) };
 }
 
 export async function unlinkTonWallet() {
