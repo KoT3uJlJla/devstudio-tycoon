@@ -6,10 +6,16 @@ function patchFile(path, patcher) {
   if (next !== source) writeFileSync(path, next);
 }
 
-const explanationBlock = `function scoreExplanation(item: ScoreBreakdownItem) {
+const scoreHelpBlock = String.raw`function scoreExplanation(item: ScoreBreakdownItem) {
   const label = item.label;
   const isPositive = item.value > 0;
-  const signText = item.kind === 'base' ? 'Это основа оценки.' : isPositive ? 'Сейчас этот фактор помогает релизу.' : item.value < 0 ? 'Сейчас этот фактор снижает оценку.' : 'Сейчас этот фактор почти нейтрален.';
+  const signText = item.kind === 'base'
+    ? 'Это основа оценки.'
+    : isPositive
+      ? 'Сейчас этот фактор помогает релизу.'
+      : item.value < 0
+        ? 'Сейчас этот фактор снижает оценку.'
+        : 'Сейчас этот фактор почти нейтрален.';
 
   const details: Record<string, { text: string; influence: string; tone: 'high' | 'medium' | 'none' }> = {
     'Фокус разработки': {
@@ -103,7 +109,7 @@ function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; on
         <button className="modal-x" type="button" onClick={onClose} aria-label="Закрыть">×</button>
         <p className="eyebrow">Детализация оценки</p>
         <h3>{info.title}</h3>
-        <div className={\`score-help-influence influence-\${info.tone}\`}>{influenceLabel}</div>
+        <div className={'score-help-influence influence-' + info.tone}>{influenceLabel}</div>
         <p>{info.text}</p>
         <p className="score-help-player-note">{info.influence}</p>
         <div className="score-help-value"><span>Текущий вклад</span><b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b></div>
@@ -112,32 +118,33 @@ function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; on
       </section>
     </div>
   );
+}`;
+
+function replaceScoreHelpBlock(source) {
+  const start = source.indexOf('function scoreExplanation(item: ScoreBreakdownItem)');
+  const marker = '\n\nconst confettiPieces =';
+  const end = source.indexOf(marker, start);
+  if (start === -1 || end === -1) return source;
+  return source.slice(0, start) + scoreHelpBlock + source.slice(end);
 }
 
-const confettiPieces =`;
+function addInfoIcon(source) {
+  if (source.includes('score-line-info')) return source;
+  return source.replaceAll(
+    `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>`,
+    `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">i</i>`,
+  );
+}
 
 patchFile('src/App.tsx', (source) => {
-  let next = source;
+  let next = replaceScoreHelpBlock(source);
+  next = addInfoIcon(next);
 
-  if (!next.includes('score-help-influence')) {
-    next = next.replace(
-      /function scoreExplanation\(item: ScoreBreakdownItem\) \{[\s\S]*?\n\}\n\nconst confettiPieces =/,
-      explanationBlock,
-    );
-  }
-
-  if (!next.includes('score-line-info')) {
-    next = next.replaceAll(
-      `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>`,
-      `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">i</i>`,
-    );
-  }
-
-  if (!next.includes('score-help-influence')) {
-    console.warn('score-breakdown-help: warning: detailed explanation modal was not inserted');
+  if (!next.includes('Детализация оценки') || !next.includes('Сильное влияние игрока') || !next.includes('Не зависит от игрока')) {
+    console.warn('score-breakdown-help: warning: explanation text was not inserted into App.tsx');
   }
   if (!next.includes('score-line-info')) {
-    console.warn('score-breakdown-help: warning: score-line info icon was not inserted');
+    console.warn('score-breakdown-help: warning: score-line info icon was not inserted into App.tsx');
   }
 
   return next;
