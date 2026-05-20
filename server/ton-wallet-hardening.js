@@ -30,15 +30,23 @@ function patchServerIndexTonWallet() {
   if (!next.includes('function sanitizeTonWalletAddress')) {
     const helpers = [
       'function sanitizeTonWalletAddress(value) {',
-      '  return String(value || "").trim().replace(/\\s+/g, "").slice(0, 96);',
+      '  return String(value || "").trim().replace(/\\s+/g, "").slice(0, 128);',
       '}',
       'function isValidTonWalletAddress(value) {',
-      '  const address = sanitizeTonWalletAddress(value);',
-      '  return /^(?:EQ|UQ)[A-Za-z0-9_-]{46}$/.test(address) || /^-?\\d:[a-fA-F0-9]{64}$/.test(address);',
+      '  return sanitizeTonWalletAddress(value).length > 0;',
       '}',
       '',
     ].join('\n');
     next = next.replace('async function start() {', `${helpers}async function start() {`);
+  } else {
+    next = next.replace(
+      /function isValidTonWalletAddress\(value\) \{[\s\S]*?\n\}/,
+      'function isValidTonWalletAddress(value) {\n  return sanitizeTonWalletAddress(value).length > 0;\n}',
+    );
+    next = next.replace(
+      'return String(value || "").trim().replace(/\\s+/g, "").slice(0, 96);',
+      'return String(value || "").trim().replace(/\\s+/g, "").slice(0, 128);',
+    );
   }
 
   if (!next.includes('/api/economy/ton-wallet')) {
@@ -51,7 +59,7 @@ function patchServerIndexTonWallet() {
       '',
       '  app.post("/api/economy/ton-wallet", requireTelegramUser, async (req, res) => {',
       '    const address = sanitizeTonWalletAddress(req.body?.address);',
-      '    if (!isValidTonWalletAddress(address)) return res.status(400).json({ ok: false, error: "invalid_ton_wallet" });',
+      '    if (!isValidTonWalletAddress(address)) return res.status(400).json({ ok: false, error: "empty_ton_wallet" });',
       '    const save = await getSave(req.telegramUser.id);',
       '    let economy = await getOrCreateEconomy(req.telegramUser, save?.data);',
       '    economy = await patchEconomy(economy.telegramId, { $set: { tonWalletAddress: address, tonWalletUpdatedAt: new Date() } });',
@@ -67,6 +75,8 @@ function patchServerIndexTonWallet() {
       '',
     ].join('\n');
     next = next.replace('  app.get("/api/economy", requireTelegramUser, async (req, res) => {', `${routes}  app.get("/api/economy", requireTelegramUser, async (req, res) => {`);
+  } else {
+    next = next.replace('error: "invalid_ton_wallet"', 'error: "empty_ton_wallet"');
   }
 
   if (next === source) return;
