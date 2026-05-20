@@ -387,9 +387,13 @@ function flushServer(keepalive = false) {
   void saveServerState(state, keepalive);
 }
 
-function scheduleServerWrite(state: GameState) {
+function scheduleServerWrite(state: GameState, immediate = false) {
   if (!canUseServerSave()) return;
   pendingServerState = state;
+  if (immediate) {
+    flushServer();
+    return;
+  }
   const throttleMs = isActiveDevelopmentSave(state) ? ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS : SERVER_SAVE_THROTTLE_MS;
   const elapsed = Date.now() - lastServerWriteAt;
   if (elapsed >= throttleMs) {
@@ -473,7 +477,14 @@ export function saveGame(state: GameState) {
   const previousSnapshot = lastActionSnapshot;
   lastActionSnapshot = safeState;
   const actionHandled = scheduleDevelopmentAction(previousSnapshot, safeState);
-  if (!actionHandled) scheduleServerWrite(safeState);
+
+  // Development actions are useful for server-side validation/economy, but they
+  // must not replace the authoritative save write. Otherwise a failed or stale
+  // /api/development/* response leaves /api/save with the old project, and a
+  // page refresh appears to reset development progress. Always persist the full
+  // active-development state as well; do it immediately when an action was just
+  // detected so start/promote/skip survive an instant refresh.
+  scheduleServerWrite(safeState, actionHandled || isActiveDevelopmentSave(safeState));
 }
 
 export function resetGame() {
