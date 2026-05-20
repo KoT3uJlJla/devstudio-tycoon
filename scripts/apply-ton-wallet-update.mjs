@@ -29,6 +29,13 @@ function isLikelyTonWallet(address: string) {
   return /^(?:EQ|UQ)[A-Za-z0-9_-]{46}$/.test(clean) || /^-?\\d:[a-fA-F0-9]{64}$/.test(clean);
 }
 
+function tonWalletMessage(error?: 'invalid' | 'auth' | 'backend' | 'unknown') {
+  if (error === 'invalid') return 'Проверь формат TON-адреса и попробуй ещё раз.';
+  if (error === 'auth') return 'Не удалось подтвердить Telegram-сессию. Перезапусти игру из Telegram.';
+  if (error === 'backend') return 'Не удалось сохранить кошелёк. Попробуй после обновления сервера.';
+  return 'Не удалось сохранить кошелёк. Попробуй ещё раз.';
+}
+
 function TonWalletPanel() {
   const [wallet, setWallet] = useState('');
   const [input, setInput] = useState('');
@@ -55,15 +62,15 @@ function TonWalletPanel() {
     if (!canBind) return;
     setStatus('saving');
     setMessage('');
-    const saved = await saveTonWallet(cleanInput);
-    if (!saved) {
+    const result = await saveTonWallet(cleanInput);
+    if (!result.ok || !result.address) {
       haptic('warning');
       setStatus('error');
-      setMessage('Проверь адрес кошелька и попробуй ещё раз.');
+      setMessage(tonWalletMessage(result.error));
       return;
     }
     haptic('success');
-    setWallet(saved);
+    setWallet(result.address);
     setInput('');
     setStatus('saved');
     setMessage('Кошелёк привязан. Он будет использоваться для еженедельных наград.');
