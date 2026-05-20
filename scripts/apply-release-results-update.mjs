@@ -20,13 +20,50 @@ patchFile('src/App.tsx', (source) => {
     next = next.replace('\nfunction ReleaseModal(', '\n' + "function criticToneClass(score: number) {\n  if (score >= 9) return 'critic-score-luxury';\n  if (score >= 6.5) return 'critic-score-good';\n  if (score >= 5) return 'critic-score-mid';\n  if (score >= 3.1) return 'critic-score-low';\n  return 'critic-score-bad';\n}\n\n" + 'function ReleaseModal(');
   }
 
-  const releaseOld = "        <div className=\"cover-art\"><Icon name=\"rocket\" /><i /></div>\n        <p className=\"eyebrow\">Релиз состоялся</p>\n        <h2 id=\"release-title\">{result.projectName}</h2>\n        <div className=\"critic-grid animated-critics\">\n          {result.critics.map((critic, index) => (\n            <div className={step > index ? 'critic-card shown' : 'critic-card'} key={critic.name}>\n              <span>{critic.name}</span>\n              <b>{step > index ? critic.score : '…'}</b>\n              <em>{step > index ? critic.quote : 'читают билд'}</em>\n            </div>\n          ))}\n        </div>\n        {showFinal ? (\n          <div className=\"score-stage\">\n            <ConfettiBurst />\n            <strong className=\"big-score\">{result.score}/10</strong>\n            <span className=\"quality\">{result.qualityLabel} · Комбо: {comboLabel(result.combo)}</span>\n            <span className=\"critic-average-note\">Средняя оценка изданий: {result.criticAverage}/10. Итоговая оценка игры считается отдельно и учитывает модификаторы ниже.</span>\n          </div>\n        ) : (\n          <div className=\"score-suspense\">Издания готовят оценки…</div>\n        )}";
-  const releaseNew = "        <p className=\"eyebrow\">Релиз состоялся</p>\n        <h2 id=\"release-title\">{result.projectName}</h2>\n        <div className=\"release-score-top\">\n          {showFinal ? (\n            <div className=\"score-stage\">\n              <ConfettiBurst />\n              <strong className=\"big-score\">{result.score}/10</strong>\n              <span className=\"quality\">{result.qualityLabel} · Комбо: {comboLabel(result.combo)}</span>\n              <span className=\"critic-average-note\">Средняя оценка изданий: {result.criticAverage}/10. Итоговая оценка игры считается отдельно и учитывает модификаторы ниже.</span>\n            </div>\n          ) : (\n            <div className=\"score-suspense\">Издания готовят оценки…</div>\n          )}\n        </div>\n        <div className=\"critic-grid animated-critics release-critic-grid-2x2\">\n          {result.critics.map((critic, index) => (\n            <div className={`${step > index ? 'critic-card shown' : 'critic-card'} ${step > index ? criticToneClass(critic.score) : ''}`} key={critic.name}>\n              <span>{critic.name}</span>\n              <b>{step > index ? critic.score : '…'}</b>\n              <em>{step > index ? critic.quote : 'читают билд'}</em>\n            </div>\n          ))}\n        </div>";
-  if (next.includes(releaseOld)) {
-    next = next.replace(releaseOld, releaseNew);
+  if (!next.includes('release-score-top')) {
+    next = next.replace(/\n\s*<div className="cover-art">[\s\S]*?<\/div>\s*\n/, '\n');
+
+    const finalScoreBlock = /\n\s*\{showFinal\s*\?\s*\(\s*\n\s*<div className="score-stage">[\s\S]*?\n\s*<\/div>\s*\n\s*\)\s*:\s*\(\s*\n\s*<div className="score-suspense">Издания готовят оценки…<\/div>\s*\n\s*\)\}/;
+    if (!finalScoreBlock.test(next)) {
+      throw new Error('release-results-update: failed to locate final score block in src/App.tsx');
+    }
+    next = next.replace(finalScoreBlock, '\n');
+
+    const scoreTop = `
+        <div className="release-score-top">
+          {showFinal ? (
+            <div className="score-stage">
+              <ConfettiBurst />
+              <strong className="big-score">{result.score}/10</strong>
+              <span className="quality">{result.qualityLabel} · Комбо: {comboLabel(result.combo)}</span>
+              <span className="critic-average-note">Средняя оценка изданий: {result.criticAverage}/10. Итоговая оценка игры считается отдельно и учитывает модификаторы ниже.</span>
+            </div>
+          ) : (
+            <div className="score-suspense">Издания готовят оценки…</div>
+          )}
+        </div>`;
+
+    next = next.replace(
+      /\n\s*<h2 id="release-title">\{result\.projectName\}<\/h2>/,
+      (match) => `${match}${scoreTop}`
+    );
   }
 
-  if (!next.includes('release-score-top') || !next.includes('release-critic-grid-2x2')) {
+  next = next.replace(
+    /className="critic-grid animated-critics"/g,
+    'className="critic-grid animated-critics release-critic-grid-2x2"'
+  );
+
+  next = next.replace(
+    /<div className=\{step > index \? 'critic-card shown' : 'critic-card'\} key=\{critic\.name\}>/g,
+    "<div className={`${step > index ? 'critic-card shown' : 'critic-card'} ${step > index ? criticToneClass(critic.score) : ''}`} key={critic.name}>"
+  );
+
+  if (next.includes('cover-art')) {
+    throw new Error('release-results-update: failed to remove cover art from release modal in src/App.tsx');
+  }
+
+  if (!next.includes('release-score-top') || !next.includes('release-critic-grid-2x2') || !next.includes('criticToneClass(critic.score)')) {
     throw new Error('release-results-update: failed to patch release modal layout in src/App.tsx');
   }
 
