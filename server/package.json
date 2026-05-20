@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node --import ./server-hardening.js index.js"
+    "start": "node --import ./rewards-hardening.js --import ./server-hardening.js index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
