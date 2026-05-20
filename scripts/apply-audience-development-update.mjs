@@ -65,8 +65,6 @@ export function estimateProjectDuration(project: Project, state: GameState) {
 const updateAudienceBlock = `function updateAudience(state: GameState, newMonth: number): AudienceState {
   const recent = state.releaseHistory.slice(-8);
   const top = [...recent].sort((a, b) => b.score - a.score)[0];
-  // Интересы месяца берутся из полного каталога игры, а не из открытого контента игрока.
-  // Индексы детерминированы от игрового месяца, поэтому у всех игроков с одним месяцем одинаковые интересы аудитории.
   const desiredGenreId = genres[seededIndex(newMonth, genres.length, 7)]?.id ?? 'arcade';
   const desiredThemeId = themes[seededIndex(newMonth, themes.length, 19)]?.id ?? 'cyberpunk';
   const desiredPlatformId = platforms[seededIndex(newMonth, platforms.length, 31)]?.id ?? 'micro_pc';
@@ -197,55 +195,88 @@ patchFile('src/globalWorld.ts', (source) => {
 
 const shopScreenBlock = `function ShopScreen({ state, update, onRenameStudio }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; onRenameStudio: () => void }) {
   const [pendingItem, setPendingItem] = useState<string | null>(null);
+  const [purchaseStatus, setPurchaseStatus] = useState<string>('');
+  const [purchaseResult, setPurchaseResult] = useState<{ title: string; reward: string } | null>(null);
   const renameCost = 15;
   const sku = [
-    { id: 'starter_pack', title: 'Стартовый набор', desc: '5 000 монет и 50 очков науки для быстрого рывка', price: 79 },
-    { id: 'coins_5k', title: 'Набор монет', desc: '+5 000 монет', price: 39 },
-    { id: 'coins_25k', title: 'Большой набор монет', desc: '+25 000 монет', price: 149 },
-    { id: 'coins_100k', title: 'Мега-набор монет', desc: '+100 000 монет', price: 399 },
-    { id: 'research_boost', title: 'Ускорение науки', desc: '+50 очков исследований', price: 69 },
+    { id: 'starter_pack', title: 'Стартовый набор', desc: '5 000 монет и 50 очков науки для быстрого рывка', price: 79, reward: '+5 000 🪙 и +50 🧪' },
+    { id: 'coins_5k', title: 'Набор монет', desc: '+5 000 монет', price: 39, reward: '+5 000 🪙' },
+    { id: 'coins_25k', title: 'Большой набор монет', desc: '+25 000 монет', price: 149, reward: '+25 000 🪙' },
+    { id: 'coins_100k', title: 'Мега-набор монет', desc: '+100 000 монет', price: 399, reward: '+100 000 🪙' },
+    { id: 'research_boost', title: 'Ускорение науки', desc: '+50 очков исследований', price: 69, reward: '+50 🧪' },
   ] as const;
 
-  const buy = async (itemId: string, after?: () => void) => {
+  const statusText = (status: string) => status === 'checking_balance'
+    ? 'Проверяем игровой баланс ⭐…'
+    : status === 'opening_invoice'
+      ? 'Открываем счёт Telegram Stars…'
+      : status === 'checking_payment'
+        ? 'Проверяем оплату…'
+        : status === 'credited'
+          ? 'Начислено!'
+          : status === 'cancelled'
+            ? 'Оплата закрыта. Товар не начислен.'
+            : status === 'failed'
+              ? 'Покупка не завершена. Товар не начислен.'
+              : '';
+
+  const buy = async (item: { id: string; title: string; reward: string }, after?: () => void) => {
     if (pendingItem) return;
-    setPendingItem(itemId);
+    setPendingItem(item.id);
+    setPurchaseStatus('checking_balance');
     try {
-      const next = await purchaseShopItem(itemId);
+      const next = await purchaseShopItem(item.id, setPurchaseStatus);
       if (!next) {
         haptic('warning');
-        window.Telegram?.WebApp?.showPopup?.({ message: 'Покупка не завершена. Товар не был начислен.', buttons: [{ type: 'ok' }] });
         return;
       }
       haptic('success');
       update(() => next);
-      after?.();
+      if (item.id === 'rename_studio') after?.();
+      else setPurchaseResult({ title: item.title, reward: item.reward });
     } finally {
-      setPendingItem(null);
+      window.setTimeout(() => { setPendingItem(null); setPurchaseStatus(''); }, 450);
     }
   };
 
-  return <div className="stack"><div className="section-head hero-title"><div><p className="eyebrow">Звёзды</p><h2>Магазин студии</h2></div><span className="pill">полезные улучшения</span></div><p className="muted">Покупки сначала используют игровой баланс ⭐. Если звёзд не хватает, откроется инвойс Telegram Stars. Товар начисляется только после успешной оплаты.</p><article className="shop-card comic-card"><div><h3>Переименовать студию</h3><p>Сейчас: {state.studioName || 'Без названия'}. Позволяет выбрать новое имя для студии.</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy('rename_studio', onRenameStudio)}>{pendingItem === 'rename_studio' ? '…' : \`⭐\${renameCost}\`}</button></article><div className="shop-list">{sku.map((item) => <article className="shop-card comic-card" key={item.id}><div><h3>{item.title}</h3><p>{item.desc}</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(item.id)}>{pendingItem === item.id ? '…' : \`⭐\${item.price}\`}</button></article>)}</div></div>;
+  const renameItem = { id: 'rename_studio', title: 'Смена названия', reward: 'Можно выбрать новое имя студии' };
+
+  return <div className="stack"><div className="section-head hero-title"><div><p className="eyebrow">Звёзды</p><h2>Магазин студии</h2></div><span className="pill">полезные улучшения</span></div><section className="shop-card comic-card shop-balance-card"><div><p className="eyebrow">Баланс звёзд</p><h3>{state.stars} ⭐</h3><p>Если игровых звёзд хватает, покупка спишется сразу. Если нет — откроется счёт Telegram Stars. Без успешной оплаты товар не начисляется.</p></div><b>без тестовой выдачи</b></section>{pendingItem && <section className="shop-card comic-card shop-status-panel"><div><h3>{statusText(purchaseStatus) || 'Обрабатываем покупку…'}</h3><p>Кнопки временно заблокированы, чтобы покупка не продублировалась.</p></div><b>⏳</b></section>}<article className="shop-card comic-card"><div><h3>Переименовать студию</h3><p>Сейчас: {state.studioName || 'Без названия'}. Позволяет выбрать новое имя для студии.</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(renameItem, onRenameStudio)}>{pendingItem === 'rename_studio' ? statusText(purchaseStatus) || '…' : \`⭐\${renameCost}\`}</button></article><div className="shop-list">{sku.map((item) => <article className="shop-card comic-card" key={item.id}><div><h3>{item.title}</h3><p>{item.desc}</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(item)}>{pendingItem === item.id ? statusText(purchaseStatus) || '…' : \`⭐\${item.price}\`}</button></article>)}</div>{purchaseResult && <div className="modal-backdrop"><section className="release-modal offer comic-card purchase-success-modal"><span className="badge">начислено</span><h2>{purchaseResult.title}</h2><p className="muted">На баланс добавлено: {purchaseResult.reward}</p><button className="primary wide" onClick={() => setPurchaseResult(null)}>Отлично</button></section></div>}</div>;
 }`;
 
 const starterOfferBlock = `function StarterOffer({ update }: { update: (fn: (state: GameState) => GameState) => void }) {
   const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState('');
+  const statusText = status === 'checking_balance'
+    ? 'Проверяем баланс ⭐…'
+    : status === 'opening_invoice'
+      ? 'Открываем счёт Telegram Stars…'
+      : status === 'checking_payment'
+        ? 'Проверяем оплату…'
+        : status === 'credited'
+          ? 'Начислено!'
+          : status === 'cancelled'
+            ? 'Оплата закрыта. Набор не начислен.'
+            : status === 'failed'
+              ? 'Покупка не завершена. Набор не начислен.'
+              : '';
   const buy = async () => {
     if (pending) return;
     setPending(true);
+    setStatus('checking_balance');
     try {
-      const next = await purchaseShopItem('starter_pack');
+      const next = await purchaseShopItem('starter_pack', setStatus);
       if (!next) {
         haptic('warning');
-        window.Telegram?.WebApp?.showPopup?.({ message: 'Покупка не завершена. Стартовый набор не был начислен.', buttons: [{ type: 'ok' }] });
         return;
       }
       haptic('success');
       update(() => next);
     } finally {
-      setPending(false);
+      window.setTimeout(() => setPending(false), 450);
     }
   };
-  return <div className="modal-backdrop"><section className="release-modal offer comic-card"><span className="badge">одноразово</span><h2>Стартовый набор для быстрого рывка</h2><p className="muted">+5 000 монет и +50 очков науки для уверенного старта.</p><div className="inline-actions"><button className="primary" disabled={pending} onClick={buy}>{pending ? 'Открываем…' : 'Купить ⭐79'}</button><button className="ghost" disabled={pending} onClick={() => update((current) => ({ ...current, offerSeen: true }))}>Не сейчас</button></div></section></div>;
+  return <div className="modal-backdrop"><section className="release-modal offer comic-card"><span className="badge">одноразово</span><h2>Стартовый набор для быстрого рывка</h2><p className="muted">+5 000 монет и +50 очков науки для уверенного старта. Набор начисляется только после успешной оплаты.</p>{statusText && <p className="shop-payment-status">{statusText}</p>}<div className="inline-actions"><button className="primary" disabled={pending} onClick={buy}>{pending ? statusText || 'Открываем…' : 'Купить ⭐79'}</button><button className="ghost" disabled={pending} onClick={() => update((current) => ({ ...current, offerSeen: true }))}>Не сейчас</button></div></section></div>;
 }`;
 
 patchFile('src/App.tsx', (source) => {
