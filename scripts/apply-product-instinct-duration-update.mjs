@@ -41,10 +41,13 @@ patchFile('src/gameData.ts', (source) => source.replace(
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('export const PRODUCT_INSTINCT_DURATION_MS =')) {
-    next = next.replace(
-      'export const GAME_DAY_MS = 72_000;\n',
-      "export const GAME_DAY_MS = 72_000;\nexport const PRODUCT_INSTINCT_ID = 'product-instinct';\nexport const PRODUCT_INSTINCT_DURATION_MS = 7 * 24 * 60 * 60 * 1000;\nexport const PRODUCT_INSTINCT_PATCH_STARTED_AT = Date.parse('2026-05-21T00:00:00.000Z');\n",
-    );
+    const constants = [
+      "export const PRODUCT_INSTINCT_ID = 'product-instinct';",
+      'export const PRODUCT_INSTINCT_DURATION_MS = 7 * 24 * 60 * 60 * 1000;',
+      "export const PRODUCT_INSTINCT_PATCH_STARTED_AT = Date.parse('2026-05-21T00:00:00.000Z');",
+      '',
+    ].join('\n');
+    next = next.replace(/(export\s+const\s+GAME_DAY_MS\s*=\s*72_000;\r?\n)/, `$1${constants}`);
   }
   if (!next.includes('export const PRODUCT_INSTINCT_DURATION_MS =')) {
     throw new Error('product-instinct-duration: failed to add product instinct constants in src/gameLogic.ts');
