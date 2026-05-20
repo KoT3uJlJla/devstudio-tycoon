@@ -64,34 +64,34 @@ function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; on
 
 `;
 
-const scoreLineBlock = String.raw`{result.scoreBreakdown.map((item) => {
-                  const displayLabel = item.label === ` + '`' + `Комбо ${result.combo}` + '`' + ` ? ` + '`' + `Комбо: ${comboLabel(result.combo)}` + '`' + ` : item.label;
-                  const openScoreHelp = () => setSelectedBreakdown(item);
-                  return (
-                    <div
-                      className={
-                        ` + '`' + `score-line ${item.kind}` + '`' + `
-                      }
-                      key={`${item.label}-${item.value}`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Показать детализацию: ${displayLabel}`}
-                      onClick={openScoreHelp}
-                      onPointerDown={openScoreHelp}
-                      onTouchEnd={(event) => { event.preventDefault(); openScoreHelp(); }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          openScoreHelp();
-                        }
-                      }}
-                    >
-                      <span>{displayLabel}</span>
-                      <b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>
-                      <button className="score-line-info" type="button" aria-label={`Пояснить модификатор: ${displayLabel}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openScoreHelp(); }} onPointerDown={(event) => { event.stopPropagation(); openScoreHelp(); }}>?</button>
-                    </div>
-                  );
-                })}`;
+const scoreLineBlock = [
+  "                {result.scoreBreakdown.map((item) => {",
+  "                  const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;",
+  "                  const openScoreHelp = () => setSelectedBreakdown(item);",
+  "                  return (",
+  "                    <div",
+  "                      className={`score-line ${item.kind}`}",
+  "                      key={`${item.label}-${item.value}`}",
+  "                      role=\"button\"",
+  "                      tabIndex={0}",
+  "                      aria-label={`Показать детализацию: ${displayLabel}`}",
+  "                      onClick={openScoreHelp}",
+  "                      onPointerDown={openScoreHelp}",
+  "                      onTouchEnd={(event) => { event.preventDefault(); openScoreHelp(); }}",
+  "                      onKeyDown={(event) => {",
+  "                        if (event.key === 'Enter' || event.key === ' ') {",
+  "                          event.preventDefault();",
+  "                          openScoreHelp();",
+  "                        }",
+  "                      }}",
+  "                    >",
+  "                      <span>{displayLabel}</span>",
+  "                      <b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>",
+  "                      <button className=\"score-line-info\" type=\"button\" aria-label={`Пояснить модификатор: ${displayLabel}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openScoreHelp(); }} onPointerDown={(event) => { event.stopPropagation(); openScoreHelp(); }} onTouchEnd={(event) => { event.preventDefault(); event.stopPropagation(); openScoreHelp(); }}>?</button>",
+  "                    </div>",
+  "                  );",
+  "                })}"
+].join('\n');
 
 function replaceScoreHelpBlock(source) {
   const start = source.indexOf('function scoreExplanation(item: ScoreBreakdownItem)');
