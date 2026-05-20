@@ -241,6 +241,110 @@
   text-shadow: none !important;
 }
 
+/* Release results v8.6: tappable score modifier explanations. */
+.score-breakdown-list .score-line {
+  position: relative;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+}
+
+.score-line-info {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: 8px;
+  border: 3px solid rgba(5, 6, 13, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.42);
+  color: rgba(5, 6, 13, 0.78);
+  font-style: normal;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.nested-modal-backdrop.score-help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.score-help-modal {
+  width: min(100%, 390px);
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  color: var(--text);
+  background: rgba(20, 22, 44, 0.96);
+  border: 3px solid var(--ink);
+  border-radius: 26px;
+  box-shadow: 7px 7px 0 var(--pink), 10px 10px 0 rgba(29, 247, 255, 0.5);
+}
+
+.score-help-modal h3 {
+  font-size: 24px;
+}
+
+.score-help-modal p {
+  line-height: 1.35;
+}
+
+.score-help-influence {
+  width: fit-content;
+  padding: 8px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.score-help-influence.influence-high {
+  background: var(--green);
+}
+
+.score-help-influence.influence-medium {
+  background: var(--cyan);
+}
+
+.score-help-influence.influence-none {
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.score-help-player-note {
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 850;
+}
+
+.score-help-value {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.score-help-value span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.score-help-value b {
+  color: var(--yellow);
+  font-size: 20px;
+}
+
 @media (max-width: 380px) {
   .release-modal .critic-grid.release-critic-grid-2x2,
   .release-modal .critic-grid.animated-critics {
