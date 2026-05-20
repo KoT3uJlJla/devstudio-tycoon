@@ -59,7 +59,7 @@ const SHOP_ITEMS = {
   research_boost: { title: "Ускорение науки", costStars: 75, reward: { rp: 100 } },
   rename_studio: { title: "Переименование студии", costStars: 25, reward: {} },
   refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },
-  time_skip: { title: "Ускорение разработки", costStars: 25, reward: {} },
+  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: {} },
   promotion: { title: "Продвижение релиза", costStars: 35, reward: {} },
   product_instinct: { title: "Продуктовое чутьё", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
 };
