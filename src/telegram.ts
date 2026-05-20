@@ -6,6 +6,7 @@ declare global {
         expand?: () => void;
         close?: () => void;
         shareToStory?: (mediaUrl: string, params?: { text?: string; widget_link?: { url: string; name?: string } }) => void;
+        isVersionAtLeast?: (version: string) => boolean;
         openTelegramLink?: (url: string) => void;
         showPopup?: (params: { title?: string; message: string; buttons?: Array<{ type: string; text?: string }> }) => void;
         HapticFeedback?: {
@@ -45,7 +46,7 @@ declare global {
 }
 
 const OFFICIAL_BOT_URL = 'https://t.me/DevTycoon_bot';
-const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.svg';
+const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.png';
 
 function absoluteAssetUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
@@ -73,6 +74,13 @@ function referralUrl() {
 
 function referralShareText(refUrl: string) {
   return `У тебя не получится сделать игру лучше моей😼\nМожешь зайти и убедиться в этом сам\n\n${refUrl}`;
+}
+
+function canShareToStory() {
+  const webApp = window.Telegram?.WebApp;
+  if (!webApp?.shareToStory) return false;
+  if (typeof webApp.isVersionAtLeast === 'function') return webApp.isVersionAtLeast('7.8');
+  return true;
 }
 
 function showStoryPlaceholder(text: string, refUrl: string) {
@@ -114,9 +122,9 @@ export function shareRelease(text: string, payload: SharePayload = {}) {
 
   if (isStoryShare) {
     const mediaUrl = absoluteAssetUrl(payload.imageUrl || SHARE_RELEASE_STORY_IMAGE);
-    if (window.Telegram?.WebApp?.shareToStory) {
+    if (canShareToStory()) {
       safeTelegramCall(() => window.Telegram?.WebApp?.shareToStory?.(mediaUrl, {
-        text: payload.storyText ?? text.slice(0, 180),
+        text: (payload.storyText ?? text).slice(0, 200),
         widget_link: { url: refUrl, name: 'Играть' },
       }));
       return;
