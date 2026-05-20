@@ -6,12 +6,16 @@ function patchFile(path, patcher) {
   if (next !== source) writeFileSync(path, next);
 }
 
-function replaceBetween(source, startNeedle, endNeedle, replacement) {
-  const start = source.indexOf(startNeedle);
-  if (start === -1) return source;
-  const end = source.indexOf(endNeedle, start);
-  if (end === -1 || end <= start) return source;
-  return source.slice(0, start) + replacement.trimEnd() + '\n\n' + source.slice(end);
+function insertAfterRatingHero(source) {
+  if (source.includes('<TonWalletPanel />')) return source;
+  const ratingStart = source.indexOf('function RatingScreen(');
+  if (ratingStart === -1) throw new Error('ton-wallet-update: RatingScreen was not found in src/App.tsx');
+  const heroStart = source.indexOf('<section className="rating-hero comic-panel">', ratingStart);
+  if (heroStart === -1) throw new Error('ton-wallet-update: rating hero was not found in src/App.tsx');
+  const heroEnd = source.indexOf('</section>', heroStart);
+  if (heroEnd === -1) throw new Error('ton-wallet-update: rating hero end was not found in src/App.tsx');
+  const insertAt = heroEnd + '</section>'.length;
+  return `${source.slice(0, insertAt)}\n    <TonWalletPanel />${source.slice(insertAt)}`;
 }
 
 const tonWalletComponent = `function maskTonWallet(address: string) {
@@ -88,23 +92,26 @@ function TonWalletPanel() {
 
 patchFile('src/App.tsx', (source) => {
   let next = source;
-  if (!next.includes("getTonWallet")) {
+
+  const backendImport = "import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet } from './backendClient';";
+  if (!next.includes(backendImport)) {
     if (next.includes("import { purchaseShopItem } from './backendClient';")) {
-      next = next.replace("import { purchaseShopItem } from './backendClient';", "import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet } from './backendClient';");
-    } else {
-      next = next.replace("import { haptic, initTelegram, shareRelease } from './telegram';", "import { haptic, initTelegram, shareRelease } from './telegram';\nimport { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet } from './backendClient';");
+      next = next.replace("import { purchaseShopItem } from './backendClient';", backendImport);
+    } else if (!next.includes("from './backendClient';")) {
+      next = next.replace("import { haptic, initTelegram, shareRelease } from './telegram';", "import { haptic, initTelegram, shareRelease } from './telegram';\n" + backendImport);
     }
   }
 
   if (!next.includes('function TonWalletPanel()')) {
-    next = next.replace('function RatingScreen({ state, update }', `${tonWalletComponent}\n\nfunction RatingScreen({ state, update }`);
+    const marker = 'function RatingScreen(';
+    if (!next.includes(marker)) throw new Error('ton-wallet-update: failed to find RatingScreen insertion point in src/App.tsx');
+    next = next.replace(marker, `${tonWalletComponent}\n\n${marker}`);
   }
 
-  if (!next.includes('<TonWalletPanel />')) {
-    next = next.replace(
-      '<section className="rating-hero comic-panel"><p className="eyebrow">Недельный топ-5</p><h2>Рейтинг лучших игр за неделю</h2><p className="muted">Рейтинг складывается из силы свежих релизов, среднего качества недели, дохода живых игр, ритма релизов, импульса студии и её уровня.</p></section>',
-      '<section className="rating-hero comic-panel"><p className="eyebrow">Недельный топ-5</p><h2>Рейтинг лучших игр за неделю</h2><p className="muted">Рейтинг складывается из силы свежих релизов, среднего качества недели, дохода живых игр, ритма релизов, импульса студии и её уровня.</p></section>\n    <TonWalletPanel />',
-    );
+  next = insertAfterRatingHero(next);
+
+  if (!next.includes('TON-кошелёк') || !next.includes('<TonWalletPanel />')) {
+    throw new Error('ton-wallet-update: TON wallet UI was not inserted into src/App.tsx');
   }
 
   return next;
