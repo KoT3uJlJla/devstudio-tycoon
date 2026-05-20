@@ -30,12 +30,16 @@
 .release-score-top .score-stage {
   position: relative;
   isolation: isolate;
-  padding: 18px 16px;
-  border-radius: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 20px;
+  border-radius: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.42);
   background: rgba(242, 244, 255, 0.92) !important;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.44);
   color: rgba(20, 22, 34, 0.96) !important;
+  overflow: hidden;
 }
 
 .release-score-top .score-stage .big-score,
@@ -47,9 +51,23 @@
 
 .release-score-top .score-stage .big-score {
   display: block;
-  font-size: clamp(48px, 15vw, 76px);
-  line-height: 0.95;
-  letter-spacing: -0.08em;
+  font-size: clamp(54px, 16vw, 82px);
+  line-height: 0.92;
+  letter-spacing: -0.075em;
+}
+
+.release-score-top .score-stage .quality {
+  font-size: clamp(18px, 5vw, 24px);
+  line-height: 1.12;
+  font-weight: 1000;
+}
+
+.release-score-top .score-stage .critic-average-note {
+  max-width: 34ch;
+  font-size: clamp(15px, 4.2vw, 18px);
+  line-height: 1.28;
+  font-weight: 850;
+  opacity: 0.9;
 }
 
 .release-score-top .score-suspense {
@@ -91,7 +109,8 @@
 }
 
 .release-modal .critic-score-bad,
-.release-score-top .critic-score-bad {
+.release-score-top .critic-score-bad,
+.release-score-top.critic-score-bad .score-stage {
   background: rgba(255, 206, 213, 0.92) !important;
   border-color: rgba(190, 76, 92, 0.34) !important;
   box-shadow: 0 12px 24px rgba(171, 67, 84, 0.14) !important;
@@ -99,7 +118,8 @@
 }
 
 .release-modal .critic-score-low,
-.release-score-top .critic-score-low {
+.release-score-top .critic-score-low,
+.release-score-top.critic-score-low .score-stage {
   background: rgba(255, 213, 160, 0.92) !important;
   border-color: rgba(205, 123, 35, 0.34) !important;
   box-shadow: 0 12px 24px rgba(186, 104, 25, 0.14) !important;
@@ -107,7 +127,8 @@
 }
 
 .release-modal .critic-score-mid,
-.release-score-top .critic-score-mid {
+.release-score-top .critic-score-mid,
+.release-score-top.critic-score-mid .score-stage {
   background: rgba(190, 221, 249, 0.92) !important;
   border-color: rgba(66, 123, 181, 0.30) !important;
   box-shadow: 0 12px 24px rgba(52, 105, 162, 0.14) !important;
@@ -115,7 +136,8 @@
 }
 
 .release-modal .critic-score-good,
-.release-score-top .critic-score-good {
+.release-score-top .critic-score-good,
+.release-score-top.critic-score-good .score-stage {
   background: rgba(185, 232, 194, 0.92) !important;
   border-color: rgba(54, 148, 76, 0.32) !important;
   box-shadow: 0 12px 24px rgba(42, 138, 70, 0.15) !important;
@@ -123,7 +145,8 @@
 }
 
 .release-modal .critic-score-luxury,
-.release-score-top .critic-score-luxury {
+.release-score-top .critic-score-luxury,
+.release-score-top.critic-score-luxury .score-stage {
   position: relative;
   overflow: hidden;
   background: rgba(238, 211, 117, 0.96) !important;
@@ -163,6 +186,48 @@
   z-index: 1;
 }
 
+/* Release results v8.3: final score card should use the same tone logic as press cards. */
+.release-score-top .score-stage::before,
+.release-score-top .score-stage::after {
+  display: none !important;
+  content: none !important;
+}
+
+.release-score-top .score-stage.score-stage {
+  background-image: none !important;
+  text-shadow: none !important;
+}
+
+.release-score-top.critic-score-bad .score-stage,
+.release-score-top .score-stage.critic-score-bad {
+  background-color: rgba(255, 206, 213, 0.94) !important;
+  color: #56242e !important;
+}
+
+.release-score-top.critic-score-low .score-stage,
+.release-score-top .score-stage.critic-score-low {
+  background-color: rgba(255, 213, 160, 0.94) !important;
+  color: #5a3410 !important;
+}
+
+.release-score-top.critic-score-mid .score-stage,
+.release-score-top .score-stage.critic-score-mid {
+  background-color: rgba(190, 221, 249, 0.94) !important;
+  color: #173757 !important;
+}
+
+.release-score-top.critic-score-good .score-stage,
+.release-score-top .score-stage.critic-score-good {
+  background-color: rgba(185, 232, 194, 0.94) !important;
+  color: #173f22 !important;
+}
+
+.release-score-top.critic-score-luxury .score-stage,
+.release-score-top .score-stage.critic-score-luxury {
+  background-color: rgba(238, 211, 117, 0.97) !important;
+  color: #3f2b05 !important;
+}
+
 @media (max-width: 380px) {
   .release-modal .critic-grid.release-critic-grid-2x2,
   .release-modal .critic-grid.animated-critics {
@@ -172,5 +237,9 @@
   .release-modal .critic-card {
     min-height: 122px;
     padding: 11px;
+  }
+
+  .release-score-top .score-stage {
+    padding: 22px 18px;
   }
 }
