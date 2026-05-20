@@ -47,7 +47,7 @@ function patchServerIndexShopItems() {
   } catch {
     return;
   }
-  if (source.includes('coins_100k') && source.includes('costStars: 79') && source.includes('reward: { rp: 50 }')) return;
+  if (source.includes('coins_100k') && source.includes('costStars: 79') && source.includes('product_instinct: { title: "Продуктовое чутьё", costStars: 199')) return;
   const shopItems = [
     'const SHOP_ITEMS = {',
     '  starter_pack: { title: "Стартовый набор", costStars: 79, reward: { coins: 5000, rp: 50, offerSeen: true } },',
@@ -61,7 +61,7 @@ function patchServerIndexShopItems() {
     '  refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },',
     '  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: {} },',
     '  promotion: { title: "Продвижение релиза", costStars: 35, reward: {} },',
-    '  product_instinct: { title: "Продуктовое чутьё", costStars: 299, reward: { unlockResearchId: "product-instinct" } },',
+    '  product_instinct: { title: "Продуктовое чутьё на 7 дней", costStars: 199, reward: { unlockResearchId: "product-instinct" } },',
     '};',
   ].join('\n');
   const next = source.replace(/const SHOP_ITEMS = \{[\s\S]*?\n\};\n\nfunction safeTimingEqual/, `${shopItems}\n\nfunction safeTimingEqual`);
