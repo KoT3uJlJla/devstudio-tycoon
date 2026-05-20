@@ -19,6 +19,10 @@ type InvoicePayload = {
   invoiceLink?: string;
 };
 
+type TelegramWebAppWithInvoice = {
+  openInvoice?: (url: string, callback?: (status: string) => void) => void;
+};
+
 type DevelopmentEndpoint = 'skip' | 'promote' | 'start' | 'release' | 'resolve-event';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -96,7 +100,7 @@ async function createInvoice(itemId: string) {
 
 function openTelegramInvoice(invoiceLink: string) {
   return new Promise<string>((resolve) => {
-    const webApp = window.Telegram?.WebApp as typeof window.Telegram.WebApp & { openInvoice?: (url: string, callback?: (status: string) => void) => void };
+    const webApp = window.Telegram?.WebApp as TelegramWebAppWithInvoice | undefined;
     try {
       if (webApp?.openInvoice) {
         webApp.openInvoice(invoiceLink, (status) => resolve(status || 'closed'));
