@@ -1,4 +1,8 @@
-.release-modal-v8 .score-stage{order:10;margin:10px 0 12px;padding:14px 12px;border:2px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(255,255,255,.06)}
+.release-modal-v8 .score-stage{order:10;margin:10px 0 12px;padding:18px 16px 16px;border:3px solid var(--ink);border-radius:22px;background:rgba(12,15,38,.92);box-shadow:6px 6px 0 #02030a,9px 9px 0 rgba(29,247,255,.22);position:relative;overflow:hidden}
+.release-modal-v8 .score-stage::after{content:'';position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,.12) 0 1px,transparent 1px);background-size:10px 10px;opacity:.08}
+.release-modal-v8 .score-stage .big-score{font-size:clamp(56px,18vw,76px)!important;line-height:.92!important;color:var(--yellow)!important;text-shadow:4px 4px 0 var(--pink),7px 7px 0 var(--ink)!important;position:relative;z-index:2}
+.release-modal-v8 .score-stage .quality{color:var(--cyan)!important;font-weight:850!important;font-size:15px!important;position:relative;z-index:2}
+.release-modal-v8 .score-stage .muted{color:rgba(207,214,255,.82)!important;font-size:13px!important;line-height:1.45!important;position:relative;z-index:2}
 .release-modal-v8 .critic-grid{order:20;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;max-height:none!important;overflow:visible!important}
 .release-modal-v8 .score-suspense{order:10}
 .release-modal-v8 .score-breakdown,.release-modal-v8 .reward-row,.release-modal-v8 .life-result,.release-modal-v8 .bonus-list,.release-modal-v8 .release-actions{order:30}
