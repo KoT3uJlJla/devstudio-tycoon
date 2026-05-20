@@ -245,13 +245,14 @@ export async function getTonWallet() {
 }
 
 export async function saveTonWallet(address: string): Promise<TonWalletResult> {
+  const submittedAddress = address.trim().replace(/\s+/g, '');
   const result = await requestJson('/api/economy/ton-wallet', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify({ address: submittedAddress }),
   });
   if (result.status >= 200 && result.status < 300 && result.payload?.ok) {
-    return { ok: true, address: economyWallet(result.payload) };
+    return { ok: true, address: economyWallet(result.payload) || submittedAddress };
   }
   return { ok: false, address: '', error: tonWalletError(result.status, result.payload) };
 }
