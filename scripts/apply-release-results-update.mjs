@@ -65,6 +65,18 @@ patchFile('src/App.tsx', (source) => {
     "<div className={`${step > index ? 'critic-card shown' : 'critic-card'} ${step > index ? criticToneClass(critic.score) : ''}`} key={critic.name}>"
   );
 
+  if (!next.includes('saveGame(nextState);')) {
+    next = next.replace(
+      "  const update = (recipe: (current: GameState) => GameState) => setState((current) => (current ? recipe(ensureDailyState(current)) : current));",
+      `  const update = (recipe: (current: GameState) => GameState) => setState((current) => {
+    if (!current) return current;
+    const nextState = recipe(ensureDailyState(current));
+    window.setTimeout(() => saveGame(nextState), 0);
+    return nextState;
+  });`
+    );
+  }
+
   const activePanelPattern = /function ActiveDevelopmentPanel\([\s\S]*?\nfunction EconomyPreview/;
   const activePanelNew = `function ActiveDevelopmentPanel({ project, state, update }: { project: Project; state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
   const [busyAction, setBusyAction] = useState<'skip' | 'promote' | null>(null);
@@ -128,6 +140,10 @@ function EconomyPreview`;
 
   if (!next.includes('runDevelopmentAction') || !next.includes('Ускорить через Telegram')) {
     throw new Error('release-results-update: failed to patch backend development actions in src/App.tsx');
+  }
+
+  if (!next.includes('saveGame(nextState);')) {
+    throw new Error('release-results-update: failed to patch immediate update saves in src/App.tsx');
   }
 
   return next;
