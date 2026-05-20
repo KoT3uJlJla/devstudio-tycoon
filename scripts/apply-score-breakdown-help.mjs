@@ -73,16 +73,19 @@ function replaceScoreHelpBlock(source) {
 
 function patchScoreLines(source) {
   let next = source.replaceAll('<i className="score-line-info" aria-hidden="true">i</i>', '<i className="score-line-info" aria-hidden="true">?</i>');
+
+  next = next.replace(
+    '<button className={`score-line ${item.kind}`} key={`${item.label}-${item.value}`} onClick={() => setSelectedBreakdown(item)}>',
+    '<button type="button" className={`score-line ${item.kind}`} key={`${item.label}-${item.value}`} onClick={() => setSelectedBreakdown(item)} onPointerDown={() => setSelectedBreakdown(item)} onTouchEnd={(event) => { event.preventDefault(); setSelectedBreakdown(item); }}>',
+  );
+
   if (!next.includes('score-line-info')) {
     next = next.replaceAll(
       `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>`,
       `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">?</i>`,
     );
   }
-  next = next.replaceAll(
-    '<button className={`score-line ${item.kind}`} key={`${item.label}-${item.value}`} onClick={() => setSelectedBreakdown(item)}>',
-    '<button type="button" className={`score-line ${item.kind}`} key={`${item.label}-${item.value}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedBreakdown(item); }}>',
-  );
+
   return next;
 }
 
@@ -93,8 +96,8 @@ patchFile('src/App.tsx', (source) => {
   if (!next.includes('Детализация оценки') || !next.includes('Сильное влияние игрока') || !next.includes('Не зависит от игрока')) {
     console.warn('score-breakdown-help: warning: explanation text was not inserted into App.tsx');
   }
-  if (!next.includes('score-line-info')) {
-    console.warn('score-breakdown-help: warning: score-line help icon was not inserted into App.tsx');
+  if (!next.includes('onPointerDown={() => setSelectedBreakdown(item)}') || !next.includes('onTouchEnd={(event) => { event.preventDefault(); setSelectedBreakdown(item); }}') || !next.includes('score-line-info')) {
+    console.warn('score-breakdown-help: warning: clickable score-line help UI was not inserted into App.tsx');
   }
 
   return next;
