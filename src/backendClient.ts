@@ -14,6 +14,8 @@ type InvoicePayload = {
   invoice?: { invoiceId?: string; status?: string };
 };
 
+type InvoiceStatePayload = InvoicePayload & BackendStatePayload;
+
 type TelegramWebAppWithInvoice = NonNullable<Window['Telegram']>['WebApp'] & {
   openInvoice?: (url: string, callback: (status: string) => void) => void;
 };
@@ -108,21 +110,30 @@ async function createInvoice(itemId: string) {
     .catch(() => null);
 }
 
+async function fetchInvoicePayload(invoiceId: string) {
+  if (!canUseBackend()) return null;
+  return fetch(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, {
+    headers: { Authorization: `tma ${initData()}` },
+  })
+    .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
+    .catch(() => null) as Promise<InvoiceStatePayload | null>;
+}
+
 async function pollInvoicePaid(invoiceId: string, attempts = 18) {
   if (!canUseBackend()) return false;
   for (let index = 0; index < attempts; index += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, index < 4 ? 900 : 1500));
-    const payload = await fetch(`${API_URL}/api/stars/invoice/${encodeURIComponent(invoiceId)}`, {
-      headers: { Authorization: `tma ${initData()}` },
-    })
-      .then(async (response) => (response.ok ? await response.json().catch(() => null) : null))
-      .catch(() => null) as InvoicePayload | null;
-
+    const payload = await fetchInvoicePayload(invoiceId);
     const status = payload?.invoice?.status;
     if (status === 'paid') return true;
     if (status && status !== 'pending') return false;
   }
   return false;
+}
+
+async function paidInvoiceState(invoiceId: string) {
+  const payload = await fetchInvoicePayload(invoiceId);
+  return stateFromPayload(payload);
 }
 
 async function payWithTelegramStars(itemId: string) {
@@ -147,6 +158,20 @@ export async function runDevelopmentAction(endpoint: DevelopmentEndpoint, body: 
     if (!invoiceId) return null;
     const retryPayload = await postJson(`/api/development/${endpoint}`, { ...body, invoiceId });
     return stateFromPayload(retryPayload, endpoint);
+  }
+
+  return null;
+}
+
+export async function purchaseShopItem(itemId: string) {
+  const payload = await postJson('/api/economy/shop/purchase', { itemId });
+  const state = stateFromPayload(payload);
+  if (state) return state;
+
+  if (payload?.error === 'not_enough_stars') {
+    const invoiceId = await payWithTelegramStars(itemId);
+    if (!invoiceId) return null;
+    return await paidInvoiceState(invoiceId);
   }
 
   return null;
