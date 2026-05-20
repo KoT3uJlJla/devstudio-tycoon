@@ -21,6 +21,7 @@ type TelegramWebAppWithInvoice = NonNullable<Window['Telegram']>['WebApp'] & {
 };
 
 type DevelopmentEndpoint = 'start' | 'skip' | 'promote' | 'release' | 'resolve-event';
+export type ShopPurchaseStatus = 'checking_balance' | 'opening_invoice' | 'checking_payment' | 'credited' | 'cancelled' | 'failed';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
@@ -136,15 +137,22 @@ async function paidInvoiceState(invoiceId: string) {
   return stateFromPayload(payload);
 }
 
-async function payWithTelegramStars(itemId: string) {
+async function payWithTelegramStars(itemId: string, onStatus?: (status: ShopPurchaseStatus) => void) {
+  onStatus?.('opening_invoice');
   const invoice = await createInvoice(itemId);
   if (!invoice) {
+    onStatus?.('failed');
     window.Telegram?.WebApp?.showPopup?.({ message: 'Не удалось открыть инвойс Telegram Stars. Попробуй ещё раз позже.', buttons: [{ type: 'ok' }] });
     return null;
   }
   const status = await openInvoice(invoice.invoiceLink);
-  if (status === 'cancelled' || status === 'failed') return null;
+  if (status === 'cancelled' || status === 'failed' || status === 'closed') {
+    onStatus?.('cancelled');
+    return null;
+  }
+  onStatus?.('checking_payment');
   const paid = await pollInvoicePaid(invoice.invoiceId);
+  if (!paid) onStatus?.('failed');
   return paid ? invoice.invoiceId : null;
 }
 
@@ -163,17 +171,26 @@ export async function runDevelopmentAction(endpoint: DevelopmentEndpoint, body: 
   return null;
 }
 
-export async function purchaseShopItem(itemId: string) {
+export async function purchaseShopItem(itemId: string, onStatus?: (status: ShopPurchaseStatus) => void) {
+  onStatus?.('checking_balance');
   const payload = await postJson('/api/economy/shop/purchase', { itemId });
   const state = stateFromPayload(payload);
-  if (state) return state;
-
-  if (payload?.error === 'not_enough_stars') {
-    const invoiceId = await payWithTelegramStars(itemId);
-    if (!invoiceId) return null;
-    return await paidInvoiceState(invoiceId);
+  if (state) {
+    onStatus?.('credited');
+    return state;
   }
 
+  if (payload?.error === 'not_enough_stars') {
+    const invoiceId = await payWithTelegramStars(itemId, onStatus);
+    if (!invoiceId) return null;
+    onStatus?.('checking_payment');
+    const invoiceState = await paidInvoiceState(invoiceId);
+    if (invoiceState) onStatus?.('credited');
+    else onStatus?.('failed');
+    return invoiceState;
+  }
+
+  onStatus?.('failed');
   return null;
 }
 
