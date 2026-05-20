@@ -17,7 +17,7 @@ function replaceBetween(source, startNeedle, endNeedle, replacement) {
 const tonWalletComponent = `function maskTonWallet(address: string) {
   const clean = address.trim();
   if (clean.length <= 12) return clean;
-  return \`${clean.slice(0, 5)}…${clean.slice(-5)}\`;
+  return clean.slice(0, 5) + '…' + clean.slice(-5);
 }
 
 function isLikelyTonWallet(address: string) {
