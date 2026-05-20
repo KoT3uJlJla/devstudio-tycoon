@@ -15,11 +15,16 @@ function replaceBetween(source, startNeedle, endNeedle, replacement) {
 }
 
 function ensureGameLogicImport(source, name) {
-  const importEnd = source.indexOf("} from './gameLogic';");
-  if (importEnd !== -1 && source.slice(0, importEnd).includes(name)) return source;
-  const marker = "  nextStudioUpgradeCost,\n} from './gameLogic';";
-  if (!source.includes(marker)) throw new Error(`product-instinct-duration: failed to add ${name} import`);
-  return source.replace(marker, `  nextStudioUpgradeCost,\n  ${name},\n} from './gameLogic';`);
+  const importRegex = /import \{([\s\S]*?)\} from '\.\/gameLogic';/;
+  const match = source.match(importRegex);
+  if (!match) throw new Error(`product-instinct-duration: failed to find gameLogic import for ${name}`);
+  const names = match[1]
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!names.includes(name)) names.push(name);
+  const nextImport = `import {\n${names.map((item) => `  ${item},`).join('\n')}\n} from './gameLogic';`;
+  return source.replace(importRegex, nextImport);
 }
 
 patchFile('src/types.ts', (source) => {
