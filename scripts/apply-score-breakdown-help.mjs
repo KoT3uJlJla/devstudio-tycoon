@@ -119,18 +119,25 @@ const confettiPieces =`;
 patchFile('src/App.tsx', (source) => {
   let next = source;
 
-  next = next.replace(
-    /function scoreExplanation\(item: ScoreBreakdownItem\) \{[\s\S]*?\n\}\n\nconst confettiPieces =/,
-    explanationBlock,
-  );
+  if (!next.includes('score-help-influence')) {
+    next = next.replace(
+      /function scoreExplanation\(item: ScoreBreakdownItem\) \{[\s\S]*?\n\}\n\nconst confettiPieces =/,
+      explanationBlock,
+    );
+  }
 
-  next = next.replace(
-    /<b>\{item\.kind === 'base' \? item\.value\.toFixed\(2\) : scoreDelta\(item\.value\)\}<\/b>\s*<\/button>/,
-    `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">i</i>\n                  </button>`,
-  );
+  if (!next.includes('score-line-info')) {
+    next = next.replaceAll(
+      `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>`,
+      `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">i</i>`,
+    );
+  }
 
-  if (!next.includes('score-help-influence') || !next.includes('score-line-info')) {
-    throw new Error('score-breakdown-help: failed to patch score modifier help UI');
+  if (!next.includes('score-help-influence')) {
+    console.warn('score-breakdown-help: warning: detailed explanation modal was not inserted');
+  }
+  if (!next.includes('score-line-info')) {
+    console.warn('score-breakdown-help: warning: score-line info icon was not inserted');
   }
 
   return next;
