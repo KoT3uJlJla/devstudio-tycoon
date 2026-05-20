@@ -67,28 +67,23 @@ function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; on
 const scoreLineBlock = [
   "                {result.scoreBreakdown.map((item) => {",
   "                  const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;",
-  "                  const openScoreHelp = () => setSelectedBreakdown(item);",
+  "                  const info = scoreExplanation(item);",
+  "                  const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';",
   "                  return (",
-  "                    <div",
-  "                      className={`score-line ${item.kind}`}",
-  "                      key={`${item.label}-${item.value}`}",
-  "                      role=\"button\"",
-  "                      tabIndex={0}",
-  "                      aria-label={`Показать детализацию: ${displayLabel}`}",
-  "                      onClick={openScoreHelp}",
-  "                      onPointerDown={openScoreHelp}",
-  "                      onTouchEnd={(event) => { event.preventDefault(); openScoreHelp(); }}",
-  "                      onKeyDown={(event) => {",
-  "                        if (event.key === 'Enter' || event.key === ' ') {",
-  "                          event.preventDefault();",
-  "                          openScoreHelp();",
-  "                        }",
-  "                      }}",
-  "                    >",
-  "                      <span>{displayLabel}</span>",
-  "                      <b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>",
-  "                      <button className=\"score-line-info\" type=\"button\" aria-label={`Пояснить модификатор: ${displayLabel}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openScoreHelp(); }} onPointerDown={(event) => { event.stopPropagation(); openScoreHelp(); }} onTouchEnd={(event) => { event.preventDefault(); event.stopPropagation(); openScoreHelp(); }}>?</button>",
-  "                    </div>",
+  "                    <details className={`score-line-details ${item.kind}`} key={`${item.label}-${item.value}`}> ",
+  "                      <summary className={`score-line ${item.kind}`}> ",
+  "                        <span>{displayLabel}</span>",
+  "                        <b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>",
+  "                        <span className=\"score-line-info\" aria-hidden=\"true\">?</span>",
+  "                      </summary>",
+  "                      <div className=\"score-inline-help\">",
+  "                        <strong>{info.title}</strong>",
+  "                        <p>{info.text}</p>",
+  "                        <em className={'score-help-influence influence-' + info.tone}>{influenceLabel}</em>",
+  "                        <p>{info.influence}</p>",
+  "                        <small>{info.signText}</small>",
+  "                      </div>",
+  "                    </details>",
   "                  );",
   "                })}"
 ].join('\n');
@@ -102,17 +97,24 @@ function replaceScoreHelpBlock(source) {
 
 function replaceScoreLines(source) {
   let next = source;
-  const start = next.indexOf('{result.scoreBreakdown.map((item) => (');
-  if (start !== -1) {
+  const oldStart = next.indexOf('{result.scoreBreakdown.map((item) => (');
+  if (oldStart !== -1) {
     const endMarker = '\n                ))}';
-    const end = next.indexOf(endMarker, start);
-    if (end !== -1) {
-      return next.slice(0, start) + scoreLineBlock + next.slice(end + endMarker.length);
-    }
+    const oldEnd = next.indexOf(endMarker, oldStart);
+    if (oldEnd !== -1) return next.slice(0, oldStart) + scoreLineBlock + next.slice(oldEnd + endMarker.length);
   }
+
+  const patchedStart = next.indexOf('{result.scoreBreakdown.map((item) => {');
+  if (patchedStart !== -1) {
+    const patchedEndMarker = '\n                })}';
+    const patchedEnd = next.indexOf(patchedEndMarker, patchedStart);
+    if (patchedEnd !== -1) return next.slice(0, patchedStart) + scoreLineBlock + next.slice(patchedEnd + patchedEndMarker.length);
+  }
+
   return next
-    .replaceAll('<i className="score-line-info" aria-hidden="true">i</i>', '<button className="score-line-info" type="button">?</button>')
-    .replaceAll('<i className="score-line-info" aria-hidden="true">?</i>', '<button className="score-line-info" type="button">?</button>');
+    .replaceAll('<i className="score-line-info" aria-hidden="true">i</i>', '<span className="score-line-info" aria-hidden="true">?</span>')
+    .replaceAll('<i className="score-line-info" aria-hidden="true">?</i>', '<span className="score-line-info" aria-hidden="true">?</span>')
+    .replaceAll('<button className="score-line-info" type="button">?</button>', '<span className="score-line-info" aria-hidden="true">?</span>');
 }
 
 patchFile('src/App.tsx', (source) => {
@@ -122,8 +124,8 @@ patchFile('src/App.tsx', (source) => {
   if (!next.includes('Детализация оценки') || !next.includes('Сильное влияние игрока') || !next.includes('Не зависит от игрока')) {
     console.warn('score-breakdown-help: warning: explanation text was not inserted into App.tsx');
   }
-  if (!next.includes('onPointerDown={openScoreHelp}') || !next.includes('score-line-info')) {
-    console.warn('score-breakdown-help: warning: clickable modifier help button was not inserted into App.tsx');
+  if (!next.includes('score-line-details') || !next.includes('score-inline-help')) {
+    console.warn('score-breakdown-help: warning: native details modifier help UI was not inserted into App.tsx');
   }
 
   return next;
