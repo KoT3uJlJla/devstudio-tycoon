@@ -39,6 +39,43 @@ const originalExpressJson = originalExpress.json.bind(originalExpress);
 const rateBuckets = new Map();
 const requestQueues = new Map();
 
+function patchServerIndexShopItems() {
+  const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
+  let source = '';
+  try {
+    source = readFileSync(indexPath, 'utf8');
+  } catch {
+    return;
+  }
+  if (source.includes('coins_100k') && source.includes('costStars: 79') && source.includes('reward: { rp: 50 }')) return;
+  const shopItems = [
+    'const SHOP_ITEMS = {',
+    '  starter_pack: { title: "Стартовый набор", costStars: 79, reward: { coins: 5000, rp: 50, offerSeen: true } },',
+    '  coins_5k: { title: "Набор монет 5 000", costStars: 39, reward: { coins: 5000 } },',
+    '  coins_25k: { title: "Набор монет 25 000", costStars: 149, reward: { coins: 25000 } },',
+    '  coins_100k: { title: "Набор монет 100 000", costStars: 399, reward: { coins: 100000 } },',
+    '  coins_small: { title: "Набор монет 5 000", costStars: 39, reward: { coins: 5000 } },',
+    '  coins_medium: { title: "Набор монет 25 000", costStars: 149, reward: { coins: 25000 } },',
+    '  research_boost: { title: "Ускорение науки", costStars: 69, reward: { rp: 50 } },',
+    '  rename_studio: { title: "Переименование студии", costStars: 15, reward: {} },',
+    '  refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },',
+    '  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: {} },',
+    '  promotion: { title: "Продвижение релиза", costStars: 35, reward: {} },',
+    '  product_instinct: { title: "Продуктовое чутьё", costStars: 299, reward: { unlockResearchId: "product-instinct" } },',
+    '};',
+  ].join('\n');
+  const next = source.replace(/const SHOP_ITEMS = \{[\s\S]*?\n\};\n\nfunction safeTimingEqual/, `${shopItems}\n\nfunction safeTimingEqual`);
+  if (next === source) {
+    console.warn('server-hardening: shop item patch was not applied');
+    return;
+  }
+  try {
+    writeFileSync(indexPath, next);
+  } catch (error) {
+    console.warn('server-hardening: failed to write shop item patch', error?.message || error);
+  }
+}
+
 function patchServerIndexForDevelopmentInvoices() {
   const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
   let source = '';
@@ -108,6 +145,7 @@ function patchServerIndexForDevelopmentInvoices() {
   }
 }
 
+patchServerIndexShopItems();
 patchServerIndexForDevelopmentInvoices();
 
 function stableHash(value) {
