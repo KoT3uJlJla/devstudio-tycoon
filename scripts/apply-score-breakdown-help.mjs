@@ -18,84 +18,26 @@ const scoreHelpBlock = String.raw`function scoreExplanation(item: ScoreBreakdown
         : 'Сейчас этот фактор почти нейтрален.';
 
   const details: Record<string, { text: string; influence: string; tone: 'high' | 'medium' | 'none' }> = {
-    'Фокус разработки': {
-      text: 'Показывает, насколько хорошо распределён фокус между этапами разработки под выбранный проект.',
-      influence: 'Ваши решения сильно влияют на этот модификатор.',
-      tone: 'high',
-    },
-    'Чеклист тестирования': {
-      text: 'Бонус за процессы контроля качества: меньше багов, стабильнее релиз.',
-      influence: 'Вы можете влиять на него через исследования и развитие студии.',
-      tone: 'medium',
-    },
-    'Ощущение от игры': {
-      text: 'Отвечает за отзывчивость, темп, анимации и общее чувство управления.',
-      influence: 'Вы можете влиять на него через исследования и фокус разработки.',
-      tone: 'medium',
-    },
-    'Звуковая лаборатория': {
-      text: 'Учитывает качество звука, музыки и атмосферы, которую они создают.',
-      influence: 'Вы можете влиять на него через исследования.',
-      tone: 'medium',
-    },
-    'Продвижение': {
-      text: 'Показывает эффект маркетингового продвижения перед релизом.',
-      influence: 'Ваше решение напрямую влияет на этот модификатор.',
-      tone: 'high',
-    },
-    'Решения разработки': {
-      text: 'Сумма последствий событий, которые случились во время разработки.',
-      influence: 'Ваши решения во время событий напрямую влияют на этот модификатор.',
-      tone: 'high',
-    },
-    'Импульс студии': {
-      text: 'Отражает общий темп студии: прошлые релизы, опыт и накопленную динамику.',
-      influence: 'Вы влияете на него постепенно через регулярные и сильные релизы.',
-      tone: 'medium',
-    },
-    'Настроение аудитории': {
-      text: 'Показывает, насколько текущая аудитория готова тепло принять такой проект.',
-      influence: 'Вы можете влиять на него косвенно через выбор жанра, сеттинга и скан аудитории.',
-      tone: 'medium',
-    },
-    'События рынка': {
-      text: 'Внешние рыночные события, которые временно помогают или мешают релизам.',
-      influence: 'Этот модификатор не зависит от ваших решений.',
-      tone: 'none',
-    },
-    'Сложность технологий': {
-      text: 'Штраф или риск за сложность выбранной платформы, жанра и технологий проекта.',
-      influence: 'Вы влияете на него выбором проекта и подготовкой студии.',
-      tone: 'medium',
-    },
-    'Непредсказуемость прессы': {
-      text: 'Небольшая случайность, чтобы оценки не были полностью одинаковыми и предсказуемыми.',
-      influence: 'Этот модификатор не зависит от ваших решений.',
-      tone: 'none',
-    },
+    'Фокус разработки': { text: 'Показывает, насколько хорошо распределён фокус между этапами разработки под выбранный проект.', influence: 'Ваши решения сильно влияют на этот модификатор.', tone: 'high' },
+    'Чеклист тестирования': { text: 'Бонус за процессы контроля качества: меньше багов, стабильнее релиз.', influence: 'Вы можете влиять на него через исследования и развитие студии.', tone: 'medium' },
+    'Ощущение от игры': { text: 'Отвечает за отзывчивость, темп, анимации и общее чувство управления.', influence: 'Вы можете влиять на него через исследования и фокус разработки.', tone: 'medium' },
+    'Звуковая лаборатория': { text: 'Учитывает качество звука, музыки и атмосферы, которую они создают.', influence: 'Вы можете влиять на него через исследования.', tone: 'medium' },
+    'Продвижение': { text: 'Показывает эффект маркетингового продвижения перед релизом.', influence: 'Ваше решение напрямую влияет на этот модификатор.', tone: 'high' },
+    'Решения разработки': { text: 'Сумма последствий событий, которые случились во время разработки.', influence: 'Ваши решения во время событий напрямую влияют на этот модификатор.', tone: 'high' },
+    'Импульс студии': { text: 'Отражает общий темп студии: прошлые релизы, опыт и накопленную динамику.', influence: 'Вы влияете на него постепенно через регулярные и сильные релизы.', tone: 'medium' },
+    'Настроение аудитории': { text: 'Показывает, насколько текущая аудитория готова тепло принять такой проект.', influence: 'Вы можете влиять на него косвенно через выбор жанра, сеттинга и скан аудитории.', tone: 'medium' },
+    'События рынка': { text: 'Внешние рыночные события, которые временно помогают или мешают релизам.', influence: 'Этот модификатор не зависит от ваших решений.', tone: 'none' },
+    'Сложность технологий': { text: 'Штраф или риск за сложность выбранной платформы, жанра и технологий проекта.', influence: 'Вы влияете на него выбором проекта и подготовкой студии.', tone: 'medium' },
+    'Непредсказуемость прессы': { text: 'Небольшая случайность, чтобы оценки не были полностью одинаковыми и предсказуемыми.', influence: 'Этот модификатор не зависит от ваших решений.', tone: 'none' },
   };
 
   if (label.startsWith('Комбо')) {
-    return {
-      title: 'Комбо жанра и сеттинга',
-      text: 'Показывает, насколько хорошо выбранные жанр и сеттинг подходят друг другу.',
-      influence: 'Ваш выбор напрямую влияет на этот модификатор.',
-      tone: 'high' as const,
-      signText,
-    };
+    return { title: 'Комбо жанра и сеттинга', text: 'Показывает, насколько хорошо выбранные жанр и сеттинг подходят друг другу.', influence: 'Ваш выбор напрямую влияет на этот модификатор.', tone: 'high' as const, signText };
   }
 
   const fallback = item.kind === 'random'
-    ? {
-      text: 'Случайная реакция мира, прессы и виртуальных игроков.',
-      influence: 'Этот модификатор не зависит от ваших решений.',
-      tone: 'none' as const,
-    }
-    : {
-      text: 'Один из факторов, из которых складывается итоговая оценка релиза.',
-      influence: 'Обычно на него можно влиять через выборы, исследования или развитие студии.',
-      tone: 'medium' as const,
-    };
+    ? { text: 'Случайная реакция мира, прессы и виртуальных игроков.', influence: 'Этот модификатор не зависит от ваших решений.', tone: 'none' as const }
+    : { text: 'Один из факторов, из которых складывается итоговая оценка релиза.', influence: 'Обычно на него можно влиять через выборы, исследования или развитие студии.', tone: 'medium' as const };
   const picked = details[label] ?? fallback;
   return { title: label, ...picked, signText };
 }
@@ -114,7 +56,7 @@ function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; on
         <p className="score-help-player-note">{info.influence}</p>
         <div className="score-help-value"><span>Текущий вклад</span><b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b></div>
         <p className="small muted">{info.signText}</p>
-        <button className="primary wide" onClick={onClose}>Понятно</button>
+        <button className="primary wide" type="button" onClick={onClose}>Понятно</button>
       </section>
     </div>
   );
@@ -129,23 +71,30 @@ function replaceScoreHelpBlock(source) {
   return source.slice(0, start) + scoreHelpBlock + source.slice(end);
 }
 
-function addInfoIcon(source) {
-  if (source.includes('score-line-info')) return source;
-  return source.replaceAll(
-    `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>`,
-    `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">i</i>`,
+function patchScoreLines(source) {
+  let next = source.replaceAll('<i className="score-line-info" aria-hidden="true">i</i>', '<i className="score-line-info" aria-hidden="true">?</i>');
+  if (!next.includes('score-line-info')) {
+    next = next.replaceAll(
+      `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>`,
+      `<b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b>\n                    <i className="score-line-info" aria-hidden="true">?</i>`,
+    );
+  }
+  next = next.replaceAll(
+    '<button className={`score-line ${item.kind}`} key={`${item.label}-${item.value}`} onClick={() => setSelectedBreakdown(item)}>',
+    '<button type="button" className={`score-line ${item.kind}`} key={`${item.label}-${item.value}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedBreakdown(item); }}>',
   );
+  return next;
 }
 
 patchFile('src/App.tsx', (source) => {
   let next = replaceScoreHelpBlock(source);
-  next = addInfoIcon(next);
+  next = patchScoreLines(next);
 
   if (!next.includes('Детализация оценки') || !next.includes('Сильное влияние игрока') || !next.includes('Не зависит от игрока')) {
     console.warn('score-breakdown-help: warning: explanation text was not inserted into App.tsx');
   }
   if (!next.includes('score-line-info')) {
-    console.warn('score-breakdown-help: warning: score-line info icon was not inserted into App.tsx');
+    console.warn('score-breakdown-help: warning: score-line help icon was not inserted into App.tsx');
   }
 
   return next;
