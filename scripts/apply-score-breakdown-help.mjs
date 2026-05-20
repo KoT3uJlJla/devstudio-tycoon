@@ -118,13 +118,14 @@ function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; on
       </section>
     </div>
   );
-}`;
+}
+
+`;
 
 function replaceScoreHelpBlock(source) {
   const start = source.indexOf('function scoreExplanation(item: ScoreBreakdownItem)');
-  const marker = '\n\nconst confettiPieces =';
-  const end = source.indexOf(marker, start);
-  if (start === -1 || end === -1) return source;
+  const end = source.indexOf('const confettiPieces =', start);
+  if (start === -1 || end === -1 || end <= start) return source;
   return source.slice(0, start) + scoreHelpBlock + source.slice(end);
 }
 
