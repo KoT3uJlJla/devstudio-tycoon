@@ -41,8 +41,27 @@ function removeDuplicateFunctionBlocks(source, signature) {
   return next;
 }
 
+function normalizeBackendClientImports(source) {
+  const backendImportRegex = /^import \{([^}]+)\} from '\.\/backendClient';\r?\n/gm;
+  const names = new Set();
+  let found = false;
+  let next = source.replace(backendImportRegex, (_, rawNames) => {
+    found = true;
+    rawNames.split(',').map((item) => item.trim()).filter(Boolean).forEach((name) => names.add(name));
+    return '';
+  });
+  if (!found) return source;
+  const order = ['getTonWallet', 'purchaseShopItem', 'saveTonWallet', 'unlinkTonWallet'];
+  const ordered = [...order.filter((name) => names.has(name)), ...[...names].filter((name) => !order.includes(name)).sort()];
+  const importLine = `import { ${ordered.join(', ')} } from './backendClient';\n`;
+  const telegramImport = "import { haptic, initTelegram, shareRelease } from './telegram';\n";
+  if (next.includes(telegramImport)) return next.replace(telegramImport, `${telegramImport}${importLine}`);
+  return `${importLine}${next}`;
+}
+
 patchFile('src/App.tsx', (source) => {
   let next = source;
+  next = normalizeBackendClientImports(next);
   // Build patches can be run repeatedly locally. Keep only one platform lookup in AudiencePanel.
   next = next.replace(
     /\n  const platform = platforms\.find\(\(item\) => item\.id === state\.audience\.desiredPlatformId\);(?:\r?\n  const platform = platforms\.find\(\(item\) => item\.id === state\.audience\.desiredPlatformId\);)+/g,
