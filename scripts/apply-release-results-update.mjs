@@ -160,3 +160,55 @@ patchFile('src/gameLogic.ts', (source) => {
 
   return next;
 });
+
+patchFile('src/storage.ts', (source) => {
+  let next = source;
+
+  const loadServerBlock = `    if (server.kind === 'loaded') {
+      const state = finalizeLoadedState(server.state);
+      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+      return rememberLoadedState(state);
+    }`;
+  const loadServerReconciled = `    if (server.kind === 'loaded') {
+      const localActiveSave = parseSave(readLocalStorage(STORAGE_KEY));
+      if (localActiveSave?.selectedProject?.startedAt && saveTimestamp(localActiveSave) >= saveTimestamp(server.state)) {
+        const localState = finalizeLoadedState(localActiveSave);
+        writeLocalStorage(STORAGE_KEY, JSON.stringify(localState));
+        void saveServerState(localState);
+        return rememberLoadedState(localState);
+      }
+
+      const state = finalizeLoadedState(server.state);
+      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+      return rememberLoadedState(state);
+    }`;
+  if (next.includes(loadServerBlock)) {
+    next = next.replace(loadServerBlock, loadServerReconciled);
+  }
+
+  if (!next.includes('const localActiveSave = parseSave(readLocalStorage(STORAGE_KEY));')) {
+    throw new Error('release-results-update: failed to add active development load reconciliation in src/storage.ts');
+  }
+
+  if (!next.includes('scheduleServerWrite(state: GameState, immediate = false)')) {
+    next = next.replace('function scheduleServerWrite(state: GameState) {', 'function scheduleServerWrite(state: GameState, immediate = false) {');
+    next = next.replace(
+      '  pendingServerState = state;\n  const throttleMs = isActiveDevelopmentSave(state) ? ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS : SERVER_SAVE_THROTTLE_MS;',
+      '  pendingServerState = state;\n  if (immediate) {\n    flushServer();\n    return;\n  }\n  const throttleMs = isActiveDevelopmentSave(state) ? ACTIVE_DEVELOPMENT_SERVER_THROTTLE_MS : SERVER_SAVE_THROTTLE_MS;'
+    );
+  }
+
+  const oldSaveTail = `  const actionHandled = scheduleDevelopmentAction(previousSnapshot, safeState);
+  if (!actionHandled) scheduleServerWrite(safeState);`;
+  const newSaveTail = `  const actionHandled = scheduleDevelopmentAction(previousSnapshot, safeState);
+  scheduleServerWrite(safeState, actionHandled || isActiveDevelopmentSave(safeState));`;
+  if (next.includes(oldSaveTail)) {
+    next = next.replace(oldSaveTail, newSaveTail);
+  }
+
+  if (!next.includes('scheduleServerWrite(safeState, actionHandled || isActiveDevelopmentSave(safeState));')) {
+    throw new Error('release-results-update: failed to force active development backend saves in src/storage.ts');
+  }
+
+  return next;
+});
