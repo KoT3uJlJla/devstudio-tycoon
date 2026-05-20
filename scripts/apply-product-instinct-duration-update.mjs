@@ -15,7 +15,8 @@ function replaceBetween(source, startNeedle, endNeedle, replacement) {
 }
 
 function ensureGameLogicImport(source, name) {
-  if (source.match(new RegExp(`\\b${name}\\b[\\s,]*`, 'm')) && source.slice(0, source.indexOf("} from './gameLogic';")).includes(name)) return source;
+  const importEnd = source.indexOf("} from './gameLogic';");
+  if (importEnd !== -1 && source.slice(0, importEnd).includes(name)) return source;
   const marker = "  nextStudioUpgradeCost,\n} from './gameLogic';";
   if (!source.includes(marker)) throw new Error(`product-instinct-duration: failed to add ${name} import`);
   return source.replace(marker, `  nextStudioUpgradeCost,\n  ${name},\n} from './gameLogic';`);
@@ -24,7 +25,7 @@ function ensureGameLogicImport(source, name) {
 patchFile('src/types.ts', (source) => {
   let next = source;
   if (!next.includes('productInstinctExpiresAt: number | null;')) {
-    next = next.replace('  unlockedResearchIds: string[];\n  unlockedGenreIds:', '  unlockedResearchIds: string[];\n  productInstinctExpiresAt: number | null;\n  unlockedGenreIds:');
+    next = next.replace(/(\n\s*unlockedResearchIds:\s*string\[\];\r?\n)/, '$1  productInstinctExpiresAt: number | null;\n');
   }
   if (!next.includes('productInstinctExpiresAt: number | null;')) {
     throw new Error('product-instinct-duration: failed to patch productInstinctExpiresAt in src/types.ts');
@@ -49,7 +50,7 @@ patchFile('src/gameLogic.ts', (source) => {
     throw new Error('product-instinct-duration: failed to add product instinct constants in src/gameLogic.ts');
   }
   if (!next.includes('productInstinctExpiresAt: null,')) {
-    next = next.replace('  unlockedResearchIds: [],\n  unlockedGenreIds:', '  unlockedResearchIds: [],\n  productInstinctExpiresAt: null,\n  unlockedGenreIds:');
+    next = next.replace(/(\n\s*unlockedResearchIds:\s*\[\],\r?\n)/, '$1  productInstinctExpiresAt: null,\n');
   }
   if (!next.includes('productInstinctExpiresAt: null,')) {
     throw new Error('product-instinct-duration: failed to add productInstinctExpiresAt to initialState');
