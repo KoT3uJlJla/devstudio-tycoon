@@ -65,7 +65,7 @@ patchFile('src/App.tsx', (source) => {
     "<div className={`${step > index ? 'critic-card shown' : 'critic-card'} ${step > index ? criticToneClass(critic.score) : ''}`} key={critic.name}>"
   );
 
-  const activePanelPattern = /function ActiveDevelopmentPanel\(\{ project, state, update \}: \{ project: Project; state: GameState; update: \(fn: \(state: GameState\) => GameState\) => void \}\) \{[\s\S]*?\n\}\n\nfunction EconomyPreview/;
+  const activePanelPattern = /function ActiveDevelopmentPanel\([\s\S]*?\nfunction EconomyPreview/;
   const activePanelNew = `function ActiveDevelopmentPanel({ project, state, update }: { project: Project; state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
   const [busyAction, setBusyAction] = useState<'skip' | 'promote' | null>(null);
   const backendReady = hasBackendSession();
@@ -113,9 +113,10 @@ patchFile('src/App.tsx', (source) => {
 }
 
 function EconomyPreview`;
-  if (activePanelPattern.test(next)) {
-    next = next.replace(activePanelPattern, activePanelNew);
+  if (!activePanelPattern.test(next)) {
+    throw new Error('release-results-update: failed to locate ActiveDevelopmentPanel in src/App.tsx');
   }
+  next = next.replace(activePanelPattern, activePanelNew);
 
   if (next.includes('cover-art')) {
     throw new Error('release-results-update: failed to remove cover art from release modal in src/App.tsx');
