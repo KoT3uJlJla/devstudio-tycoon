@@ -34,15 +34,15 @@ function ensureChoiceBlockLock(source) {
   }
 
   next = next.replace(
-    /(<ChoiceBlock title=\"1\. Жанр\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep <= 0\})(\s*\/>)//,
+    /(<ChoiceBlock title=\"1\. Жанр\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep <= 0\})(\s*\/>)\s*/,
     '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep > 0}$2',
   );
   next = next.replace(
-    /(<ChoiceBlock title=\"2\. Сеттинг\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 1\})(\s*\/>)//,
+    /(<ChoiceBlock title=\"2\. Сеттинг\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 1\})(\s*\/>)\s*/,
     '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep !== 1}$2',
   );
   next = next.replace(
-    /(<ChoiceBlock title=\"3\. Платформа\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 2\})(\s*\/>)//,
+    /(<ChoiceBlock title=\"3\. Платформа\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 2\})(\s*\/>)\s*/,
     '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep !== 2}$2',
   );
 
