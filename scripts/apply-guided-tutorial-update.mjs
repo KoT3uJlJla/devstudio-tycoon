@@ -219,8 +219,8 @@ patchFile('src/App.tsx', (source) => {
     '<GuidedTutorialOverlay state={state} onSkip={() => update((current) => ({ ...current, tutorialDone: true }))} />',
   );
 
-  next = replaceBetween(next, 'function TutorialBanner(', 'function StudioScreen(', guidedTutorialBlock + '\n\nfunction StudioScreen(');
-  next = replaceBetween(next, 'function Onboarding(', 'function StudioNamingModal(', onboardingBlock + '\n\nfunction StudioNamingModal(');
+  next = replaceBetween(next, 'function TutorialBanner(', 'function StudioScreen(', guidedTutorialBlock);
+  next = replaceBetween(next, 'function Onboarding(', 'function StudioNamingModal(', onboardingBlock);
 
   if (!next.includes('tutorialTarget?: boolean')) {
     next = next.replace(
