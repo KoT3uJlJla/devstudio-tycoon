@@ -18,6 +18,37 @@ function requireContains(source, needle, label) {
   if (!source.includes(needle)) throw new Error('guided-inline-focus: missing ' + label);
 }
 
+function ensureChoiceBlockLock(source) {
+  let next = source;
+
+  if (!next.includes('tutorialLocked?: boolean')) {
+    next = next.replace('tutorialTarget = false }: {', 'tutorialTarget = false, tutorialLocked = false }: {');
+    next = next.replace('tutorialTarget?: boolean }) {', 'tutorialTarget?: boolean; tutorialLocked?: boolean }) {');
+  }
+
+  if (!next.includes("tutorialLocked ? ' tutorial-locked'")) {
+    next = next.replace(
+      "<div className={tutorialTarget ? 'panel comic-card tutorial-target tutorial-choice-block' : 'panel comic-card'}>",
+      "<div className={`panel comic-card${tutorialTarget ? ' tutorial-target tutorial-choice-block' : ''}${tutorialLocked ? ' tutorial-locked' : ''}`.trim()}>",
+    );
+  }
+
+  next = next.replace(
+    /(<ChoiceBlock title=\"1\. Жанр\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep <= 0\})(\s*\/>)//,
+    '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep > 0}$2',
+  );
+  next = next.replace(
+    /(<ChoiceBlock title=\"2\. Сеттинг\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 1\})(\s*\/>)//,
+    '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep !== 1}$2',
+  );
+  next = next.replace(
+    /(<ChoiceBlock title=\"3\. Платформа\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 2\})(\s*\/>)//,
+    '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep !== 2}$2',
+  );
+
+  return next;
+}
+
 const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state: GameState; onSkip: () => void }) {
   const step = getTutorialGuideStep(state);
 
@@ -131,28 +162,7 @@ patchFile('src/App.tsx', (source) => {
   );
 
   next = replaceBetween(next, 'function GuidedTutorialOverlay(', 'function TutorialBanner(', overlayBlock);
-
-  next = next.replace(
-    "function ChoiceBlock({ title, items, selected, onSelect, hint, itemHint, tutorialTarget = false }: { title: string; items: Array<{ id: string; name: string; emoji: string }>; selected: string | null; onSelect: (id: string) => void; hint?: string; itemHint?: (id: string) => string; tutorialTarget?: boolean }) {",
-    "function ChoiceBlock({ title, items, selected, onSelect, hint, itemHint, tutorialTarget = false, tutorialLocked = false }: { title: string; items: Array<{ id: string; name: string; emoji: string }>; selected: string | null; onSelect: (id: string) => void; hint?: string; itemHint?: (id: string) => string; tutorialTarget?: boolean; tutorialLocked?: boolean }) {",
-  );
-  next = next.replace(
-    "<div className={tutorialTarget ? 'panel comic-card tutorial-target tutorial-choice-block' : 'panel comic-card'}>",
-    "<div className={`panel comic-card${tutorialTarget ? ' tutorial-target tutorial-choice-block' : ''}${tutorialLocked ? ' tutorial-locked' : ''}`.trim()}>",
-  );
-
-  next = next.replace(
-    "<ChoiceBlock title=\"1. Жанр\" items={availableGenres} selected={project.genre} onSelect={(id) => update((current) => setProjectChoice(current, 'genre', id as GenreId))} tutorialTarget={!state.tutorialDone && state.tutorialStep <= 0} />",
-    "<ChoiceBlock title=\"1. Жанр\" items={availableGenres} selected={project.genre} onSelect={(id) => update((current) => setProjectChoice(current, 'genre', id as GenreId))} tutorialTarget={!state.tutorialDone && state.tutorialStep <= 0} tutorialLocked={!state.tutorialDone && state.tutorialStep > 0} />",
-  );
-  next = next.replace(
-    "<ChoiceBlock title=\"2. Сеттинг\" items={availableThemes} selected={project.theme} onSelect={(id) => update((current) => setProjectChoice(current, 'theme', id as ThemeId))} itemHint={hasProductInstinct && project.genre ? (id) => comboFor(project.genre!, id as ThemeId) : undefined} hint={!hasProductInstinct ? 'Исследуй «Продуктовое чутьё», чтобы видеть комбо и фокус.' : undefined} tutorialTarget={!state.tutorialDone && state.tutorialStep === 1} />",
-    "<ChoiceBlock title=\"2. Сеттинг\" items={availableThemes} selected={project.theme} onSelect={(id) => update((current) => setProjectChoice(current, 'theme', id as ThemeId))} itemHint={hasProductInstinct && project.genre ? (id) => comboFor(project.genre!, id as ThemeId) : undefined} hint={!hasProductInstinct ? 'Исследуй «Продуктовое чутьё», чтобы видеть комбо и фокус.' : undefined} tutorialTarget={!state.tutorialDone && state.tutorialStep === 1} tutorialLocked={!state.tutorialDone && state.tutorialStep !== 1} />",
-  );
-  next = next.replace(
-    "<ChoiceBlock title=\"3. Платформа\" items={platforms.filter((item) => item.unlockLevel <= state.level || item.id === 'micro_pc')} selected={project.platform} onSelect={(id) => update((current) => setProjectChoice(current, 'platform', id as PlatformId))} tutorialTarget={!state.tutorialDone && state.tutorialStep === 2} />",
-    "<ChoiceBlock title=\"3. Платформа\" items={platforms.filter((item) => item.unlockLevel <= state.level || item.id === 'micro_pc')} selected={project.platform} onSelect={(id) => update((current) => setProjectChoice(current, 'platform', id as PlatformId))} tutorialTarget={!state.tutorialDone && state.tutorialStep === 2} tutorialLocked={!state.tutorialDone && state.tutorialStep !== 2} />",
-  );
+  next = ensureChoiceBlockLock(next);
 
   requireContains(next, 'inline-focus-mode', 'inline focus overlay');
   requireContains(next, 'tutorialLocked?: boolean', 'choice lock prop');
