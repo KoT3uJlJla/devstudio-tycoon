@@ -10,6 +10,12 @@ function ensureImport(source, importLine) {
   return source.includes(importLine) ? source : source.replace("import { haptic, initTelegram, shareRelease } from './telegram';\n", "import { haptic, initTelegram, shareRelease } from './telegram';\n" + importLine + '\n');
 }
 
+function ensureTypeImport(source, importLine) {
+  if (source.includes(importLine)) return source;
+  const firstImport = source.indexOf('import ');
+  return firstImport === -1 ? importLine + '\n' + source : source.slice(0, firstImport) + importLine + '\n' + source.slice(firstImport);
+}
+
 function replaceBetween(source, startNeedle, endNeedle, replacement) {
   const start = source.indexOf(startNeedle);
   if (start === -1) throw new Error('studio-goals-safe: start not found: ' + startNeedle);
@@ -20,8 +26,8 @@ function replaceBetween(source, startNeedle, endNeedle, replacement) {
 
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
-  if (!next.includes('studioGoalClaims: {},')) {
-    next = next.replace('  dailyTaskClaims: {},\n', '  dailyTaskClaims: {},\n  studioGoalClaims: {},\n');
+  if (!next.includes('  studioGoalClaims: {},')) {
+    next = next.replace(/(\s+dailyTaskClaims:\s*\{\},\s*\r?\n)/, '$1  studioGoalClaims: {},\n');
   }
   if (!next.includes('studioGoalClaims: (() => {')) {
     const block = [
@@ -35,16 +41,14 @@ patchFile('src/gameLogic.ts', (source) => {
       '      );',
       '    })(),',
     ].join('\n');
-    next = next.replace('    dailyPassiveIncome: Math.max(0, Math.floor(Number(merged.dailyPassiveIncome) || 0)),', block + '\n    dailyPassiveIncome: Math.max(0, Math.floor(Number(merged.dailyPassiveIncome) || 0)),');
+    next = next.replace(/(\s+dailyPassiveIncome:\s*Math\.max\(0,\s*Math\.floor\(Number\(merged\.dailyPassiveIncome\)\s*\|\|\s*0\)\),)/, block + '\n$1');
   }
   return next;
 });
 
 patchFile('src/backendClient.ts', (source) => {
   let next = source;
-  if (!next.includes("import type { TaskCatalogOverrides } from './taskCatalog';")) {
-    next = next.replace("import type { GameState } from './types';\n", "import type { GameState } from './types';\nimport type { TaskCatalogOverrides } from './taskCatalog';\n");
-  }
+  next = ensureTypeImport(next, "import type { TaskCatalogOverrides } from './taskCatalog';");
   if (!next.includes('export async function fetchTaskConfig')) {
     const helper = [
       'export async function fetchTaskConfig(): Promise<TaskCatalogOverrides> {',
