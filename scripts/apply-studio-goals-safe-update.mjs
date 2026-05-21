@@ -24,6 +24,14 @@ function replaceBetween(source, startNeedle, endNeedle, replacement) {
   return source.slice(0, start) + replacement.trimEnd() + '\n\n' + source.slice(end);
 }
 
+function replaceFunction(source, signature, replacement, beforeNeedle) {
+  const start = source.indexOf(signature);
+  if (start === -1) return beforeNeedle ? source.replace(beforeNeedle, replacement + beforeNeedle) : source;
+  const end = beforeNeedle ? source.indexOf(beforeNeedle, start) : -1;
+  if (end === -1 || end <= start) return source;
+  return source.slice(0, start) + replacement + source.slice(end);
+}
+
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('  studioGoalClaims: {},')) {
@@ -49,18 +57,19 @@ patchFile('src/gameLogic.ts', (source) => {
 patchFile('src/backendClient.ts', (source) => {
   let next = source;
   next = ensureTypeImport(next, "import type { TaskCatalogOverrides } from './taskCatalog';");
-  if (!next.includes('export async function fetchTaskConfig')) {
-    const helper = [
-      'export async function fetchTaskConfig(): Promise<TaskCatalogOverrides> {',
-      '  if (!canUseBackend()) return {};',
-      "  const result = await requestJson('/api/tasks/config');",
-      '  const payload = result.status >= 200 && result.status < 300 ? result.payload as (BackendStatePayload & { tasksConfig?: TaskCatalogOverrides }) | null : null;',
-      '  return payload?.ok && payload.tasksConfig ? payload.tasksConfig : {};',
-      '}',
-      '',
-    ].join('\n');
-    next = next.replace('export async function getTonWallet() {', helper + 'export async function getTonWallet() {');
-  }
+  const helper = [
+    'export async function fetchTaskConfig(): Promise<TaskCatalogOverrides> {',
+    '  if (!API_URL) return {};',
+    "  return fetch(`${API_URL}/api/tasks/config?ts=${Date.now()}`, { cache: 'no-store' })",
+    '    .then(async (response) => {',
+    '      const data = await response.json().catch(() => null) as (BackendStatePayload & { tasksConfig?: TaskCatalogOverrides }) | null;',
+    '      return response.ok && data?.ok && data.tasksConfig ? data.tasksConfig : {};',
+    '    })',
+    '    .catch(() => ({}));',
+    '}',
+    '',
+  ].join('\n');
+  next = replaceFunction(next, 'export async function fetchTaskConfig', helper, 'export async function getTonWallet() {');
   return next;
 });
 
@@ -118,8 +127,11 @@ patchFile('src/App.tsx', (source) => {
   if (!next.includes('const [taskOverrides, setTaskOverrides] = useState<TaskCatalogOverrides>({});')) {
     next = next.replace("  const [studioNamingMode, setStudioNamingMode] = useState<'initial' | 'rename' | null>(null);", "  const [studioNamingMode, setStudioNamingMode] = useState<'initial' | 'rename' | null>(null);\n  const [taskOverrides, setTaskOverrides] = useState<TaskCatalogOverrides>({});");
   }
-  if (!next.includes('fetchTaskConfig().then(setTaskOverrides)')) {
-    next = next.replace('    loadGame().then(setState);\n', '    loadGame().then(setState);\n    fetchTaskConfig().then(setTaskOverrides).catch(() => setTaskOverrides({}));\n');
+  if (!next.includes('const refreshTaskOverrides = () =>')) {
+    next = next.replace(
+      '  useInterfaceSounds();\n\n  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n  }, []);',
+      "  useInterfaceSounds();\n\n  const refreshTaskOverrides = () => fetchTaskConfig().then(setTaskOverrides).catch(() => undefined);\n\n  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n    refreshTaskOverrides();\n    const onVisibility = () => { if (!document.hidden) refreshTaskOverrides(); };\n    document.addEventListener('visibilitychange', onVisibility);\n    const timer = window.setInterval(refreshTaskOverrides, 60000);\n    return () => { document.removeEventListener('visibilitychange', onVisibility); window.clearInterval(timer); };\n  }, []);",
+    );
   }
   next = next.replace("{state.screen === 'studio' && <StudioScreen state={state} onNewProject={startNewProject} update={update} />}", "{state.screen === 'studio' && <StudioScreen state={state} onNewProject={startNewProject} update={update} taskOverrides={taskOverrides} />}");
   next = next.replace('function StudioScreen({ state, onNewProject, update }: { state: GameState; onNewProject: () => void; update: (fn: (state: GameState) => GameState) => void }) {', 'function StudioScreen({ state, onNewProject, update, taskOverrides }: { state: GameState; onNewProject: () => void; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {');
