@@ -26,6 +26,156 @@ function requirePatch(source, needle, label) {
   if (!source.includes(needle)) console.warn('trust-model-hardening: patch check failed: ' + label);
 }
 
+const gameAccessHelpers = String.raw`
+const GAME_STATUS_CONFIG_ID = 'game_status';
+const USER_ROLES = new Set(['dev', 'tester', 'user']);
+
+function normalizeUserRole(value) {
+  const role = String(value || 'user').toLowerCase().trim();
+  return USER_ROLES.has(role) ? role : 'user';
+}
+
+function normalizeGameStatusDoc(doc) {
+  const status = doc?.status === 'closed' || doc?.closed === true ? 'closed' : 'open';
+  return {
+    status,
+    closed: status === 'closed',
+    message: sanitizeText(doc?.message || 'Maintenance in progress. Please come back later.', 'Maintenance in progress. Please come back later.'),
+    updatedAt: doc?.updatedAt || null,
+  };
+}
+
+async function ensureUserRole(telegramUser) {
+  const telegramId = String(telegramUser?.id || '');
+  if (!telegramId) return 'user';
+  const now = new Date();
+  await db.collection('users').updateOne(
+    { telegramId },
+    { $set: { telegramId, telegramUser, updatedAt: now }, $setOnInsert: { role: 'user', createdAt: now } },
+    { upsert: true },
+  );
+  const row = await db.collection('users').findOne({ telegramId });
+  return normalizeUserRole(row?.role);
+}
+
+async function loadGameStatus() {
+  const now = new Date();
+  await db.collection('config').updateOne(
+    { _id: GAME_STATUS_CONFIG_ID },
+    { $setOnInsert: { _id: GAME_STATUS_CONFIG_ID, status: 'open', closed: false, message: 'Maintenance in progress. Please come back later.', createdAt: now, updatedAt: now } },
+    { upsert: true },
+  );
+  const doc = await db.collection('config').findOne({ _id: GAME_STATUS_CONFIG_ID });
+  return normalizeGameStatusDoc(doc);
+}
+
+async function requireTelegramUser(req, res, next) {
+  try {
+    const auth = req.get('authorization') || '';
+    const initData = auth.startsWith('tma ') ? auth.slice(4) : req.get('x-telegram-init-data');
+    req.telegramUser = validateTelegramInitData(initData);
+    req.userRole = await ensureUserRole(req.telegramUser);
+    req.gameStatus = await loadGameStatus();
+    if (req.gameStatus.closed && !['dev', 'tester'].includes(req.userRole)) {
+      return res.status(423).json({ ok: false, error: 'game_closed', role: req.userRole, gameStatus: req.gameStatus });
+    }
+    next();
+  } catch (error) {
+    res.status(401).json({ ok: false, error: 'telegram_auth_failed' });
+  }
+}
+`;
+
+const serverOwnedSaveHelpers = String.raw`
+const SERVER_OWNED_SAVE_FIELDS = [
+  'coins', 'rp', 'stars', 'qualifiedReferrals', 'qualifiedSecondLevelReferrals', 'referralMilestoneClaims',
+  'level', 'studioXp', 'gamesReleased', 'bestScore', 'latestRelease', 'activeGames', 'releaseHistory',
+  'employees', 'hiredEmployeeIds', 'unlockedResearchIds', 'unlockedGenreIds', 'unlockedThemeIds',
+  'dailyClaimedAt', 'dailyStatsDate', 'dailyGamesReleased', 'dailyWorkTaps', 'dailyResearchUnlocked',
+  'dailyPassiveIncome', 'dailyTaskClaims', 'weeklyExpenseTotal', 'unpaidSinceMonth', 'closureWarningMonth',
+  'ratingResetCount', 'activeMarketEvents', 'newsFeed', 'audience', 'lastLedger', 'marketMustRecover',
+  'tutorialDone', 'tutorialStep', 'tutorialRewardClaimed', 'gameDay', 'lastGameTickAt', 'lastOfflineReward',
+  'offerSeen', 'productInstinctUntil', 'unlockedResearchMeta', 'saveSchemaVersion'
+];
+
+function initialTrustedSaveData() {
+  const now = Date.now();
+  return {
+    coins: 3000,
+    rp: 0,
+    stars: 0,
+    qualifiedReferrals: 0,
+    qualifiedSecondLevelReferrals: 0,
+    referralMilestoneClaims: {},
+    level: 1,
+    studioXp: 0,
+    gamesReleased: 0,
+    bestScore: 0,
+    latestRelease: null,
+    activeGames: [],
+    releaseHistory: [],
+    employees: [],
+    hiredEmployeeIds: [],
+    unlockedResearchIds: [],
+    unlockedGenreIds: ['arcade', 'platformer', 'puzzle', 'strategy'],
+    unlockedThemeIds: ['space', 'fantasy', 'cyberpunk'],
+    dailyClaimedAt: null,
+    dailyStatsDate: todayKey(),
+    dailyGamesReleased: 0,
+    dailyWorkTaps: 0,
+    dailyResearchUnlocked: 0,
+    dailyPassiveIncome: 0,
+    dailyTaskClaims: {},
+    weeklyExpenseTotal: 0,
+    unpaidSinceMonth: null,
+    closureWarningMonth: null,
+    ratingResetCount: 0,
+    activeMarketEvents: [],
+    newsFeed: [],
+    audience: undefined,
+    lastLedger: [],
+    marketMustRecover: false,
+    tutorialDone: false,
+    tutorialStep: 0,
+    tutorialRewardClaimed: false,
+    gameDay: 1,
+    lastGameTickAt: now,
+    lastOfflineReward: 0,
+    offerSeen: false,
+    saveSchemaVersion: 3,
+  };
+}
+
+function safeClientProjectDraft(project, previousProject) {
+  if (isPlainObject(previousProject) && (previousProject.startedAt || previousProject.pendingDevEvent || safeInt(previousProject.progress, 0, 100) > 1)) {
+    return previousProject;
+  }
+  if (!isPlainObject(project)) return previousProject && !previousProject.startedAt ? previousProject : null;
+  if (project.startedAt || project.pendingDevEvent || safeInt(project.progress, 0, 100) > 1) return null;
+  return {
+    id: sanitizeText(project.id || crypto.randomUUID(), crypto.randomUUID()).slice(0, 64),
+    name: sanitizeText(project.name || 'New Game', 'New Game'),
+    genre: sanitizeText(project.genre || '', ''),
+    theme: sanitizeText(project.theme || '', ''),
+    platform: sanitizeText(project.platform || 'micro_pc', 'micro_pc'),
+    focus: isPlainObject(project.focus) ? project.focus : undefined,
+    progress: 0,
+    startedAt: null,
+  };
+}
+
+function mergeServerOwnedSaveData(incomingData, previousData) {
+  const incoming = isPlainObject(incomingData) ? incomingData : {};
+  const trustedBase = isPlainObject(previousData) ? previousData : initialTrustedSaveData();
+  const next = { ...incoming };
+  for (const field of SERVER_OWNED_SAVE_FIELDS) next[field] = trustedBase[field];
+  next.selectedProject = safeClientProjectDraft(incoming.selectedProject, trustedBase.selectedProject);
+  next.lastSavedAt = Date.now();
+  next.saveSchemaVersion = 3;
+  return next;
+}
+`;
+
 const trustedReleaseHelpers = String.raw`
 function trustedReleaseRecordFromState(telegramUser, beforeData, afterData) {
   const release = isPlainObject(afterData?.latestRelease) ? afterData.latestRelease : null;
@@ -126,6 +276,14 @@ async function recordTrustedReleaseAndRating(telegramUser, beforeData, afterData
 function patchIndex(source) {
   let next = source;
 
+  if (!next.includes('const GAME_STATUS_CONFIG_ID')) {
+    next = next.replace(/function requireTelegramUser\(req, res, next\) \{[\s\S]*?\n\}\n\nfunction isPlainObject/, gameAccessHelpers + '\nfunction isPlainObject');
+  }
+
+  if (!next.includes('const SERVER_OWNED_SAVE_FIELDS')) {
+    next = next.replace('async function syncEconomyFromIncomingSave', serverOwnedSaveHelpers + '\nasync function syncEconomyFromIncomingSave');
+  }
+
   if (!next.includes('function trustedReleaseRecordFromState')) {
     next = next.replace('async function syncEconomyFromIncomingSave', trustedReleaseHelpers + '\nasync function syncEconomyFromIncomingSave');
   }
@@ -145,6 +303,13 @@ function patchIndex(source) {
     '  if (incomingData?.gamesReleased > 0) {\n    // Client saves may update the personal save, but never leaderboard or referrals.\n    economy = await db.collection("economy").findOne({ telegramId: telegramUser.id }) || economy;\n  }',
   );
 
+  if (!next.includes('await db.collection("users").createIndex')) {
+    next = next.replace(
+      '  await db.collection("economy").createIndex({ telegramId: 1 }, { unique: true });',
+      '  await db.collection("economy").createIndex({ telegramId: 1 }, { unique: true });\n  await db.collection("users").createIndex({ telegramId: 1 }, { unique: true });\n  await db.collection("users").createIndex({ role: 1 });\n  await db.collection("config").createIndex({ _id: 1 }, { unique: true });\n  await db.collection("config").updateOne({ _id: GAME_STATUS_CONFIG_ID }, { $setOnInsert: { _id: GAME_STATUS_CONFIG_ID, status: "open", closed: false, message: "Maintenance in progress. Please come back later.", createdAt: new Date(), updatedAt: new Date() } }, { upsert: true });',
+    );
+  }
+
   next = next.replace(
     'await db.collection("stars_invoices").createIndex({ telegramId: 1, createdAt: -1 });',
     'await db.collection("stars_invoices").createIndex({ telegramId: 1, createdAt: -1 });\n  await db.collection("trusted_releases").createIndex({ releaseKey: 1 }, { unique: true });\n  await db.collection("trusted_releases").createIndex({ telegramId: 1, weekKey: 1, createdAt: -1 });\n  await db.collection("ratings").createIndex({ weekKey: 1, trusted: 1, score: -1 });',
@@ -156,12 +321,17 @@ function patchIndex(source) {
   );
 
   next = next.replace(
-    'if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
-    'if (action === "release" && nextData.gamesReleased > 0) await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
+    '    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);\n    const authoritativeData = normalizeServerDevelopment(mergedDevelopment, previousSave?.data);',
+    '    const trustedClientData = mergeServerOwnedSaveData(data, previousSave?.data);\n    const mergedDevelopment = mergeServerDevelopment(trustedClientData, previousSave?.data);\n    const authoritativeData = normalizeServerDevelopment(mergedDevelopment, previousSave?.data);',
   );
 
   next = next.replace(
-    'if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    if (action === "release") economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" });\n    res.json({ ok: true, save: { data: overlayProtectedEconomy(nextData, economy), updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
+    '    const nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
+    '    let nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (action === "release" && nextData.gamesReleased > 0) {\n      await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n      if (typeof qualifyReferralIfEligible === "function") {\n        economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" }) || economy;\n        nextData = overlayProtectedEconomy(nextData, economy);\n        await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n      }\n    }\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
+  );
+
+  next = next.replace(
+    'if (action === "release" && nextData.gamesReleased > 0) await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n    if (action === "release") economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" });\n    res.json({ ok: true, save: { data: overlayProtectedEconomy(nextData, economy), updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
     'if (action === "release" && nextData.gamesReleased > 0) await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n    if (action === "release") economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" });\n    res.json({ ok: true, save: { data: overlayProtectedEconomy(nextData, economy), updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
   );
 
@@ -176,10 +346,13 @@ function patchIndex(source) {
     ].join('\n'),
   );
 
+  requirePatch(next, 'const GAME_STATUS_CONFIG_ID', 'game access role helpers');
+  requirePatch(next, 'const SERVER_OWNED_SAVE_FIELDS', 'server-owned save helpers');
   requirePatch(next, 'function trustedReleaseRecordFromState', 'trusted release helpers');
-  requirePatch(next, 'Client saves are not allowed to mint daily Stars', 'daily star source lock');
+  requirePatch(next, 'mergeServerOwnedSaveData(data, previousSave?.data)', 'server-owned save merge');
   requirePatch(next, 'find({ weekKey: currentWeek, trusted: true })', 'trusted leaderboard filter');
   requirePatch(next, 'recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData)', 'trusted release action');
+  requirePatch(next, 'error: \'game_closed\'', 'game closed response');
   requirePatch(next, 'trusted: true });', 'trusted rating submit');
   return next;
 }
@@ -219,5 +392,20 @@ function patchDevAuthority(source) {
   return next;
 }
 
+function patchDevActions(source) {
+  let next = source;
+  next = next.replace(
+    'isTutorial:Boolean(src.isTutorial&&!data.tutorialDone)',
+    'isTutorial:Boolean(src.isTutorial&&!data.tutorialDone&&!data.tutorialRewardClaimed&&i(data.gamesReleased,0)===0)',
+  );
+  next = next.replace(
+    'startedAt:now,progress:Math.max(1,Number(p.progress)||0),promotionUsed:false',
+    'startedAt:now,progress:1,promotionUsed:false',
+  );
+  requirePatch(next, 'startedAt:now,progress:1,promotionUsed:false', 'server start progress');
+  return next;
+}
+
 patchFile('index.js', patchIndex);
 patchFile('devAuthority.js', patchDevAuthority);
+patchFile('devActions.js', patchDevActions);
