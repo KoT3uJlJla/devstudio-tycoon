@@ -247,17 +247,25 @@ function mergeTask<T extends DailyTaskBase | StudioGoalBase>(base: T, override: 
   };
 }
 
+function isDailyTaskModel(task: DailyTaskModel | null): task is DailyTaskModel {
+  return task !== null;
+}
+
+function isStudioGoalModel(goal: StudioGoalModel | null): goal is StudioGoalModel {
+  return goal !== null;
+}
+
 export function buildDailyTasks(state: GameState, overrides: TaskCatalogOverrides = {}): DailyTaskModel[] {
   return dailyTaskBase
     .map((task) => mergeTask(task, overrides.daily?.[task.id], state) as DailyTaskModel | null)
-    .filter(Boolean)
+    .filter(isDailyTaskModel)
     .sort((a, b) => a.order - b.order);
 }
 
 export function buildStudioGoals(state: GameState, overrides: TaskCatalogOverrides = {}): StudioGoalModel[] {
   return studioGoalBase
     .map((goal) => mergeTask(goal, overrides.studio?.[goal.id], state) as StudioGoalModel | null)
-    .filter(Boolean)
+    .filter(isStudioGoalModel)
     .sort((a, b) => a.order - b.order);
 }
 
