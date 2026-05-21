@@ -129,7 +129,7 @@ const calendarCss = [
   '  height: 58px;',
   '  border-radius: 50%;',
   '  border: 3px solid var(--ink);',
-  '  background: conic-gradient(from -90deg, rgba(5,6,13,.22) 0 var(--day-progress), var(--cyan) var(--day-progress) 100%);',
+  '  background: conic-gradient(from 0deg, rgba(5,6,13,.22) 0 var(--day-progress), var(--cyan) var(--day-progress) 100%);',
   '  display: flex;',
   '  flex-direction: column;',
   '  align-items: center;',
@@ -218,43 +218,3 @@ patchFile('src/App.tsx', (source) => {
       '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));',
       '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));\n  const topbarDate = gameDateParts(state.gameDay);',
     );
-  }
-
-  next = next.replace(
-    /<h1 title=\{state\.studioName \|\| 'Новая студия'\}>\{state\.studioName \|\| 'Новая студия'\}<\/h1>/,
-    "<h1 className=\"studio-name\" title={state.studioName || 'Новая студия'}>{state.studioName || 'Новая студия'}</h1>",
-  );
-
-  if (next.includes('badge kaboom day-badge')) {
-    next = next.replace(
-      /<span className="badge kaboom day-badge">[\s\S]*?<\/span>\s*<\/div>/,
-      compactTopbarBlock(),
-    );
-  } else {
-    next = next.replace(
-      /<div className="topbar-meta">[\s\S]*?<\/span>\s*<\/div>\s*<\/div>/,
-      compactTopbarBlock(),
-    );
-  }
-
-  next = ensureGameClockDate(next);
-  next = next.replace(
-    '<div><p className="eyebrow">Игровое время</p><h3>Месяц {gameMonthLabel(state.gameDay)} · День {state.gameDay}</h3><p className="small muted">1 игровой день ≈ 72 секунды</p></div>',
-    '<div><p className="eyebrow">Игровое время</p><h3>Год {gameDate.year} · Месяц {gameDate.month} · День {gameDate.day}</h3><p className="small muted">1 игровой день ≈ 72 секунды</p></div>',
-  );
-
-  requireContains(next, 'studio-name', 'visible studio name');
-  requireContains(next, 'studio-level-badge">Lvl:', 'compact studio level badge');
-  requireContains(next, 'compact-date-badge', 'compact date badge');
-  requireContains(next, 'day-dial', 'circular day timer');
-  requireContains(next, 'topbarDate = gameDateParts(state.gameDay)', 'topbar date usage');
-  requireMatch(next, /function GameClock[\s\S]*?const gameDate = gameDateParts\(state\.gameDay\);[\s\S]*?<section className="time-card/, 'GameClock date local');
-  return next;
-});
-
-patchFile('src/styles.css', (source) => {
-  const marker = '/* Calendar + studio level header */';
-  const markerIndex = source.indexOf(marker);
-  const base = markerIndex >= 0 ? source.slice(0, markerIndex).trimEnd() : source.trimEnd();
-  return base + '\n\n' + calendarCss + '\n';
-});
