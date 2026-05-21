@@ -78,6 +78,13 @@ const saveTransitionBlock = `    await writeSave(req.telegramUser.id, req.telegr
 patchFile('index.js', (source) => {
   let next = source;
 
+  // MongoDB does not allow the same path in $setOnInsert and $set. The trusted
+  // record object includes updatedAt, so remove it before spreading into insert.
+  next = next.replace(
+    '  await db.collection(\'trusted_releases\').updateOne(\n    { releaseKey: record.releaseKey },\n    { $setOnInsert: { ...record, createdAt: record.createdAt }, $set: { updatedAt: new Date() } },\n    { upsert: true },\n  );',
+    '  const { updatedAt: _ignoredUpdatedAt, ...insertRecord } = record;\n  await db.collection(\'trusted_releases\').updateOne(\n    { releaseKey: record.releaseKey },\n    { $setOnInsert: { ...insertRecord, createdAt: record.createdAt }, $set: { updatedAt: new Date() } },\n    { upsert: true },\n  );',
+  );
+
   // Roll back only the over-aggressive /api/save merge. This keeps active
   // development visible after refresh while syncEconomyFromIncomingSave and
   // rating submit remain hardened by earlier patches.
@@ -107,6 +114,9 @@ patchFile('index.js', (source) => {
 
   if (next.includes('mergeServerOwnedSaveData(data, previousSave?.data)')) {
     console.warn('recovery-trust-fix: aggressive save merge still present');
+  }
+  if (next.includes('$setOnInsert: { ...record, createdAt: record.createdAt }')) {
+    console.warn('recovery-trust-fix: trusted release updatedAt conflict still present');
   }
   if (!next.includes('trusted release save transition')) {
     console.warn('recovery-trust-fix: save transition trusted release recording not installed');
