@@ -145,9 +145,23 @@ patchFile('src/App.tsx', (source) => {
     "target: true, placement: 'top', cta: 'Нажми на платформу',",
   );
   next = replaceBetween(next, 'function GuidedTutorialOverlay(', 'function TutorialBanner(', overlayBlock);
+  next = next.replace(
+    'if (!state.onboardingDone || state.tutorialDone || state.latestRelease) return null;',
+    'if (!state.onboardingDone || state.tutorialDone || state.latestRelease || state.gamesReleased > 0 || state.releaseHistory.length > 0 || state.tutorialRewardClaimed) return null;',
+  );
   requireContains(next, 'inline-focus-mode', 'inline focus overlay');
   requireContains(next, 'guardClick', 'outside click guard');
+  requireContains(next, 'state.gamesReleased > 0', 'first release tutorial guard');
   requireContains(next, "placement: 'top', cta: 'Нажми на платформу'", 'platform top card');
+  return next;
+});
+
+patchFile('src/gameLogic.ts', (source) => {
+  const next = source.replace(
+    'tutorialDone: current.tutorialDone || project.isTutorial,',
+    'tutorialDone: current.tutorialDone || project.isTutorial || !current.tutorialDone || current.gamesReleased === 0,',
+  );
+  requireContains(next, 'tutorialDone: current.tutorialDone || project.isTutorial || !current.tutorialDone || current.gamesReleased === 0,', 'release tutorial completion');
   return next;
 });
 
