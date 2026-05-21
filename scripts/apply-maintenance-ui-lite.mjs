@@ -45,6 +45,12 @@ patch('src/storage.ts', (src) => {
   if (!s.includes('if (isGameClosedPayload(payload as BackendSavePayload | null)) { markGameClosed(payload as BackendSavePayload | null); return; }')) {
     s = s.replace('  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);\n  if (normalized) rememberAuthoritativeState(normalized);', '  if (isGameClosedPayload(payload as BackendSavePayload | null)) { markGameClosed(payload as BackendSavePayload | null); return; }\n  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);\n  if (normalized) rememberAuthoritativeState(normalized);');
   }
+  if (!s.includes('latestRelease: null, screen: state.screen === \'release\' ? \'studio\' : state.screen')) {
+    s = s.replace(
+      'function finalizeLoadedState(state: GameState): GameState {\n  try {\n    return syncGlobalState(applyOfflineReward(state));\n  } catch {\n    return syncGlobalState(normalizeState(state));\n  }\n}',
+      "function finalizeLoadedState(state: GameState): GameState {\n  const withoutTransientRelease = { ...state, latestRelease: null, screen: state.screen === 'release' ? 'studio' : state.screen };\n  try {\n    return syncGlobalState(applyOfflineReward(withoutTransientRelease));\n  } catch {\n    return syncGlobalState(normalizeState(withoutTransientRelease));\n  }\n}",
+    );
+  }
   if (!s.includes('error?: string;') || !s.includes('gameStatus?:') || !s.includes("kind: 'closed'")) {
     throw new Error('apply-maintenance-ui-lite: storage TypeScript types were not patched');
   }
