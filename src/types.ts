@@ -236,6 +236,7 @@ export type GameState = {
   dailyResearchUnlocked: number;
   dailyPassiveIncome: number;
   dailyTaskClaims: Record<string, boolean>;
+  studioGoalClaims: Record<string, boolean>;
   weeklyExpenseTotal: number;
   unpaidSinceMonth: number | null;
   closureWarningMonth: number | null;
