@@ -55,6 +55,130 @@ function ensureGameClockDate(source) {
   return next;
 }
 
+function compactTopbarBlock() {
+  return [
+    '<div className="topbar-meta">',
+    '          <span className="badge kaboom studio-level-badge">Lvl: {state.level}</span>',
+    '          <span className="badge kaboom date-badge compact-date-badge">',
+    '            <span>Г:{topbarDate.year}</span>',
+    '            <span>М:{topbarDate.month}</span>',
+    '            <span>Д:{topbarDate.day}</span>',
+    "            <span className=\"day-dial\" style={{ '--day-progress': `${dayPercent}%` } as CSSProperties}>",
+    '              <b>{secondsLeft}</b>',
+    '              <small>сек</small>',
+    '            </span>',
+    '          </span>',
+    '        </div>',
+    '      </div>',
+  ].join('\n');
+}
+
+const calendarCss = [
+  '/* Calendar + studio level header */',
+  '.compact-brand-row {',
+  '  display: flex;',
+  '  align-items: flex-start;',
+  '  justify-content: space-between;',
+  '  gap: 10px;',
+  '}',
+  '.studio-title-block {',
+  '  min-width: 0;',
+  '  flex: 1 1 auto;',
+  '}',
+  '.studio-title-block .eyebrow {',
+  '  margin-bottom: 3px;',
+  '}',
+  '.studio-name, .studio-title-block h1 {',
+  '  margin: 0;',
+  '  max-width: 176px;',
+  '  font-size: clamp(28px, 7vw, 42px);',
+  '  line-height: .95;',
+  '  white-space: nowrap;',
+  '  overflow: hidden;',
+  '  text-overflow: ellipsis;',
+  '}',
+  '.topbar-meta {',
+  '  display: flex;',
+  '  align-items: center;',
+  '  justify-content: flex-end;',
+  '  gap: 8px;',
+  '  flex: 0 0 auto;',
+  '  flex-wrap: nowrap;',
+  '}',
+  '.studio-level-badge {',
+  '  background: var(--cyan);',
+  '  transform: rotate(-3deg);',
+  '  white-space: nowrap;',
+  '  padding: 6px 10px;',
+  '  min-height: 38px;',
+  '}',
+  '.compact-date-badge {',
+  '  display: flex;',
+  '  align-items: center;',
+  '  gap: 8px;',
+  '  padding: 6px 10px;',
+  '  transform: rotate(3deg);',
+  '  white-space: nowrap;',
+  '}',
+  '.compact-date-badge > span:not(.day-dial) {',
+  '  white-space: nowrap;',
+  '}',
+  '.day-dial {',
+  '  --day-progress: 0%;',
+  '  width: 58px;',
+  '  height: 58px;',
+  '  border-radius: 50%;',
+  '  border: 3px solid var(--ink);',
+  '  background: conic-gradient(from -90deg, rgba(5,6,13,.22) 0 var(--day-progress), var(--cyan) var(--day-progress) 100%);',
+  '  display: flex;',
+  '  flex-direction: column;',
+  '  align-items: center;',
+  '  justify-content: center;',
+  '  position: relative;',
+  '  box-shadow: inset 0 0 0 3px rgba(255,255,255,.2);',
+  '  flex: 0 0 auto;',
+  '}',
+  '.day-dial::after {',
+  "  content: '';",
+  '  position: absolute;',
+  '  inset: 7px;',
+  '  border-radius: inherit;',
+  '  background: var(--paper);',
+  '  border: 2px solid var(--ink);',
+  '}',
+  '.day-dial b, .day-dial small {',
+  '  position: relative;',
+  '  z-index: 1;',
+  '  line-height: 1;',
+  '}',
+  '.day-dial b {',
+  '  font-size: 14px;',
+  '  font-weight: 900;',
+  '}',
+  '.day-dial small {',
+  '  font-size: 9px;',
+  '  margin-top: 2px;',
+  '  position: relative;',
+  '}',
+  '@media (max-width: 390px) {',
+  '  .compact-brand-row { gap: 8px; }',
+  '  .studio-name, .studio-title-block h1 {',
+  '    max-width: 128px;',
+  '    font-size: clamp(24px, 6vw, 34px);',
+  '  }',
+  '  .topbar-meta { gap: 6px; }',
+  '  .studio-level-badge { padding: 5px 8px; }',
+  '  .compact-date-badge {',
+  '    gap: 6px;',
+  '    padding: 5px 8px;',
+  '  }',
+  '  .day-dial {',
+  '    width: 54px;',
+  '    height: 54px;',
+  '  }',
+  '}',
+].join('\n');
+
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('export function gameDateParts')) {
@@ -89,28 +213,29 @@ patchFile('src/App.tsx', (source) => {
   let next = source;
   next = ensureImportName(next, 'gameDateParts');
 
-  if (!next.includes('const dayRemainingPercent = Math.round(100 - dayPercent);')) {
+  if (!next.includes('const topbarDate = gameDateParts(state.gameDay);')) {
     next = next.replace(
       '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));',
-      '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));\n  const dayRemainingPercent = Math.round(100 - dayPercent);\n  const gameDate = gameDateParts(state.gameDay);',
+      '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));\n  const topbarDate = gameDateParts(state.gameDay);',
     );
   }
 
   next = next.replace(
-    /<span className="badge kaboom day-badge">[\s\S]*?<\/span>\s*<\/div>/,
-    [
-      '<div className="topbar-meta">',
-      '          <span className="badge kaboom studio-level-badge">УРОВЕНЬ {state.level}</span>',
-      '          <span className="badge kaboom date-badge">',
-      '            <span>ГОД {gameDate.year}</span>',
-      '            <span>МЕСЯЦ {gameDate.month}</span>',
-      '            <span>ДЕНЬ {gameDate.day}</span>',
-      "            <span className=\"day-dial\" style={{ '--day-progress': `${dayRemainingPercent}%` } as CSSProperties}><b>{secondsLeft}</b><small>сек</small></span>",
-      '          </span>',
-      '        </div>',
-      '      </div>',
-    ].join('\n'),
+    /<h1 title=\{state\.studioName \|\| 'Новая студия'\}>\{state\.studioName \|\| 'Новая студия'\}<\/h1>/,
+    "<h1 className=\"studio-name\" title={state.studioName || 'Новая студия'}>{state.studioName || 'Новая студия'}</h1>",
   );
+
+  if (next.includes('badge kaboom day-badge')) {
+    next = next.replace(
+      /<span className="badge kaboom day-badge">[\s\S]*?<\/span>\s*<\/div>/,
+      compactTopbarBlock(),
+    );
+  } else {
+    next = next.replace(
+      /<div className="topbar-meta">[\s\S]*?<\/span>\s*<\/div>\s*<\/div>/,
+      compactTopbarBlock(),
+    );
+  }
 
   next = ensureGameClockDate(next);
   next = next.replace(
@@ -118,73 +243,18 @@ patchFile('src/App.tsx', (source) => {
     '<div><p className="eyebrow">Игровое время</p><h3>Год {gameDate.year} · Месяц {gameDate.month} · День {gameDate.day}</h3><p className="small muted">1 игровой день ≈ 72 секунды</p></div>',
   );
 
-  requireContains(next, 'studio-level-badge', 'studio level badge');
+  requireContains(next, 'studio-name', 'visible studio name');
+  requireContains(next, 'studio-level-badge">Lvl:', 'compact studio level badge');
+  requireContains(next, 'compact-date-badge', 'compact date badge');
   requireContains(next, 'day-dial', 'circular day timer');
-  requireContains(next, 'gameDateParts(state.gameDay)', 'game date usage');
-  requireContains(next, 'function GameClock', 'GameClock component');
+  requireContains(next, 'topbarDate = gameDateParts(state.gameDay)', 'topbar date usage');
   requireMatch(next, /function GameClock[\s\S]*?const gameDate = gameDateParts\(state\.gameDay\);[\s\S]*?<section className="time-card/, 'GameClock date local');
   return next;
 });
 
 patchFile('src/styles.css', (source) => {
-  if (source.includes('.day-dial')) return source;
-  return source + [
-    '',
-    '/* Calendar + studio level header */',
-    '.topbar-meta {',
-    '  display: flex;',
-    '  align-items: center;',
-    '  justify-content: flex-end;',
-    '  gap: 8px;',
-    '  flex-wrap: wrap;',
-    '}',
-    '.studio-level-badge {',
-    '  background: var(--cyan);',
-    '  transform: rotate(-3deg);',
-    '  white-space: nowrap;',
-    '}',
-    '.date-badge {',
-    '  display: grid;',
-    '  grid-template-columns: auto auto auto auto;',
-    '  align-items: center;',
-    '  gap: 6px;',
-    '  padding: 6px 8px;',
-    '  transform: rotate(3deg);',
-    '}',
-    '.date-badge > span:not(.day-dial) {',
-    '  white-space: nowrap;',
-    '}',
-    '.day-dial {',
-    '  --day-progress: 100%;',
-    '  width: 42px;',
-    '  height: 42px;',
-    '  border-radius: 50%;',
-    '  border: 3px solid var(--ink);',
-    '  background: conic-gradient(var(--cyan) var(--day-progress), rgba(5,6,13,.28) 0);',
-    '  display: grid;',
-    '  place-items: center;',
-    '  position: relative;',
-    '  box-shadow: inset 0 0 0 3px rgba(255,255,255,.2);',
-    '}',
-    '.day-dial::after {',
-    "  content: '';",
-    '  position: absolute;',
-    '  inset: 6px;',
-    '  border-radius: inherit;',
-    '  background: var(--paper);',
-    '  border: 2px solid var(--ink);',
-    '}',
-    '.day-dial b, .day-dial small {',
-    '  position: relative;',
-    '  z-index: 1;',
-    '  line-height: 1;',
-    '}',
-    '.day-dial b { font-size: 12px; }',
-    '.day-dial small { font-size: 8px; margin-top: 12px; position: absolute; }',
-    '@media (max-width: 390px) {',
-    '  .topbar-meta { justify-content: flex-start; }',
-    '  .date-badge { grid-template-columns: auto auto auto; }',
-    '  .day-dial { grid-column: 1 / -1; justify-self: end; width: 38px; height: 38px; }',
-    '}',
-  ].join('\n') + '\n';
+  const marker = '/* Calendar + studio level header */';
+  const markerIndex = source.indexOf(marker);
+  const base = markerIndex >= 0 ? source.slice(0, markerIndex).trimEnd() : source.trimEnd();
+  return base + '\n\n' + calendarCss + '\n';
 });
