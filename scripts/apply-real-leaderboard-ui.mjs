@@ -77,7 +77,7 @@ const ratingScreen = `function RatingScreen({ state, update }: { state: GameStat
     return {
       ...current,
       coins: current.coins + milestone.reward.coins,
-            rp: current.rp + milestone.reward.rp,
+      rp: current.rp + milestone.reward.rp,
       referralMilestoneClaims: { ...(current.referralMilestoneClaims ?? {}), [id]: true },
     };
   });
@@ -94,12 +94,19 @@ const ratingScreen = `function RatingScreen({ state, update }: { state: GameStat
 }
 `;
 
+function replaceRatingScreen(source) {
+  const start = source.indexOf('function RatingScreen(');
+  const end = source.indexOf('function formatDevChoiceEffect', start);
+  if (start === -1 || end === -1) return source;
+  return source.slice(0, start) + ratingScreen + '\n\n' + source.slice(end);
+}
+
 patch('src/App.tsx', (src) => {
   let s = src;
   if (!s.includes('type RealLeaderboardRow')) {
     s = s.replace('function signedPercent(value: number) {', helpers + '\nfunction signedPercent(value: number) {');
   }
-  s = s.replace(/function RatingScreen\(\{ state, update \}: \{ state: GameState; update: \(fn: \(state: GameState\) => GameState\) => void \}\) \{[\s\S]*?\n\}\n\n\nfunction formatDevChoiceEffect/, ratingScreen + '\n\nfunction formatDevChoiceEffect');
+  s = replaceRatingScreen(s);
   if (!s.includes('Реальных релизов в рейтинге пока нет')) throw new Error('apply-real-leaderboard-ui: RatingScreen was not patched');
   return s;
 });
