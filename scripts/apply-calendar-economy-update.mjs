@@ -20,6 +20,27 @@ function requireContains(source, needle, label) {
   if (!source.includes(needle)) throw new Error('calendar-economy: missing ' + label);
 }
 
+function patchOfflineRewardGuard(source) {
+  if (source.includes('const hadOfflineDays = advanced.gameDay > normalized.gameDay;')) return source;
+
+  let next = source.replace(
+    /(\s+const passiveDelta = Math\.max\(0, advanced\.coins - beforeCoins\);\s*)\n(\s+const studioIdle = )advanced\.gamesReleased > 0 \? Math\.round\(\(90 \+ advanced\.level \* 28 \+ advanced\.employees\.length \* 70\) \* idleBoost\) : 0;/,
+    '$1\n  const hadOfflineDays = advanced.gameDay > normalized.gameDay;\n$2hadOfflineDays && advanced.gamesReleased > 0 ? Math.round((90 + advanced.level * 28 + advanced.employees.length * 70) * idleBoost) : 0;',
+  );
+
+  if (next !== source) return next;
+
+  next = source.replace(
+    /(\s+const passiveDelta = Math\.max\(0, advanced\.coins - beforeCoins\);)/,
+    '$1\n  const hadOfflineDays = advanced.gameDay > normalized.gameDay;',
+  );
+  next = next.replace(
+    /const studioIdle = advanced\.gamesReleased > 0 \? Math\.round\(\(90 \+ advanced\.level \* 28 \+ advanced\.employees\.length \* 70\) \* idleBoost\) : 0;/,
+    'const studioIdle = hadOfflineDays && advanced.gamesReleased > 0 ? Math.round((90 + advanced.level * 28 + advanced.employees.length * 70) * idleBoost) : 0;',
+  );
+  return next;
+}
+
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('export function gameDateParts')) {
@@ -43,12 +64,7 @@ patchFile('src/gameLogic.ts', (source) => {
     next = next.replace('export function todayKey() {', helpers + 'export function todayKey() {');
   }
 
-  if (!next.includes('const hadOfflineDays = advanced.gameDay > normalized.gameDay;')) {
-    next = next.replace(
-      "  const idleBoost = researchHas(advanced, 'async-standups') ? 1.2 : 1;\n  const passiveDelta = Math.max(0, advanced.coins - beforeCoins);\n  const studioIdle = advanced.gamesReleased > 0 ? Math.round((90 + advanced.level * 28 + advanced.employees.length * 70) * idleBoost) : 0;",
-      "  const idleBoost = researchHas(advanced, 'async-standups') ? 1.2 : 1;\n  const passiveDelta = Math.max(0, advanced.coins - beforeCoins);\n  const hadOfflineDays = advanced.gameDay > normalized.gameDay;\n  const studioIdle = hadOfflineDays && advanced.gamesReleased > 0 ? Math.round((90 + advanced.level * 28 + advanced.employees.length * 70) * idleBoost) : 0;",
-    );
-  }
+  next = patchOfflineRewardGuard(next);
 
   requireContains(next, 'export function gameDateParts', 'game date parts helper');
   requireContains(next, 'const hadOfflineDays = advanced.gameDay > normalized.gameDay;', 'offline reward guard');
