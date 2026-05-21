@@ -22,6 +22,28 @@ function patchFile(fileName, patcher) {
   }
 }
 
+const trustedReleaseRoute = `  app.post("/api/development/release", requireTelegramUser, async (req, res) => {
+    try {
+      let save = await getSave(req.telegramUser.id);
+      let economy = await getOrCreateEconomy(req.telegramUser, save?.data);
+      const authoritative = overlayProtectedEconomy(normalizeServerDevelopment(save?.data || {}), economy);
+      const beforeGamesReleased = safeInt(authoritative?.gamesReleased, 0);
+      let nextData = overlayProtectedEconomy(releaseDevelopmentAction(authoritative), economy);
+      await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+      if (safeInt(nextData?.gamesReleased, 0) > beforeGamesReleased) {
+        await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);
+        if (typeof qualifyReferralIfEligible === "function") {
+          economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" }) || economy;
+          nextData = overlayProtectedEconomy(nextData, economy);
+          await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+        }
+      }
+      res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData), trustedReleaseRecorded: safeInt(nextData?.gamesReleased, 0) > beforeGamesReleased });
+    } catch (error) {
+      res.status(error.status || 500).json({ ok: false, error: error.code || error.message || "development_action_failed" });
+    }
+  });`;
+
 patchFile('index.js', (source) => {
   let next = source;
 
@@ -33,9 +55,15 @@ patchFile('index.js', (source) => {
     '    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);',
   );
 
-  // If earlier patch layers left the old development action body, replace that
-  // exact body only. Avoid brace-scanning whole functions; that caused the
-  // previous Render SyntaxError on generated index.js.
+  // The generic runDevelopmentAction can be modified by several hardening layers.
+  // Patch the release route itself so trusted_releases are always written after
+  // a real backend release, regardless of the generic action body shape.
+  next = next.replace(
+    '  app.post("/api/development/release", requireTelegramUser, async (req, res) => runDevelopmentAction(req, res, "release", releaseDevelopmentAction));',
+    trustedReleaseRoute,
+  );
+
+  // If older layers left one of these exact bodies in place, keep them safe too.
   next = next.replace(
     '    const nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
     '    let nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (action === "release" && nextData.gamesReleased > safeInt(authoritative?.gamesReleased, 0)) {\n      await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n      if (typeof qualifyReferralIfEligible === "function") {\n        economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" }) || economy;\n        nextData = overlayProtectedEconomy(nextData, economy);\n        await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n      }\n    }\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
@@ -49,8 +77,8 @@ patchFile('index.js', (source) => {
   if (next.includes('mergeServerOwnedSaveData(data, previousSave?.data)')) {
     console.warn('recovery-trust-fix: aggressive save merge still present');
   }
-  if (!next.includes('recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData)')) {
-    console.warn('recovery-trust-fix: trusted release action still missing');
+  if (!next.includes('trustedReleaseRecorded')) {
+    console.warn('recovery-trust-fix: direct trusted release route not installed');
   }
   return next;
 });
