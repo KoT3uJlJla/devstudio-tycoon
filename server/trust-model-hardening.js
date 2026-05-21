@@ -1,4 +1,4 @@
-﻿import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,8 +33,8 @@ function trustedReleaseRecordFromState(telegramUser, beforeData, afterData) {
   const releaseCreatedAt = safeInt(release.createdAt, 0, Number.MAX_SAFE_INTEGER) || Date.now();
   const releaseIndex = safeInt(afterData?.gamesReleased, 0, 999999999);
   const score = Number(clampNumber(release.score, 1, 10).toFixed(1));
-  const title = sanitizeText(release.projectName || release.title || 'Р РµР»РёР·', 'Р РµР»РёР·');
-  const displayName = sanitizeText(afterData?.studioName || telegramUser?.username || telegramUser?.firstName || 'РРіСЂРѕРє ' + telegramUser.id, 'РРіСЂРѕРє');
+  const title = sanitizeText(release.projectName || release.title || 'Release', 'Release');
+  const displayName = sanitizeText(afterData?.studioName || telegramUser?.username || telegramUser?.firstName || 'Player ' + telegramUser.id, 'Player');
   const releaseKey = String(telegramUser.id) + ':' + String(releaseCreatedAt) + ':' + String(releaseIndex);
   return {
     releaseKey,
@@ -68,10 +68,10 @@ function trustedRatingBreakdownFromReleases(releases) {
   return {
     total,
     items: [
-      ['Р›СѓС‡С€РёР№ СЃРµСЂРІРµСЂРЅС‹Р№ СЂРµР»РёР·', Math.round(bestRecent * bestRecent * 930)],
-      ['РЎСЂРµРґРЅРµРµ РєР°С‡РµСЃС‚РІРѕ РЅРµРґРµР»Рё', Math.round(avgRecent * 1500)],
-      ['РџСЂРѕРІРµСЂРµРЅРЅС‹Р№ РґРѕС…РѕРґ СЂРµР»РёР·РѕРІ', Math.round(trustedRevenue)],
-      ['Р РµР»РёР·РЅС‹Р№ СЂРёС‚Рј', Math.round(releaseVolume)],
+      ['Best trusted release', Math.round(bestRecent * bestRecent * 930)],
+      ['Weekly average quality', Math.round(avgRecent * 1500)],
+      ['Verified release revenue', Math.round(trustedRevenue)],
+      ['Release rhythm', Math.round(releaseVolume)],
     ].filter(([, value]) => Number(value) !== 0),
   };
 }
@@ -91,8 +91,8 @@ async function upsertTrustedRating(telegramUser) {
     telegramId: String(telegramUser.id),
     telegramUser,
     weekKey: currentWeek,
-    displayName: sanitizeText(latestRelease?.displayName || telegramUser.username || telegramUser.firstName || 'РРіСЂРѕРє ' + telegramUser.id, 'РРіСЂРѕРє'),
-    bestTitle: sanitizeText(bestRelease?.title || 'РўРІРѕСЏ Р»СѓС‡С€Р°СЏ РёРіСЂР°', 'РўРІРѕСЏ Р»СѓС‡С€Р°СЏ РёРіСЂР°'),
+    displayName: sanitizeText(latestRelease?.displayName || telegramUser.username || telegramUser.firstName || 'Player ' + telegramUser.id, 'Player'),
+    bestTitle: sanitizeText(bestRelease?.title || 'Best game', 'Best game'),
     score: breakdown.total,
     breakdown: breakdown.items,
     trusted: true,
@@ -221,4 +221,3 @@ function patchDevAuthority(source) {
 
 patchFile('index.js', patchIndex);
 patchFile('devAuthority.js', patchDevAuthority);
-
