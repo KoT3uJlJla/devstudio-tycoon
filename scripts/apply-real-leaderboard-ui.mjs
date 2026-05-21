@@ -15,12 +15,16 @@ function applyReplacements(source, replacements) {
 }
 
 function patchLegacyReleaseCompatibility(source) {
-  const oldBlock = `export function releaseProject(state: GameState): GameState {
-  const current = ensureDailyState(advanceGameTime(state, Date.now(), 3));
-  const project = current.selectedProject;
-  if (!project?.genre || !project.theme || !project.platform) return current;
-  const combo = comboFor(project.genre, project.theme);`;
-  const newBlock = `export function releaseProject(state: GameState): GameState {
+  if (source.includes('Compatibility for projects started before recent save/model updates.')) return source;
+
+  const functionStart = source.indexOf('export function releaseProject(state: GameState): GameState {');
+  if (functionStart === -1) throw new Error('apply-real-leaderboard-ui: releaseProject function not found');
+
+  const comboLine = '  const combo = comboFor(project.genre, project.theme);';
+  const comboStart = source.indexOf(comboLine, functionStart);
+  if (comboStart === -1) throw new Error('apply-real-leaderboard-ui: releaseProject combo anchor not found');
+
+  const newHeader = `export function releaseProject(state: GameState): GameState {
   const current = ensureDailyState(advanceGameTime(state, Date.now(), 3));
   const loadedProject = current.selectedProject;
   if (!loadedProject?.startedAt) return current;
@@ -39,11 +43,9 @@ function patchLegacyReleaseCompatibility(source) {
     pendingDevEvent: null,
     progress: Math.max(Number(loadedProject.progress) || 0, 100),
   } as Project & { genre: GenreId; theme: ThemeId; platform: PlatformId };
-  const combo = comboFor(project.genre, project.theme);`;
-  if (source.includes(newBlock)) return source;
-  const next = source.replace(oldBlock, newBlock);
-  if (next === source) throw new Error('apply-real-leaderboard-ui: releaseProject compatibility patch failed');
-  return next;
+`;
+
+  return source.slice(0, functionStart) + newHeader + source.slice(comboStart);
 }
 
 const helpers = `
