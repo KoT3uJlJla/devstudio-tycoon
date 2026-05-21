@@ -32,6 +32,10 @@ function replaceFunction(source, signature, replacement, beforeNeedle) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
 
+function requireContains(source, needle, label) {
+  if (!source.includes(needle)) throw new Error('studio-goals-safe: missing ' + label);
+}
+
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('  studioGoalClaims: {},')) {
@@ -51,6 +55,8 @@ patchFile('src/gameLogic.ts', (source) => {
     ].join('\n');
     next = next.replace(/(\s+dailyPassiveIncome:\s*Math\.max\(0,\s*Math\.floor\(Number\(merged\.dailyPassiveIncome\)\s*\|\|\s*0\)\),)/, block + '\n$1');
   }
+  requireContains(next, 'studioGoalClaims: {},', 'initial studio goal claims');
+  requireContains(next, 'studioGoalClaims: (() => {', 'normalized studio goal claims');
   return next;
 });
 
@@ -75,6 +81,8 @@ patchFile('src/backendClient.ts', (source) => {
     '',
   ].join('\n');
   next = replaceFunction(next, 'export async function fetchTaskConfig', helper, 'export async function getTonWallet() {');
+  requireContains(next, 'TASK_CONFIG_API_URL', 'task config api url');
+  requireContains(next, 'export async function fetchTaskConfig', 'task config fetcher');
   return next;
 });
 
@@ -125,6 +133,8 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
   );
 }`;
 
+const refreshBlock = "  useInterfaceSounds();\n\n  const refreshTaskOverrides = () => fetchTaskConfig().then(setTaskOverrides).catch(() => undefined);\n\n  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n    refreshTaskOverrides();\n    const onVisibility = () => { if (!document.hidden) refreshTaskOverrides(); };\n    document.addEventListener('visibilitychange', onVisibility);\n    const timer = window.setInterval(refreshTaskOverrides, 60000);\n    return () => { document.removeEventListener('visibilitychange', onVisibility); window.clearInterval(timer); };\n  }, []);";
+
 patchFile('src/App.tsx', (source) => {
   let next = source;
   next = ensureImport(next, "import { fetchTaskConfig } from './backendClient';");
@@ -133,14 +143,16 @@ patchFile('src/App.tsx', (source) => {
     next = next.replace("  const [studioNamingMode, setStudioNamingMode] = useState<'initial' | 'rename' | null>(null);", "  const [studioNamingMode, setStudioNamingMode] = useState<'initial' | 'rename' | null>(null);\n  const [taskOverrides, setTaskOverrides] = useState<TaskCatalogOverrides>({});");
   }
   if (!next.includes('const refreshTaskOverrides = () =>')) {
-    next = next.replace(
-      '  useInterfaceSounds();\n\n  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n  }, []);',
-      "  useInterfaceSounds();\n\n  const refreshTaskOverrides = () => fetchTaskConfig().then(setTaskOverrides).catch(() => undefined);\n\n  useEffect(() => {\n    initTelegram();\n    loadGame().then(setState);\n    refreshTaskOverrides();\n    const onVisibility = () => { if (!document.hidden) refreshTaskOverrides(); };\n    document.addEventListener('visibilitychange', onVisibility);\n    const timer = window.setInterval(refreshTaskOverrides, 60000);\n    return () => { document.removeEventListener('visibilitychange', onVisibility); window.clearInterval(timer); };\n  }, []);",
-    );
+    const before = next;
+    next = next.replace(/  useInterfaceSounds\(\);\s*\r?\n\s*useEffect\(\(\) => \{\s*\r?\n\s*initTelegram\(\);\s*\r?\n\s*loadGame\(\)\.then\(setState\);\s*\r?\n\s*\}, \[\]\);/, refreshBlock);
+    if (next === before) throw new Error('studio-goals-safe: failed to insert task config refresh');
   }
   next = next.replace("{state.screen === 'studio' && <StudioScreen state={state} onNewProject={startNewProject} update={update} />}", "{state.screen === 'studio' && <StudioScreen state={state} onNewProject={startNewProject} update={update} taskOverrides={taskOverrides} />}");
   next = next.replace('function StudioScreen({ state, onNewProject, update }: { state: GameState; onNewProject: () => void; update: (fn: (state: GameState) => GameState) => void }) {', 'function StudioScreen({ state, onNewProject, update, taskOverrides }: { state: GameState; onNewProject: () => void; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {');
   next = next.replace('<DailyTasks state={state} update={update} />', '<DailyTasks state={state} update={update} taskOverrides={taskOverrides} />\n      <StudioGoals state={state} update={update} taskOverrides={taskOverrides} />');
   next = replaceBetween(next, 'function DailyTasks(', 'function ActiveGames(', dailyTasksBlock);
+  requireContains(next, 'refreshTaskOverrides', 'task config refresh in App');
+  requireContains(next, 'taskOverrides={taskOverrides}', 'task overrides props');
+  requireContains(next, 'function StudioGoals(', 'studio goals component');
   return next;
 });
