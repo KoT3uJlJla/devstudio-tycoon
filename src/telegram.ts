@@ -61,15 +61,13 @@ function safeTelegramCall(callback: () => void) {
   }
 }
 
-function maskedReferralCode() {
-  const userId = Number(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 0);
-  if (!Number.isFinite(userId) || userId <= 0) return 'guest';
-  const mixed = (userId ^ 0x5f3759df) >>> 0;
-  return `r_${mixed.toString(36)}`;
+function referralCode() {
+  const userId = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '').replace(/\D/g, '');
+  return userId ? `u_${userId}` : 'guest';
 }
 
 function referralUrl() {
-  return `${OFFICIAL_BOT_URL}?startapp=${maskedReferralCode()}`;
+  return `${OFFICIAL_BOT_URL}?startapp=${referralCode()}`;
 }
 
 function referralShareText(refUrl: string) {
