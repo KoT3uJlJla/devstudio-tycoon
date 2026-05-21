@@ -100,13 +100,19 @@ function patchServerIndexForTasksConfig() {
     );
   }
 
+  next = next.replace(
+    '  app.get("/api/tasks/config", requireTelegramUser, async (req, res) => {',
+    '  app.get("/api/tasks/config", async (req, res) => {',
+  );
+
   if (!next.includes('/api/tasks/config')) {
     next = next.replace(
       '  app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));',
       [
         '  app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));',
-        '  app.get("/api/tasks/config", requireTelegramUser, async (req, res) => {',
+        '  app.get("/api/tasks/config", async (req, res) => {',
         '    try {',
+        '      res.set("Cache-Control", "no-store");',
         '      res.json({ ok: true, tasksConfig: await loadTasksConfig() });',
         '    } catch (error) {',
         '      console.error("Tasks config failed:", error);',
@@ -116,6 +122,11 @@ function patchServerIndexForTasksConfig() {
       ].join('\n'),
     );
   }
+
+  next = next.replace(
+    '      res.json({ ok: true, tasksConfig: await loadTasksConfig() });',
+    '      res.set("Cache-Control", "no-store");\n      res.json({ ok: true, tasksConfig: await loadTasksConfig() });',
+  );
 
   try {
     writeFileSync(indexPath, next);
