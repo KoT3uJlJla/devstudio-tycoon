@@ -41,6 +41,16 @@ function patchOfflineRewardGuard(source) {
   return next;
 }
 
+function ensureGameClockDate(source) {
+  if (/function GameClock[\s\S]*?const gameDate = gameDateParts\(state\.gameDay\);[\s\S]*?return \(/.test(source)) return source;
+  const next = source.replace(
+    /(function GameClock\(\{ state, expenses, nextRentDay \}: \{ state: GameState; expenses: number; nextRentDay: number \}\) \{\s*)return \(/,
+    '$1const gameDate = gameDateParts(state.gameDay);\n  return (',
+  );
+  if (next === source) throw new Error('calendar-economy: failed to insert GameClock date');
+  return next;
+}
+
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('export function gameDateParts')) {
@@ -75,7 +85,7 @@ patchFile('src/App.tsx', (source) => {
   let next = source;
   next = ensureImportName(next, 'gameDateParts');
 
-  if (!next.includes('const gameDate = gameDateParts(state.gameDay);')) {
+  if (!next.includes('const dayRemainingPercent = Math.round(100 - dayPercent);')) {
     next = next.replace(
       '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));',
       '  const secondsLeft = Math.max(0, Math.ceil((GAME_DAY_MS - dayElapsed) / 1000));\n  const dayRemainingPercent = Math.round(100 - dayPercent);\n  const gameDate = gameDateParts(state.gameDay);',
@@ -98,12 +108,7 @@ patchFile('src/App.tsx', (source) => {
     ].join('\n'),
   );
 
-  if (!next.includes('const gameDate = gameDateParts(state.gameDay);\n  return (\n    <section className="time-card')) {
-    next = next.replace(
-      'function GameClock({ state, expenses, nextRentDay }: { state: GameState; expenses: number; nextRentDay: number }) {\n  return (',
-      'function GameClock({ state, expenses, nextRentDay }: { state: GameState; expenses: number; nextRentDay: number }) {\n  const gameDate = gameDateParts(state.gameDay);\n  return (',
-    );
-  }
+  next = ensureGameClockDate(next);
   next = next.replace(
     '<div><p className="eyebrow">Игровое время</p><h3>Месяц {gameMonthLabel(state.gameDay)} · День {state.gameDay}</h3><p className="small muted">1 игровой день ≈ 72 секунды</p></div>',
     '<div><p className="eyebrow">Игровое время</p><h3>Год {gameDate.year} · Месяц {gameDate.month} · День {gameDate.day}</h3><p className="small muted">1 игровой день ≈ 72 секунды</p></div>',
@@ -112,6 +117,8 @@ patchFile('src/App.tsx', (source) => {
   requireContains(next, 'studio-level-badge', 'studio level badge');
   requireContains(next, 'day-dial', 'circular day timer');
   requireContains(next, 'gameDateParts(state.gameDay)', 'game date usage');
+  requireContains(next, 'function GameClock', 'GameClock component');
+  requireContains(next, 'const gameDate = gameDateParts(state.gameDay);\n  return (\n    <section className="time-card', 'GameClock date local');
   return next;
 });
 
