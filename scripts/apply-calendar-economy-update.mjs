@@ -94,6 +94,7 @@ patchFile('src/App.tsx', (source) => {
       "            <span className=\"day-dial\" style={{ '--day-progress': `${dayRemainingPercent}%` } as CSSProperties}><b>{secondsLeft}</b><small>сек</small></span>",
       '          </span>',
       '        </div>',
+      '      </div>',
     ].join('\n'),
   );
 
