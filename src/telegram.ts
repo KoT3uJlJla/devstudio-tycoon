@@ -47,6 +47,7 @@ declare global {
 
 const OFFICIAL_BOT_URL = 'https://t.me/DevTycoon_bot';
 const SHARE_RELEASE_STORY_IMAGE = '/share-release-story.png';
+const REFERRAL_CODE_MASK = 0x5f3759df9f4a7c15n;
 
 function absoluteAssetUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
@@ -63,7 +64,12 @@ function safeTelegramCall(callback: () => void) {
 
 function referralCode() {
   const userId = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '').replace(/\D/g, '');
-  return userId ? `u_${userId}` : 'guest';
+  if (!userId) return 'guest';
+  try {
+    return `r_${(BigInt(userId) ^ REFERRAL_CODE_MASK).toString(36)}`;
+  } catch {
+    return 'guest';
+  }
 }
 
 function referralUrl() {
