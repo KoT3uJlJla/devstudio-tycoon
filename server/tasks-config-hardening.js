@@ -22,7 +22,7 @@ const DEFAULT_TASK_CONFIG_ROWS = [
 ];
 
 function cleanTaskText(value, fallback = "") {
-  return String(value || fallback).replace(/[<>"'`]/g, "").replace(/\s+/g, " ").trim().slice(0, 160);
+  return String(value || fallback).replace(/[<>"']/g, "").replace(/\u0060/g, "").replace(/\s+/g, " ").trim().slice(0, 160);
 }
 function cleanTaskReward(value) {
   const raw = isPlainObject(value) ? value : {};
