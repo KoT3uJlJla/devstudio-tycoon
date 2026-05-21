@@ -27,6 +27,30 @@ const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state:
     const target = step.target ? document.querySelector<HTMLElement>('.tutorial-target') : null;
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
+    const scrollParents: HTMLElement[] = [];
+
+    const findScrollParents = (node: HTMLElement | null) => {
+      let current = node?.parentElement ?? null;
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current);
+        const canScroll = /(auto|scroll|overlay)/.test(style.overflowY) && current.scrollHeight > current.clientHeight;
+        if (canScroll) scrollParents.push(current);
+        current = current.parentElement;
+      }
+    };
+
+    const centerTarget = () => {
+      if (!target) return;
+      findScrollParents(target);
+      target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+      const rect = target.getBoundingClientRect();
+      const desiredTop = Math.max(96, Math.round((window.innerHeight - rect.height) / 2));
+      const delta = rect.top - desiredTop;
+      if (Math.abs(delta) > 8) {
+        if (scrollParents[0]) scrollParents[0].scrollTop += delta;
+        else window.scrollBy({ top: delta, behavior: 'auto' });
+      }
+    };
 
     const measure = () => {
       if (!step.target || !target) {
@@ -34,38 +58,41 @@ const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state:
         return;
       }
       const rect = target.getBoundingClientRect();
-      const pad = 12;
+      const pad = 13;
       const top = Math.max(8, rect.top - pad);
       const left = Math.max(8, rect.left - pad);
       const right = Math.min(window.innerWidth - 8, rect.right + pad);
       const bottom = Math.min(window.innerHeight - 8, rect.bottom + pad);
-      setSpotlight({ top, left, width: Math.max(32, right - left), height: Math.max(32, bottom - top) });
+      setSpotlight({ top, left, width: Math.max(44, right - left), height: Math.max(44, bottom - top) });
     };
 
-    if (target) {
-      target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-    }
+    centerTarget();
+    measure();
+
     if (step.target) {
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
+      window.setTimeout(() => {
+        centerTarget();
+        measure();
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+      }, 80);
     }
 
     const preventScroll = (event: Event) => {
       if (step.target) event.preventDefault();
     };
+    const recenter = () => { centerTarget(); measure(); };
     document.addEventListener('wheel', preventScroll, { passive: false, capture: true });
     document.addEventListener('touchmove', preventScroll, { passive: false, capture: true });
-    window.addEventListener('resize', measure);
-    window.addEventListener('scroll', measure, true);
-    const timers = [window.setTimeout(measure, 40), window.setTimeout(measure, 260), window.setTimeout(measure, 520)];
+    window.addEventListener('resize', recenter);
+    const timers = [window.setTimeout(recenter, 220), window.setTimeout(recenter, 520), window.setTimeout(recenter, 900)];
 
     return () => {
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
       document.removeEventListener('wheel', preventScroll, true);
       document.removeEventListener('touchmove', preventScroll, true);
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', recenter);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [step?.id, step?.target]);
@@ -74,17 +101,7 @@ const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state:
   const cutout = step.target && spotlight;
   return (
     <div className={step.target ? 'guided-tutorial active spotlight-mode' : 'guided-tutorial passive'} aria-live="polite">
-      {cutout ? (
-        <div className="guided-tutorial-spotlight" aria-hidden="true">
-          <span className="tutorial-dim-piece dim-top" style={{ height: spotlight.top } as CSSProperties} />
-          <span className="tutorial-dim-piece dim-bottom" style={{ top: spotlight.top + spotlight.height } as CSSProperties} />
-          <span className="tutorial-dim-piece dim-left" style={{ top: spotlight.top, width: spotlight.left, height: spotlight.height } as CSSProperties} />
-          <span className="tutorial-dim-piece dim-right" style={{ top: spotlight.top, left: spotlight.left + spotlight.width, height: spotlight.height } as CSSProperties} />
-          <span className="tutorial-spotlight-ring" style={{ top: spotlight.top, left: spotlight.left, width: spotlight.width, height: spotlight.height } as CSSProperties} />
-        </div>
-      ) : (
-        <div className="guided-tutorial-dim" />
-      )}
+      {cutout ? <span className="tutorial-spotlight-ring" style={{ top: spotlight.top, left: spotlight.left, width: spotlight.width, height: spotlight.height } as CSSProperties} aria-hidden="true" /> : <div className="guided-tutorial-dim" />}
       <section className={\`guided-tutorial-card comic-card \${step.placement === 'top' ? 'place-top' : 'place-bottom'}\`}>
         <p className="eyebrow">{step.eyebrow}</p>
         <h3>{step.title}</h3>
@@ -106,43 +123,21 @@ const spotlightCss = [
   '  z-index: 120;',
   '  pointer-events: none;',
   '}',
-  '.guided-tutorial-dim, .tutorial-dim-piece {',
-  '  position: absolute;',
-  '  background: rgba(5, 6, 13, .74);',
-  '  pointer-events: none;',
-  '}',
   '.guided-tutorial-dim {',
+  '  position: absolute;',
   '  inset: 0;',
+  '  background: rgba(5, 6, 13, .72);',
+  '  pointer-events: none;',
   '}',
   '.guided-tutorial.passive .guided-tutorial-dim {',
   '  opacity: .42;',
   '}',
-  '.guided-tutorial-spotlight {',
-  '  position: absolute;',
-  '  inset: 0;',
-  '  pointer-events: none;',
-  '}',
-  '.tutorial-dim-piece.dim-top {',
-  '  top: 0;',
-  '  left: 0;',
-  '  right: 0;',
-  '}',
-  '.tutorial-dim-piece.dim-bottom {',
-  '  left: 0;',
-  '  right: 0;',
-  '  bottom: 0;',
-  '}',
-  '.tutorial-dim-piece.dim-left {',
-  '  left: 0;',
-  '}',
-  '.tutorial-dim-piece.dim-right {',
-  '  right: 0;',
-  '}',
   '.tutorial-spotlight-ring {',
   '  position: fixed;',
+  '  z-index: 130;',
   '  border-radius: 24px;',
   '  border: 4px solid var(--yellow);',
-  '  box-shadow: 0 0 0 5px rgba(255,255,255,.96), 0 0 36px rgba(40,245,255,.5);',
+  '  box-shadow: 0 0 0 9999px rgba(5, 6, 13, .72), 0 0 0 7px rgba(255,255,255,.96), 0 0 38px rgba(40,245,255,.55);',
   '  pointer-events: none;',
   '  animation: tutorialRingPulse 1.05s ease-in-out infinite alternate;',
   '}',
@@ -180,7 +175,7 @@ const spotlightCss = [
   '}',
   '.tutorial-target {',
   '  position: relative !important;',
-  '  z-index: 135 !important;',
+  '  z-index: 140 !important;',
   '  isolation: isolate;',
   '  filter: none !important;',
   '  animation: tutorialPulse 1.1s ease-in-out infinite alternate;',
@@ -196,7 +191,7 @@ const spotlightCss = [
   '  to { transform: translateY(-2px); }',
   '}',
   '@keyframes tutorialRingPulse {',
-  '  from { opacity: .78; transform: scale(.995); }',
+  '  from { opacity: .86; transform: scale(.995); }',
   '  to { opacity: 1; transform: scale(1.01); }',
   '}',
   '@media (max-height: 690px) {',
@@ -208,8 +203,8 @@ const spotlightCss = [
 
 patchFile('src/App.tsx', (source) => {
   const next = replaceBetween(source, 'function GuidedTutorialOverlay(', 'function TutorialBanner(', overlayBlock);
-  requireContains(next, 'guided-tutorial-spotlight', 'spotlight overlay');
-  requireContains(next, 'scrollIntoView', 'target centering');
+  requireContains(next, 'tutorial-spotlight-ring', 'single spotlight ring');
+  requireContains(next, 'centerTarget', 'target centering');
   requireContains(next, "document.body.style.overflow = 'hidden'", 'scroll lock');
   return next;
 });
