@@ -44,6 +44,37 @@ const trustedReleaseRoute = `  app.post("/api/development/release", requireTeleg
     }
   });`;
 
+const saveTransitionBlock = `    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);
+    const previousGamesReleased = safeInt(previousSave?.data?.gamesReleased, 0);
+    const currentGamesReleased = safeInt(protectedData?.gamesReleased, 0);
+    const releaseAdvanced = currentGamesReleased > previousGamesReleased;
+    let trustedReleaseRecorded = false;
+    if (releaseAdvanced) {
+      const history = Array.isArray(protectedData?.releaseHistory) ? protectedData.releaseHistory : [];
+      const activeGames = Array.isArray(protectedData?.activeGames) ? protectedData.activeGames : [];
+      const lastHistory = history[history.length - 1] || null;
+      const latestActive = [...activeGames].sort((a, b) => safeInt(b?.createdGameDay, 0) - safeInt(a?.createdGameDay, 0))[0] || null;
+      const fallbackLatestRelease = protectedData?.latestRelease || (lastHistory ? {
+        projectName: lastHistory.title || latestActive?.title || 'Release',
+        title: lastHistory.title || latestActive?.title || 'Release',
+        genre: lastHistory.genre || latestActive?.genre,
+        theme: lastHistory.theme || latestActive?.theme,
+        score: Number(lastHistory.score || latestActive?.score || 1),
+        criticAverage: Number(lastHistory.score || latestActive?.score || 1),
+        sales: safeInt(latestActive?.totalEarned, 0),
+        passivePerDay: safeInt(latestActive?.baseDailyIncome, 0),
+        rp: safeInt(protectedData?.rp, 0),
+        createdAt: Date.now(),
+      } : null);
+      if (fallbackLatestRelease) {
+        const trustedData = { ...protectedData, latestRelease: fallbackLatestRelease };
+        await recordTrustedReleaseAndRating(req.telegramUser, previousSave?.data || {}, trustedData);
+        trustedReleaseRecorded = true;
+      }
+      console.log('trusted release save transition', { telegramId: req.telegramUser.id, previousGamesReleased, currentGamesReleased, hasLatestRelease: Boolean(protectedData?.latestRelease), hasHistory: history.length > 0, trustedReleaseRecorded });
+    }
+    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() }, trustedReleaseRecorded });`;
+
 patchFile('index.js', (source) => {
   let next = source;
 
@@ -55,19 +86,20 @@ patchFile('index.js', (source) => {
     '    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);',
   );
 
-  // The current frontend releases locally first, then sends /api/save. By the
-  // time /api/development/release arrives, selectedProject may already be gone.
-  // Record the transition inside /api/save when previous save had an active
-  // project and the incoming save contains a new release. This restores the
-  // leaderboard/referral pipeline while we keep /api/save from minting Stars.
+  // Record trusted releases from the actual current frontend flow: local release
+  // -> /api/save. This catches cases where latestRelease was already dismissed
+  // by the user and reconstructs a release from releaseHistory/activeGames.
   next = next.replace(
     '    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);\n    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() } });',
-    '    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);\n    const hadActiveProject = Boolean(previousSave?.data?.selectedProject?.startedAt);\n    const releaseAdvanced = safeInt(protectedData?.gamesReleased, 0) > safeInt(previousSave?.data?.gamesReleased, 0);\n    const hasNewRelease = Boolean(protectedData?.latestRelease && protectedData.latestRelease?.createdAt !== previousSave?.data?.latestRelease?.createdAt);\n    let trustedReleaseRecorded = false;\n    if (hadActiveProject && releaseAdvanced && hasNewRelease) {\n      await recordTrustedReleaseAndRating(req.telegramUser, previousSave.data, protectedData);\n      trustedReleaseRecorded = true;\n    }\n    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() }, trustedReleaseRecorded });',
+    saveTransitionBlock,
   );
 
-  // The generic runDevelopmentAction can be modified by several hardening layers.
-  // Patch the release route itself so trusted_releases are also written after a
-  // real backend release, regardless of the generic action body shape.
+  next = next.replace(
+    '    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);\n    const hadActiveProject = Boolean(previousSave?.data?.selectedProject?.startedAt);\n    const releaseAdvanced = safeInt(protectedData?.gamesReleased, 0) > safeInt(previousSave?.data?.gamesReleased, 0);\n    const hasNewRelease = Boolean(protectedData?.latestRelease && protectedData.latestRelease?.createdAt !== previousSave?.data?.latestRelease?.createdAt);\n    let trustedReleaseRecorded = false;\n    if (hadActiveProject && releaseAdvanced && hasNewRelease) {\n      await recordTrustedReleaseAndRating(req.telegramUser, previousSave.data, protectedData);\n      trustedReleaseRecorded = true;\n    }\n    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() }, trustedReleaseRecorded });',
+    saveTransitionBlock,
+  );
+
+  // Keep direct backend release protected too.
   next = next.replace(
     '  app.post("/api/development/release", requireTelegramUser, async (req, res) => runDevelopmentAction(req, res, "release", releaseDevelopmentAction));',
     trustedReleaseRoute,
@@ -76,8 +108,8 @@ patchFile('index.js', (source) => {
   if (next.includes('mergeServerOwnedSaveData(data, previousSave?.data)')) {
     console.warn('recovery-trust-fix: aggressive save merge still present');
   }
-  if (!next.includes('trustedReleaseRecorded')) {
-    console.warn('recovery-trust-fix: trusted release recording not installed');
+  if (!next.includes('trusted release save transition')) {
+    console.warn('recovery-trust-fix: save transition trusted release recording not installed');
   }
   return next;
 });
