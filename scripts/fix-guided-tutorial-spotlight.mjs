@@ -18,37 +18,6 @@ function requireContains(source, needle, label) {
   if (!source.includes(needle)) throw new Error('guided-inline-focus: missing ' + label);
 }
 
-function ensureChoiceBlockLock(source) {
-  let next = source;
-
-  if (!next.includes('tutorialLocked?: boolean')) {
-    next = next.replace('tutorialTarget = false }: {', 'tutorialTarget = false, tutorialLocked = false }: {');
-    next = next.replace('tutorialTarget?: boolean }) {', 'tutorialTarget?: boolean; tutorialLocked?: boolean }) {');
-  }
-
-  if (!next.includes("tutorialLocked ? ' tutorial-locked'")) {
-    next = next.replace(
-      "<div className={tutorialTarget ? 'panel comic-card tutorial-target tutorial-choice-block' : 'panel comic-card'}>",
-      "<div className={`panel comic-card${tutorialTarget ? ' tutorial-target tutorial-choice-block' : ''}${tutorialLocked ? ' tutorial-locked' : ''}`.trim()}>",
-    );
-  }
-
-  next = next.replace(
-    /(<ChoiceBlock title=\"1\. Жанр\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep <= 0\})(\s*\/>)\s*/,
-    '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep > 0}$2',
-  );
-  next = next.replace(
-    /(<ChoiceBlock title=\"2\. Сеттинг\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 1\})(\s*\/>)\s*/,
-    '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep !== 1}$2',
-  );
-  next = next.replace(
-    /(<ChoiceBlock title=\"3\. Платформа\"[\s\S]*?tutorialTarget=\{!state\.tutorialDone && state\.tutorialStep === 2\})(\s*\/>)\s*/,
-    '$1 tutorialLocked={!state.tutorialDone && state.tutorialStep !== 2}$2',
-  );
-
-  return next;
-}
-
 const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state: GameState; onSkip: () => void }) {
   const step = getTutorialGuideStep(state);
 
@@ -63,10 +32,28 @@ const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state:
       target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
     };
 
+    const guardClick = (event: Event) => {
+      if (!step.target || !target) return;
+      const element = event.target as HTMLElement | null;
+      if (!element || target.contains(element) || element.closest('.guided-tutorial-card')) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const preventScroll = (event: Event) => {
+      if (step.target) event.preventDefault();
+    };
+
     centerTarget();
     const timers = [window.setTimeout(centerTarget, 120), window.setTimeout(centerTarget, 360), window.setTimeout(centerTarget, 720)];
     if (step.target) {
+      document.addEventListener('click', guardClick, true);
+      document.addEventListener('pointerdown', guardClick, true);
+      document.addEventListener('touchstart', guardClick, true);
+      document.addEventListener('wheel', preventScroll, { passive: false, capture: true });
+      document.addEventListener('touchmove', preventScroll, { passive: false, capture: true });
       window.setTimeout(() => {
+        centerTarget();
         document.body.style.overflow = 'hidden';
         document.documentElement.style.overflow = 'hidden';
       }, 180);
@@ -75,6 +62,11 @@ const overlayBlock = `function GuidedTutorialOverlay({ state, onSkip }: { state:
     return () => {
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
+      document.removeEventListener('click', guardClick, true);
+      document.removeEventListener('pointerdown', guardClick, true);
+      document.removeEventListener('touchstart', guardClick, true);
+      document.removeEventListener('wheel', preventScroll, true);
+      document.removeEventListener('touchmove', preventScroll, true);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [step?.id, step?.target]);
@@ -114,10 +106,7 @@ const inlineFocusCss = [
   '}',
   '.guided-tutorial-card.place-bottom { bottom: calc(86px + env(safe-area-inset-bottom)); }',
   '.guided-tutorial-card.place-top { top: calc(12px + env(safe-area-inset-top)); }',
-  '.guided-tutorial-card h3 {',
-  '  margin: 2px 0 6px;',
-  '  font-size: 20px;',
-  '}',
+  '.guided-tutorial-card h3 { margin: 2px 0 6px; font-size: 20px; }',
   '.guided-tutorial-card p { margin: 0; }',
   '.guided-tutorial-footer {',
   '  display: flex;',
@@ -137,11 +126,6 @@ const inlineFocusCss = [
   '  box-shadow: 0 0 0 4px var(--yellow), 0 0 0 9px rgba(255,255,255,.95), 0 0 32px rgba(40,245,255,.45), 0 12px 0 rgba(0,0,0,.18) !important;',
   '}',
   '.tutorial-target, .tutorial-target * { pointer-events: auto !important; }',
-  '.tutorial-locked {',
-  '  pointer-events: none !important;',
-  '  opacity: .42 !important;',
-  '  filter: grayscale(.35) brightness(.8);',
-  '}',
   '.tutorial-choice-block { transform: translateZ(0); }',
   '.guided-onboarding .onboarding-card { max-width: 420px; }',
   '@keyframes tutorialPulse {',
@@ -160,13 +144,9 @@ patchFile('src/App.tsx', (source) => {
     "target: true, placement: 'bottom', cta: 'Нажми на платформу',",
     "target: true, placement: 'top', cta: 'Нажми на платформу',",
   );
-
   next = replaceBetween(next, 'function GuidedTutorialOverlay(', 'function TutorialBanner(', overlayBlock);
-  next = ensureChoiceBlockLock(next);
-
   requireContains(next, 'inline-focus-mode', 'inline focus overlay');
-  requireContains(next, 'tutorialLocked?: boolean', 'choice lock prop');
-  requireContains(next, 'tutorial-locked', 'choice lock class');
+  requireContains(next, 'guardClick', 'outside click guard');
   requireContains(next, "placement: 'top', cta: 'Нажми на платформу'", 'platform top card');
   return next;
 });
