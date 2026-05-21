@@ -55,30 +55,29 @@ patchFile('index.js', (source) => {
     '    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);',
   );
 
+  // The current frontend releases locally first, then sends /api/save. By the
+  // time /api/development/release arrives, selectedProject may already be gone.
+  // Record the transition inside /api/save when previous save had an active
+  // project and the incoming save contains a new release. This restores the
+  // leaderboard/referral pipeline while we keep /api/save from minting Stars.
+  next = next.replace(
+    '    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);\n    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() } });',
+    '    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);\n    const hadActiveProject = Boolean(previousSave?.data?.selectedProject?.startedAt);\n    const releaseAdvanced = safeInt(protectedData?.gamesReleased, 0) > safeInt(previousSave?.data?.gamesReleased, 0);\n    const hasNewRelease = Boolean(protectedData?.latestRelease && protectedData.latestRelease?.createdAt !== previousSave?.data?.latestRelease?.createdAt);\n    let trustedReleaseRecorded = false;\n    if (hadActiveProject && releaseAdvanced && hasNewRelease) {\n      await recordTrustedReleaseAndRating(req.telegramUser, previousSave.data, protectedData);\n      trustedReleaseRecorded = true;\n    }\n    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() }, trustedReleaseRecorded });',
+  );
+
   // The generic runDevelopmentAction can be modified by several hardening layers.
-  // Patch the release route itself so trusted_releases are always written after
-  // a real backend release, regardless of the generic action body shape.
+  // Patch the release route itself so trusted_releases are also written after a
+  // real backend release, regardless of the generic action body shape.
   next = next.replace(
     '  app.post("/api/development/release", requireTelegramUser, async (req, res) => runDevelopmentAction(req, res, "release", releaseDevelopmentAction));',
     trustedReleaseRoute,
-  );
-
-  // If older layers left one of these exact bodies in place, keep them safe too.
-  next = next.replace(
-    '    const nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
-    '    let nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (action === "release" && nextData.gamesReleased > safeInt(authoritative?.gamesReleased, 0)) {\n      await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n      if (typeof qualifyReferralIfEligible === "function") {\n        economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" }) || economy;\n        nextData = overlayProtectedEconomy(nextData, economy);\n        await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n      }\n    }\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
-  );
-
-  next = next.replace(
-    '    const nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    if (action === "release") economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" });\n    res.json({ ok: true, save: { data: overlayProtectedEconomy(nextData, economy), updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
-    '    let nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (action === "release" && nextData.gamesReleased > safeInt(authoritative?.gamesReleased, 0)) {\n      await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n      if (typeof qualifyReferralIfEligible === "function") {\n        economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" }) || economy;\n        nextData = overlayProtectedEconomy(nextData, economy);\n        await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n      }\n    }\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
   );
 
   if (next.includes('mergeServerOwnedSaveData(data, previousSave?.data)')) {
     console.warn('recovery-trust-fix: aggressive save merge still present');
   }
   if (!next.includes('trustedReleaseRecorded')) {
-    console.warn('recovery-trust-fix: direct trusted release route not installed');
+    console.warn('recovery-trust-fix: trusted release recording not installed');
   }
   return next;
 });
