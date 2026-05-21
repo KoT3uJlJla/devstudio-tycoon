@@ -6,19 +6,48 @@ function patch(path, fn) {
   if (out !== src) writeFileSync(path, out);
 }
 
+function patchBackendPayloadType(source) {
+  return source.replace(/type\s+BackendSavePayload\s*=\s*\{([\s\S]*?)\n\};/, (match, body) => {
+    let nextBody = body;
+    const add = (line) => {
+      if (nextBody.includes(line.trim())) return;
+      nextBody = nextBody.replace(/\n\s*ok\?:\s*boolean;?/, (okLine) => `${okLine}\n  ${line}`);
+    };
+    add('error?: string;');
+    add('role?: string;');
+    add('gameStatus?: { status?: string; closed?: boolean; message?: string } | null;');
+    return `type BackendSavePayload = {${nextBody}\n};`;
+  });
+}
+
+function patchServerLoadType(source) {
+  return source.replace(/type\s+ServerLoadResult\s*=([\s\S]*?)\n\s*\|\s*\{\s*kind:\s*'unavailable'\s*\};/, (match, body) => {
+    if (match.includes("kind: 'closed'")) return match;
+    return `type ServerLoadResult =${body}\n  | { kind: 'closed' }\n  | { kind: 'unavailable' };`;
+  });
+}
+
 patch('src/storage.ts', (src) => {
   let s = src;
-  if (!s.includes('error?: string;')) {
-    s = s.replace('type BackendSavePayload = {\n  ok?: boolean;\n', 'type BackendSavePayload = {\n  ok?: boolean;\n  error?: string;\n  role?: string;\n  gameStatus?: { status?: string; closed?: boolean; message?: string } | null;\n');
-  }
+  s = patchBackendPayloadType(s);
+  s = patchServerLoadType(s);
   if (!s.includes('__devstudioGameClosed')) {
     const helper = `\nfunction markGameClosed(payload: BackendSavePayload | null) {\n  const status = isPlainObject(payload?.gameStatus) ? payload?.gameStatus : null;\n  const message = typeof status?.message === 'string' && status.message.trim() ? status.message : 'Ведутся технические работы. Возвращайтесь позже';\n  try {\n    (window as unknown as { __devstudioGameClosed?: boolean }).__devstudioGameClosed = true;\n    window.dispatchEvent(new CustomEvent('devstudio:game-closed', { detail: { message, role: payload?.role || 'user', status } }));\n  } catch { }\n}\n\nfunction isGameClosedPayload(payload: BackendSavePayload | null) {\n  return Boolean(payload && payload.error === 'game_closed');\n}\n\nasync function backendJsonOrNull(response: globalThis.Response): Promise<BackendSavePayload | null> {\n  const data = await response.json().catch(() => null) as BackendSavePayload | null;\n  if (!response.ok && isGameClosedPayload(data)) return data;\n  return response.ok ? data : null;\n}\n`;
     s = s.replace('\nfunction telegramInitData(): string {', helper + '\nfunction telegramInitData(): string {');
   }
   s = s.replaceAll('.then((response) => (response.ok ? response.json() : null))', '.then(backendJsonOrNull)');
-  s = s.replace('  if (!payload?.ok || !rawSave || !isPlainObject(rawSave)) return null;', '  if (isGameClosedPayload(payload)) { markGameClosed(payload); return null; }\n  if (!payload?.ok || !rawSave || !isPlainObject(rawSave)) return null;');
-  s = s.replace('  const authoritativeState = stateFromBackendPayload(payload);\n  if (authoritativeState) rememberAuthoritativeState(authoritativeState);', '  if (isGameClosedPayload(payload)) { markGameClosed(payload); return; }\n  const authoritativeState = stateFromBackendPayload(payload);\n  if (authoritativeState) rememberAuthoritativeState(authoritativeState);');
-  s = s.replace('  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);\n  if (normalized) rememberAuthoritativeState(normalized);', '  if (isGameClosedPayload(payload as BackendSavePayload | null)) { markGameClosed(payload as BackendSavePayload | null); return; }\n  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);\n  if (normalized) rememberAuthoritativeState(normalized);');
+  if (!s.includes('if (isGameClosedPayload(payload)) { markGameClosed(payload); return null; }')) {
+    s = s.replace('  if (!payload?.ok || !rawSave || !isPlainObject(rawSave)) return null;', '  if (isGameClosedPayload(payload)) { markGameClosed(payload); return null; }\n  if (!payload?.ok || !rawSave || !isPlainObject(rawSave)) return null;');
+  }
+  if (!s.includes('if (isGameClosedPayload(payload)) { markGameClosed(payload); return; }\n  const authoritativeState = stateFromBackendPayload(payload);')) {
+    s = s.replace('  const authoritativeState = stateFromBackendPayload(payload);\n  if (authoritativeState) rememberAuthoritativeState(authoritativeState);', '  if (isGameClosedPayload(payload)) { markGameClosed(payload); return; }\n  const authoritativeState = stateFromBackendPayload(payload);\n  if (authoritativeState) rememberAuthoritativeState(authoritativeState);');
+  }
+  if (!s.includes('if (isGameClosedPayload(payload as BackendSavePayload | null)) { markGameClosed(payload as BackendSavePayload | null); return; }')) {
+    s = s.replace('  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);\n  if (normalized) rememberAuthoritativeState(normalized);', '  if (isGameClosedPayload(payload as BackendSavePayload | null)) { markGameClosed(payload as BackendSavePayload | null); return; }\n  const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);\n  if (normalized) rememberAuthoritativeState(normalized);');
+  }
+  if (!s.includes('error?: string;') || !s.includes('gameStatus?:') || !s.includes("kind: 'closed'")) {
+    throw new Error('apply-maintenance-ui-lite: storage TypeScript types were not patched');
+  }
   return s;
 });
 
