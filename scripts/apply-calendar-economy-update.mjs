@@ -20,6 +20,10 @@ function requireContains(source, needle, label) {
   if (!source.includes(needle)) throw new Error('calendar-economy: missing ' + label);
 }
 
+function requireMatch(source, pattern, label) {
+  if (!pattern.test(source)) throw new Error('calendar-economy: missing ' + label);
+}
+
 function patchOfflineRewardGuard(source) {
   if (source.includes('const hadOfflineDays = advanced.gameDay > normalized.gameDay;')) return source;
 
@@ -118,7 +122,7 @@ patchFile('src/App.tsx', (source) => {
   requireContains(next, 'day-dial', 'circular day timer');
   requireContains(next, 'gameDateParts(state.gameDay)', 'game date usage');
   requireContains(next, 'function GameClock', 'GameClock component');
-  requireContains(next, 'const gameDate = gameDateParts(state.gameDay);\n  return (\n    <section className="time-card', 'GameClock date local');
+  requireMatch(next, /function GameClock[\s\S]*?const gameDate = gameDateParts\(state\.gameDay\);[\s\S]*?<section className="time-card/, 'GameClock date local');
   return next;
 });
 
