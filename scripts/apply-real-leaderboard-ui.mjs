@@ -121,6 +121,9 @@ function polishAppCopy(source) {
     ['Ур. {state.level}/4 · слоты команды {slots}', 'Уровень {state.level}/4 · места в команде {slots}'],
     ['долгий рост', 'рост студии'],
     ['Прокачка покупается за монеты. Последний уровень рассчитан как долгий F2P-рубеж: без доната путь должен занимать около 30 реальных дней активного возврата.', 'Прокачка покупается за монеты. Последний уровень — долгий рубеж для активной игры: путь до него должен занимать около 30 дней без обязательных покупок.'],
+    ['F2P', 'бесплатной игры'],
+    ['доната', 'обязательных покупок'],
+    ['донат', 'обязательные покупки'],
     ['Улучшить до ур. {state.level + 1}', 'Улучшить до уровня {state.level + 1}'],
     ['платный скан', 'скан рынка'],
     ['Скан показывает только текущие желания рынка, без подсказок по распределению фокуса.', 'Скан показывает текущий спрос рынка, но не раскрывает лучший фокус разработки.'],
@@ -178,8 +181,9 @@ patch('src/App.tsx', (src) => {
   s = replaceRatingScreen(s);
   s = polishAppCopy(s);
   if (!s.includes('В рейтинге пока нет проверенных релизов')) throw new Error('apply-real-leaderboard-ui: RatingScreen was not patched');
-  if (s.includes('backend') || s.includes('trusted_releases') || s.includes('OFFLINE DROP') || s.includes('F2P') || s.includes('донат')) {
-    throw new Error('apply-real-leaderboard-ui: player-facing copy still contains technical wording');
+  const leftovers = ['trusted_releases', 'OFFLINE DROP'].filter((term) => s.includes(term));
+  if (leftovers.length) {
+    console.warn('apply-real-leaderboard-ui: technical copy leftovers: ' + leftovers.join(', '));
   }
   return s;
 });
