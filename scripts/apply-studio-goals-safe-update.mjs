@@ -57,10 +57,15 @@ patchFile('src/gameLogic.ts', (source) => {
 patchFile('src/backendClient.ts', (source) => {
   let next = source;
   next = ensureTypeImport(next, "import type { TaskCatalogOverrides } from './taskCatalog';");
+  if (!next.includes('const TASK_CONFIG_API_URL =')) {
+    next = next.replace(
+      "const API_URL = import.meta.env.VITE_API_URL ?? '';",
+      "const API_URL = import.meta.env.VITE_API_URL ?? '';\nconst TASK_CONFIG_API_URL = API_URL || 'https://devstudio-tycoon-api.onrender.com';",
+    );
+  }
   const helper = [
     'export async function fetchTaskConfig(): Promise<TaskCatalogOverrides> {',
-    '  if (!API_URL) return {};',
-    "  return fetch(`${API_URL}/api/tasks/config?ts=${Date.now()}`, { cache: 'no-store' })",
+    "  return fetch(`${TASK_CONFIG_API_URL}/api/tasks/config?ts=${Date.now()}`, { cache: 'no-store' })",
     '    .then(async (response) => {',
     '      const data = await response.json().catch(() => null) as (BackendStatePayload & { tasksConfig?: TaskCatalogOverrides }) | null;',
     '      return response.ok && data?.ok && data.tasksConfig ? data.tasksConfig : {};',
