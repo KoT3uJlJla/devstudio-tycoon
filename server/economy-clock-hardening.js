@@ -25,7 +25,7 @@ function estimateServerWeeklyExpenses(data) {
 }
 
 function serverLedgerEntry(day, title, amount, kind) {
-  return { id: `server-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, day, title, amount, kind };
+  return { id: 'server-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8), day, title, amount, kind };
 }
 
 function advanceServerEconomy(data) {
