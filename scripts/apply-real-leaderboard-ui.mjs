@@ -14,6 +14,38 @@ function applyReplacements(source, replacements) {
   return replacements.reduce((next, [from, to]) => replaceAllLiteral(next, from, to), source);
 }
 
+function patchLegacyReleaseCompatibility(source) {
+  const oldBlock = `export function releaseProject(state: GameState): GameState {
+  const current = ensureDailyState(advanceGameTime(state, Date.now(), 3));
+  const project = current.selectedProject;
+  if (!project?.genre || !project.theme || !project.platform) return current;
+  const combo = comboFor(project.genre, project.theme);`;
+  const newBlock = `export function releaseProject(state: GameState): GameState {
+  const current = ensureDailyState(advanceGameTime(state, Date.now(), 3));
+  const loadedProject = current.selectedProject;
+  if (!loadedProject?.startedAt) return current;
+
+  // Compatibility for projects started before recent save/model updates.
+  // Some old selectedProject records can reach 100% while missing one of the
+  // release fields. Do not trap the player on the completed project screen.
+  const releaseGenre: GenreId = loadedProject.genre && genres.some((item) => item.id === loadedProject.genre) ? loadedProject.genre : 'arcade';
+  const releaseTheme: ThemeId = loadedProject.theme && themes.some((item) => item.id === loadedProject.theme) ? loadedProject.theme : 'cyberpunk';
+  const releasePlatform: PlatformId = loadedProject.platform && platforms.some((item) => item.id === loadedProject.platform) ? loadedProject.platform : 'micro_pc';
+  const project = {
+    ...loadedProject,
+    genre: releaseGenre,
+    theme: releaseTheme,
+    platform: releasePlatform,
+    pendingDevEvent: null,
+    progress: Math.max(Number(loadedProject.progress) || 0, 100),
+  } as Project & { genre: GenreId; theme: ThemeId; platform: PlatformId };
+  const combo = comboFor(project.genre, project.theme);`;
+  if (source.includes(newBlock)) return source;
+  const next = source.replace(oldBlock, newBlock);
+  if (next === source) throw new Error('apply-real-leaderboard-ui: releaseProject compatibility patch failed');
+  return next;
+}
+
 const helpers = `
 type RealLeaderboardRow = {
   place?: number;
@@ -188,11 +220,11 @@ patch('src/App.tsx', (src) => {
   return s;
 });
 
-patch('src/gameLogic.ts', (src) => applyReplacements(src, [
+patch('src/gameLogic.ts', (src) => patchLegacyReleaseCompatibility(applyReplacements(src, [
   ['Long-tail доход', 'Доход релизов'],
   ['Получить 1000 монет пассивно от выпущенных игр.', 'Получи 1000 монет пассивного дохода от выпущенных игр.'],
   ['виртуальных пользователей', 'игроков'],
-]));
+])));
 
 patch('src/gameData.ts', (src) => applyReplacements(src, [
   ['name: \'Survival\'', 'name: \'Выживание\''],
