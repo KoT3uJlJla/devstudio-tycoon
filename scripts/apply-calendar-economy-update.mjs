@@ -75,7 +75,7 @@ patchFile('src/App.tsx', (source) => {
       '            <span>ГОД {gameDate.year}</span>',
       '            <span>МЕСЯЦ {gameDate.month}</span>',
       '            <span>ДЕНЬ {gameDate.day}</span>',
-      '            <span className="day-dial" style={{ \'--day-progress\': `${dayRemainingPercent}%` } as CSSProperties}><b>{secondsLeft}</b><small>сек</small></span>',
+      "            <span className=\"day-dial\" style={{ '--day-progress': `${dayRemainingPercent}%` } as CSSProperties}><b>{secondsLeft}</b><small>сек</small></span>",
       '          </span>',
       '        </div>',
     ].join('\n'),
