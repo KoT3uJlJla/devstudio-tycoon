@@ -181,10 +181,17 @@ function patchIndexJs(source) {
       "if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    if (action === \"release\") economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: \"development:release\" });\n    res.json({ ok: true, save: { data: overlayProtectedEconomy(nextData, economy), updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });",
     );
   }
+  if (!next.includes('source: "save_sync"')) {
+    next = next.replace(
+      "if (incomingData?.gamesReleased > 0) {\n    await upsertRating(telegramUser, incomingData);\n    economy = await db.collection(\"economy\").findOne({ telegramId: telegramUser.id });\n  }",
+      "if (incomingData?.gamesReleased > 0) {\n    await upsertRating(telegramUser, incomingData);\n    economy = await qualifyReferralIfEligible(telegramUser, incomingData, { source: \"save_sync\" });\n  }",
+    );
+  }
 
   requirePatch(next, "REFERRAL_QUALIFY_MIN_SCORE", "index referral constants");
   requirePatch(next, "async function ensureReferralForUser", "index referral attribution");
   requirePatch(next, "qualifyReferralIfEligible(req.telegramUser, nextData", "index referral qualification");
+  requirePatch(next, 'source: "save_sync"', "index referral save sync qualification");
   requirePatch(next, 'db.collection("referrals").createIndex', "index referral indexes");
   return next;
 }
