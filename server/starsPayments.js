@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { grantReferralPurchaseCommissions } from "./referralCommissions.js";
 
 const EXTRA_GENRE_IDS = ["horror", "racing", "fighting", "simulator", "visual-novel", "roguelike", "deckbuilder", "survival", "metroidvania", "sandbox", "battle-royale", "rhythm", "party", "idle", "tower-defense", "moba-lite", "city-builder", "detective-game", "sports-manager", "social-sim"];
 const EXTRA_THEME_IDS = ["detective", "medieval", "sport", "postapoc", "military", "mythology", "underwater", "pirates", "kaiju", "dreams", "office", "food", "music", "ai-revolt", "time-travel"];
@@ -245,6 +246,7 @@ async function applyPaidInvoice(deps, invoice, payment) {
       },
     },
   });
+  await grantReferralPurchaseCommissions(deps, invoice);
   await deps.db.collection("stars_invoices").updateOne(
     { invoiceId: invoice.invoiceId, status: { $ne: "paid" } },
     { $set: { status: "paid", paidAt: new Date(), payment: { currency: payment.currency, totalAmount: payment.total_amount, telegramPaymentChargeId: payment.telegram_payment_charge_id || null, providerPaymentChargeId: payment.provider_payment_charge_id || null }, updatedAt: new Date() } },
