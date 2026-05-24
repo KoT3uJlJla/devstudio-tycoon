@@ -196,31 +196,49 @@ async function getAuthoritativeSave(telegramUser, save, economy) {
   return { data: normalizedData, updatedAt: save.updatedAt ?? null };
 }
 
+function economyMigrationFromSave(saveData) {
+  const data = isPlainObject(saveData) ? saveData : {};
+  return {
+    stars: safeInt(data.stars, 0, 9999999),
+    qualifiedReferrals: safeInt(data.qualifiedReferrals, 0, 999999),
+    qualifiedSecondLevelReferrals: safeInt(data.qualifiedSecondLevelReferrals, 0, 999999),
+    referralMilestoneClaims: isPlainObject(data.referralMilestoneClaims) ? data.referralMilestoneClaims : {},
+    dailyClaimedAt: typeof data.dailyClaimedAt === "string" ? data.dailyClaimedAt : null,
+    migratedFromSave: Boolean(saveData),
+  };
+}
+
 async function getOrCreateEconomy(telegramUser, saveData = null) {
   const telegramId = telegramUser.id;
   await ensureReferralForUser(db, telegramUser);
   const existing = await db.collection("economy").findOne({ telegramId });
   if (existing) return existing;
   const now = new Date();
+  const migrated = economyMigrationFromSave(saveData);
   const doc = {
     telegramId,
     telegramUser,
-    stars: 0,
-    qualifiedReferrals: 0,
-    qualifiedSecondLevelReferrals: 0,
-    referralMilestoneClaims: {},
-    dailyClaimedAt: null,
+    stars: migrated.stars,
+    qualifiedReferrals: migrated.qualifiedReferrals,
+    qualifiedSecondLevelReferrals: migrated.qualifiedSecondLevelReferrals,
+    referralMilestoneClaims: migrated.referralMilestoneClaims,
+    dailyClaimedAt: migrated.dailyClaimedAt,
     dailyTaskStarClaims: {},
     tutorialStarClaimed: false,
     prizeClaims: {},
     tonWalletAddress: "",
-    ledger: [],
-    migratedFromSave: Boolean(saveData),
+    ledger: migrated.stars > 0 ? [buildLedgerEntry("star_migration", migrated.stars, "migrate_from_save", { source: "legacy_save" })] : [],
+    migratedFromSave: migrated.migratedFromSave,
     createdAt: now,
     updatedAt: now,
   };
-  await db.collection("economy").insertOne(doc);
-  return doc;
+  try {
+    await db.collection("economy").insertOne(doc);
+    return doc;
+  } catch (error) {
+    if (error?.code === 11000) return db.collection("economy").findOne({ telegramId });
+    throw error;
+  }
 }
 async function patchEconomy(telegramId, patch) {
   await db.collection("economy").updateOne({ telegramId }, { ...patch, $set: { ...(patch.$set || {}), updatedAt: new Date() } });
