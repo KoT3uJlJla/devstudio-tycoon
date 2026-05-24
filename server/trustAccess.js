@@ -23,7 +23,6 @@ export function normalizeGameStatusDoc(doc) {
 export async function ensureTrustAccessIndexes(db) {
   await db.collection("users").createIndex({ telegramId: 1 }, { unique: true });
   await db.collection("users").createIndex({ role: 1 });
-  await db.collection("config").createIndex({ _id: 1 }, { unique: true });
   const now = new Date();
   await db.collection("config").updateOne(
     { _id: GAME_STATUS_CONFIG_ID },
