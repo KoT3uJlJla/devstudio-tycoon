@@ -1,3 +1,5 @@
+import { advanceServerEconomy } from "./economyClock.js";
+
 const DEFAULT_DURATION_SECONDS = 180;
 const MAX_SERVER_ELAPSED_MS = Number(process.env.DEV_SERVER_MAX_ELAPSED_MS || 6 * 60 * 60 * 1000);
 
@@ -96,7 +98,7 @@ function sanitizeLedger(ledger) {
       day: safeInt(entry.day, 1, 999999),
       title: safeText(entry.title, 'Событие'),
       amount: safeInt(entry.amount, -100000000, 100000000),
-      kind: entry.kind === 'expense' ? 'expense' : 'income',
+      kind: entry.kind === 'expense' ? 'expense' : entry.kind === 'event' ? 'event' : 'income',
     }))
     .slice(-10);
 }
@@ -112,7 +114,7 @@ function sanitizeMarketEvents(events) {
       daysRemaining: safeInt(event.daysRemaining, 0, 31),
       salesMultiplier: Number(clampNumber(event.salesMultiplier, 0.1, 5).toFixed(2)),
       scoreModifier: Number(clampNumber(event.scoreModifier, -5, 5).toFixed(2)),
-      tone: ['boom', 'risk', 'neutral'].includes(event.tone) ? event.tone : 'neutral',
+      tone: ['positive', 'negative', 'boom', 'risk', 'neutral'].includes(event.tone) ? event.tone : 'neutral',
     }))
     .slice(0, 4);
 }
@@ -160,7 +162,8 @@ export function mergeServerDevelopment(incomingData, previousData) {
 
 export function normalizeServerDevelopment(data, previousData = null) {
   if (!isPlainObject(data)) return data;
-  const baseData = sanitizePersistentCollections(data);
+  const economyAdvancedData = advanceServerEconomy(data);
+  const baseData = sanitizePersistentCollections(economyAdvancedData);
   const project = baseData.selectedProject;
   if (!isPlainObject(project)) return baseData;
 
