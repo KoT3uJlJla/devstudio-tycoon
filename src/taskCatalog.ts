@@ -1,4 +1,3 @@
-import { isProductInstinctActive } from './gameLogic';
 import type { DailyTaskId, GameState } from './types';
 
 export type TaskReward = {
@@ -64,6 +63,13 @@ export type StudioGoalModel = {
   reward: TaskReward;
   order: number;
 };
+
+function isProductInstinctActiveCompat(state: GameState) {
+  const maybeTimed = state as GameState & { productInstinctExpiresAt?: unknown };
+  const expiresAt = Number(maybeTimed.productInstinctExpiresAt || 0);
+  if (expiresAt > 0) return expiresAt > Date.now();
+  return state.unlockedResearchIds.includes('product-instinct');
+}
 
 const dailyTaskBase: DailyTaskBase[] = [
   {
@@ -185,7 +191,7 @@ const studioGoalBase: StudioGoalBase[] = [
     desc: 'Активируй «Продуктовое чутьё».',
     target: 1,
     reward: { coins: 3000, rp: 12 },
-    current: (state) => isProductInstinctActive(state) ? 1 : 0,
+    current: (state) => isProductInstinctActiveCompat(state) ? 1 : 0,
     order: 90,
   },
   {
