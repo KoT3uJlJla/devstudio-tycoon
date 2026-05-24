@@ -75,8 +75,60 @@ export function initialTrustedSaveData() {
   };
 }
 
+function sameProject(a, b) {
+  return Boolean(isPlainObject(a) && isPlainObject(b) && a.id && b.id && String(a.id) === String(b.id));
+}
+
+function safeDevEventQueue(value, previousQueue) {
+  const previous = Array.isArray(previousQueue) ? previousQueue : [];
+  if (!Array.isArray(value)) return previous;
+  const byInstance = new Map(previous.filter(isPlainObject).map((item) => [String(item.instanceId || ""), item]));
+  return value
+    .filter(isPlainObject)
+    .map((item) => {
+      const previousItem = byInstance.get(String(item.instanceId || ""));
+      if (!previousItem) return null;
+      return {
+        ...previousItem,
+        triggered: Boolean(item.triggered || previousItem.triggered),
+      };
+    })
+    .filter(Boolean);
+}
+
+function safePendingDevEvent(value, previousProject) {
+  if (!isPlainObject(value)) return previousProject?.pendingDevEvent || null;
+  const queue = Array.isArray(previousProject?.devEventQueue) ? previousProject.devEventQueue : [];
+  const match = queue.find((item) => isPlainObject(item) && String(item.instanceId || "") === String(value.instanceId || ""));
+  if (!match) return previousProject?.pendingDevEvent || null;
+  return {
+    instanceId: String(match.instanceId || "").slice(0, 80),
+    scenarioId: String(match.scenarioId || value.scenarioId || "").slice(0, 80),
+    triggeredAtProgress: safeInt(value.triggeredAtProgress ?? match.progressAt, 0, 100),
+  };
+}
+
+function mergeClientProjectRuntimeState(project, previousProject) {
+  if (!sameProject(project, previousProject)) return previousProject;
+  const previousProgress = safeInt(previousProject.progress, 0, 100);
+  const incomingProgress = safeInt(project.progress, 0, 100);
+  const queue = safeDevEventQueue(project.devEventQueue, previousProject.devEventQueue);
+  const pending = project.pendingDevEvent ? safePendingDevEvent(project.pendingDevEvent, previousProject) : previousProject.pendingDevEvent || null;
+  return {
+    ...previousProject,
+    progress: Math.max(previousProgress, incomingProgress),
+    devEventQueue: queue,
+    pendingDevEvent: pending,
+    devEventId: cleanText(project.devEventId || previousProject.devEventId || "", ""),
+    devEventText: cleanText(project.devEventText || previousProject.devEventText || "", ""),
+    devEventTone: project.devEventTone === "danger" ? "danger" : project.devEventTone === "normal" ? "normal" : previousProject.devEventTone,
+  };
+}
+
 function safeClientProjectDraft(project, previousProject) {
-  if (isPlainObject(previousProject) && (previousProject.startedAt || previousProject.pendingDevEvent || safeInt(previousProject.progress, 0, 100) > 1)) return previousProject;
+  if (isPlainObject(previousProject) && (previousProject.startedAt || previousProject.pendingDevEvent || safeInt(previousProject.progress, 0, 100) > 1)) {
+    return mergeClientProjectRuntimeState(project, previousProject);
+  }
   if (!isPlainObject(project)) return previousProject && !previousProject.startedAt ? previousProject : null;
   if (project.startedAt || project.pendingDevEvent || safeInt(project.progress, 0, 100) > 1) return null;
   return {
