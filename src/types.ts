@@ -192,7 +192,7 @@ export type AudienceState = {
   mood: number;
   desiredGenreId: GenreId;
   desiredThemeId: ThemeId;
-  desiredPlatformId: PlatformId;
+  desiredPlatformId?: PlatformId;
   vibe: string;
   lastUpdatedMonth: number;
   revealedUntilMonth: number;
@@ -236,7 +236,7 @@ export type GameState = {
   dailyResearchUnlocked: number;
   dailyPassiveIncome: number;
   dailyTaskClaims: Record<string, boolean>;
-  studioGoalClaims: Record<string, boolean>;
+  studioGoalClaims?: Record<string, boolean>;
   weeklyExpenseTotal: number;
   unpaidSinceMonth: number | null;
   closureWarningMonth: number | null;
