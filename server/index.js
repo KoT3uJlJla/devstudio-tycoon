@@ -6,6 +6,7 @@ import { MongoClient } from "mongodb";
 import { mergeServerDevelopment, normalizeServerDevelopment, publicDevelopmentStatus } from "./devAuthority.js";
 import { registerStarsPaymentRoutes } from "./starsPayments.js";
 import { registerTonWalletRoutes } from "./tonWalletRoutes.js";
+import { ensureDefaultTaskConfigs, registerTasksConfigRoutes } from "./tasksConfig.js";
 import {
   DEVELOPMENT_ACTION_STAR_COSTS,
   promoteDevelopmentAction,
@@ -326,6 +327,7 @@ async function start() {
   await db.collection("ratings").createIndex({ telegramId: 1, weekKey: 1 }, { unique: true });
   await db.collection("stars_invoices").createIndex({ invoiceId: 1 }, { unique: true });
   await db.collection("stars_invoices").createIndex({ telegramId: 1, createdAt: -1 });
+  await ensureDefaultTaskConfigs(db);
 
   app.get("/health", (req, res) => res.json({ ok: true }));
   app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));
@@ -373,6 +375,7 @@ async function start() {
   });
 
   registerTonWalletRoutes(app, { requireTelegramUser, getSave, getOrCreateEconomy, patchEconomy });
+  registerTasksConfigRoutes(app, { db });
 
   app.get("/api/economy", requireTelegramUser, async (req, res) => {
     const save = await getSave(req.telegramUser.id);
