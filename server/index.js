@@ -7,6 +7,7 @@ import { mergeServerDevelopment, normalizeServerDevelopment, publicDevelopmentSt
 import { registerStarsPaymentRoutes } from "./starsPayments.js";
 import { registerTonWalletRoutes } from "./tonWalletRoutes.js";
 import { ensureDefaultTaskConfigs, registerTasksConfigRoutes } from "./tasksConfig.js";
+import { registerBotStartRoutes } from "./botStartRoutes.js";
 import {
   DEVELOPMENT_ACTION_STAR_COSTS,
   promoteDevelopmentAction,
@@ -425,6 +426,7 @@ async function start() {
     res.json({ ok: true, rating: await upsertRating(req.telegramUser, data), leaderboard: await leaderboardForCurrentWeek(), weekKey: weekKey() });
   });
   registerStarsPaymentRoutes(app, { db, botToken, requireTelegramUser, SHOP_ITEMS, getSave, getOrCreateEconomy, overlayProtectedEconomy, applyRewardToSaveData, writeSave, patchEconomy });
+  registerBotStartRoutes(app);
 
   const port = process.env.PORT || 3000;
   app.listen(port, () => console.log(`Backend запущен: http://localhost:${port}`));
