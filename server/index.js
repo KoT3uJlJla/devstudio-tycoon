@@ -64,12 +64,20 @@ const REFERRAL_MILESTONES = [
 const SHOP_ITEMS = {
   starter_pack: { title: "Стартовый набор", costStars: 100, reward: { coins: 5000, rp: 50, offerSeen: true } },
   coins_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
+  coin_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
+  coins_pack: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
+  coins_3000: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
+  money_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
   coins_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
+  coin_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
+  coins_big: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
+  coins_18000: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
+  money_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
   research_boost: { title: "Ускорение науки", costStars: 75, reward: { rp: 100 } },
   rename_studio: { title: "Переименование студии", costStars: 25, reward: {} },
   refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },
-  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: {} },
-  promotion: { title: "Продвижение релиза", costStars: 35, reward: {} },
+  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: { developmentAction: "skip" } },
+  promotion: { title: "Продвижение релиза", costStars: 35, reward: { developmentAction: "promote" } },
   product_instinct: { title: "Продуктовое чутьё", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
 };
 
@@ -299,7 +307,9 @@ async function syncEconomyFromIncomingSave(telegramUser, incomingData, previousD
   return db.collection("economy").findOne({ telegramId: telegramUser.id }) || economy;
 }
 function applyRewardToSaveData(data, reward) {
-  const next = isPlainObject(data) ? { ...data } : {};
+  let next = isPlainObject(data) ? { ...data } : {};
+  if (reward.developmentAction === "skip") return skipDevelopmentAction(next);
+  if (reward.developmentAction === "promote") return promoteDevelopmentAction(next);
   if (reward.coins) next.coins = safeInt(next.coins, -50000) + reward.coins;
   if (reward.rp) next.rp = safeInt(next.rp, 0) + reward.rp;
   if (reward.offerSeen) next.offerSeen = true;
