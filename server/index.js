@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { MongoClient } from "mongodb";
 import { mergeServerDevelopment, normalizeServerDevelopment, publicDevelopmentStatus } from "./devAuthority.js";
 import { registerStarsPaymentRoutes } from "./starsPayments.js";
+import { registerTonWalletRoutes } from "./tonWalletRoutes.js";
 import {
   DEVELOPMENT_ACTION_STAR_COSTS,
   promoteDevelopmentAction,
@@ -145,6 +146,7 @@ function publicEconomy(economy) {
     referralMilestoneClaims: isPlainObject(economy?.referralMilestoneClaims) ? economy.referralMilestoneClaims : {},
     dailyClaimedAt: economy?.dailyClaimedAt || null,
     lastRating: economy?.lastRating || null,
+    tonWalletAddress: typeof economy?.tonWalletAddress === "string" ? economy.tonWalletAddress : "",
   };
 }
 
@@ -199,6 +201,7 @@ async function getOrCreateEconomy(telegramUser, saveData = null) {
     dailyTaskStarClaims: {},
     tutorialStarClaimed: false,
     prizeClaims: {},
+    tonWalletAddress: "",
     ledger: [],
     migratedFromSave: Boolean(saveData),
     createdAt: now,
@@ -368,6 +371,8 @@ async function start() {
     await db.collection("user_resets").updateOne({ telegramId: req.telegramUser.id }, { $set: { telegramId: req.telegramUser.id, resetAt: new Date() } }, { upsert: true });
     res.json({ ok: true });
   });
+
+  registerTonWalletRoutes(app, { requireTelegramUser, getSave, getOrCreateEconomy, patchEconomy });
 
   app.get("/api/economy", requireTelegramUser, async (req, res) => {
     const save = await getSave(req.telegramUser.id);
