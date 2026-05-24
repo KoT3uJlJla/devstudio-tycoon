@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 
@@ -62,7 +63,7 @@ async function main() {
           $set: { ...set, updatedAt: new Date() },
           $push: {
             ledger: {
-              $each: [{ id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, kind: 'economy_repair', amount: 0, reason: 'normalize_stars_type', meta: { previousStars: economy.stars, saveStars }, createdAt: new Date() }],
+              $each: [{ id: crypto.randomUUID(), kind: 'economy_repair', amount: 0, reason: 'normalize_stars_type', meta: { previousStars: economy.stars, saveStars }, createdAt: new Date() }],
               $slice: -80,
             },
           },
