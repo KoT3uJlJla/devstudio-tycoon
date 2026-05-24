@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node --import ./rewards-hardening.js --import ./ton-wallet-hardening.js --import ./server-hardening.js --import ./tasks-config-hardening.js --import ./economy-clock-hardening.js --import ./bot-start-hardening.js --import ./referrals-hardening.js --import ./trust-model-hardening.js --import ./post-trust-fix.js --import ./recovery-trust-fix.js index.js"
+    "start": "node --import ./ton-wallet-hardening.js --import ./server-hardening.js --import ./tasks-config-hardening.js --import ./economy-clock-hardening.js --import ./bot-start-hardening.js --import ./referrals-hardening.js --import ./trust-model-hardening.js --import ./post-trust-fix.js --import ./recovery-trust-fix.js index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
