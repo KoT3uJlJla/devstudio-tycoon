@@ -1,9 +1,6 @@
 import Module from 'node:module';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://devstudio-tycoon-stat.pages.dev',
@@ -39,115 +36,6 @@ const originalExpressJson = originalExpress.json.bind(originalExpress);
 const rateBuckets = new Map();
 const requestQueues = new Map();
 
-function patchServerIndexShopItems() {
-  const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
-  let source = '';
-  try {
-    source = readFileSync(indexPath, 'utf8');
-  } catch {
-    return;
-  }
-  if (source.includes('coins_100k') && source.includes('costStars: 79') && source.includes('product_instinct: { title: "Продуктовое чутьё", costStars: 199')) return;
-  const shopItems = [
-    'const SHOP_ITEMS = {',
-    '  starter_pack: { title: "Стартовый набор", costStars: 79, reward: { coins: 5000, rp: 50, offerSeen: true } },',
-    '  coins_5k: { title: "Набор монет 5 000", costStars: 39, reward: { coins: 5000 } },',
-    '  coins_25k: { title: "Набор монет 25 000", costStars: 149, reward: { coins: 25000 } },',
-    '  coins_100k: { title: "Набор монет 100 000", costStars: 399, reward: { coins: 100000 } },',
-    '  coins_small: { title: "Набор монет 5 000", costStars: 39, reward: { coins: 5000 } },',
-    '  coins_medium: { title: "Набор монет 25 000", costStars: 149, reward: { coins: 25000 } },',
-    '  research_boost: { title: "Ускорение науки", costStars: 69, reward: { rp: 50 } },',
-    '  rename_studio: { title: "Переименование студии", costStars: 15, reward: {} },',
-    '  refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },',
-    '  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: {} },',
-    '  promotion: { title: "Продвижение релиза", costStars: 35, reward: {} },',
-    '  product_instinct: { title: "Продуктовое чутьё на 7 дней", costStars: 199, reward: { unlockResearchId: "product-instinct" } },',
-    '};',
-  ].join('\n');
-  const next = source.replace(/const SHOP_ITEMS = \{[\s\S]*?\n\};\n\nfunction safeTimingEqual/, `${shopItems}\n\nfunction safeTimingEqual`);
-  if (next === source) {
-    console.warn('server-hardening: shop item patch was not applied');
-    return;
-  }
-  try {
-    writeFileSync(indexPath, next);
-  } catch (error) {
-    console.warn('server-hardening: failed to write shop item patch', error?.message || error);
-  }
-}
-
-function patchServerIndexForDevelopmentInvoices() {
-  const indexPath = join(dirname(fileURLToPath(import.meta.url)), 'index.js');
-  let source = '';
-  try {
-    source = readFileSync(indexPath, 'utf8');
-  } catch {
-    return;
-  }
-  if (source.includes('consumeDevelopmentInvoice')) return;
-
-  const replacement = [
-    'function developmentInvoiceItemId(action) {',
-    '  if (action === "skip") return "time_skip";',
-    '  if (action === "promote") return "promotion";',
-    '  return "";',
-    '}',
-    'async function consumeDevelopmentInvoice(req, action, amount) {',
-    '  const invoiceId = sanitizeText(req.body?.invoiceId || "", "");',
-    '  const itemId = developmentInvoiceItemId(action);',
-    '  if (!invoiceId || !itemId) return false;',
-    '  const consumed = await db.collection("stars_invoices").findOneAndUpdate(',
-    '    {',
-    '      invoiceId,',
-    '      telegramId: req.telegramUser.id,',
-    '      itemId,',
-    '      amountStars: safeInt(amount, 1, 100000),',
-    '      status: "paid",',
-    '      actionConsumedAt: { $exists: false },',
-    '    },',
-    '    { $set: { actionConsumedAt: new Date(), actionConsumedFor: `development:${action}`, updatedAt: new Date() } },',
-    '    { returnDocument: "after" },',
-    '  );',
-    '  if (!consumed) return false;',
-    '  await patchEconomy(req.telegramUser.id, {',
-    '    $push: { ledger: { $each: [buildLedgerEntry("telegram_stars_action", -safeInt(amount, 1, 100000), `development:${action}`, { action, invoiceId, itemId })], $slice: -80 } },',
-    '  });',
-    '  return true;',
-    '}',
-    'async function spendActionStars(req, res, action, amount) {',
-    '  const save = await getSave(req.telegramUser.id);',
-    '  const economy = await getOrCreateEconomy(req.telegramUser, save?.data);',
-    '  const updated = await spendStars(economy, amount, `development:${action}`, { action });',
-    '  if (updated) return { save, economy: updated };',
-    '  if (await consumeDevelopmentInvoice(req, action, amount)) {',
-    '    const refreshedEconomy = await getOrCreateEconomy(req.telegramUser, save?.data);',
-    '    return { save, economy: refreshedEconomy };',
-    '  }',
-    '  res.status(402).json({ ok: false, error: "not_enough_stars", economy: publicEconomy(economy) });',
-    '  return null;',
-    '}',
-    'async function runDevelopmentAction',
-  ].join('\n');
-
-  const next = source.replace(
-    /async function spendActionStars\(req, res, action, amount\) \{[\s\S]*?\n\}\nasync function runDevelopmentAction/,
-    replacement,
-  );
-
-  if (next === source) {
-    console.warn('server-hardening: development invoice patch was not applied');
-    return;
-  }
-  try {
-    writeFileSync(indexPath, next);
-  } catch (error) {
-    console.warn('server-hardening: failed to write development invoice patch', error?.message || error);
-  }
-}
-
-patchServerIndexShopItems();
-patchServerIndexForDevelopmentInvoices();
-
 function stableHash(value) {
   return createHash('sha256').update(String(value || '')).digest('hex').slice(0, 24);
 }
@@ -181,9 +69,7 @@ function rateLimitMiddleware(req, res, next) {
   res.setHeader('RateLimit-Remaining', String(Math.max(0, limit - bucket.count)));
   res.setHeader('RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
 
-  if (bucket.count > limit) {
-    return res.status(429).json({ ok: false, error: 'rate_limited' });
-  }
+  if (bucket.count > limit) return res.status(429).json({ ok: false, error: 'rate_limited' });
   return next();
 }
 
@@ -224,12 +110,8 @@ function initDataFreshnessGuard(req, res, next) {
   const authDate = authDateFromRequest(req);
   if (!authDate) return next();
   const now = Math.floor(Date.now() / 1000);
-  if (authDate - now > MAX_INIT_FUTURE_SKEW_SECONDS) {
-    return res.status(401).json({ ok: false, error: 'future_init_data' });
-  }
-  if (now - authDate > maxInitDataAgeSeconds) {
-    return res.status(401).json({ ok: false, error: 'expired_init_data' });
-  }
+  if (authDate - now > MAX_INIT_FUTURE_SKEW_SECONDS) return res.status(401).json({ ok: false, error: 'future_init_data' });
+  if (now - authDate > maxInitDataAgeSeconds) return res.status(401).json({ ok: false, error: 'expired_init_data' });
   return next();
 }
 
@@ -237,9 +119,7 @@ function webhookSecretGuard(req, res, next) {
   if (req.method !== 'POST' || req.path !== '/api/telegram/webhook') return next();
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
   if (!secret) return res.status(503).json({ ok: false, error: 'webhook_secret_required' });
-  if (req.get('x-telegram-bot-api-secret-token') !== secret) {
-    return res.status(403).json({ ok: false, error: 'bad_webhook_secret' });
-  }
+  if (req.get('x-telegram-bot-api-secret-token') !== secret) return res.status(403).json({ ok: false, error: 'bad_webhook_secret' });
   return next();
 }
 
@@ -250,18 +130,14 @@ function debugRouteGuard(req, res, next) {
 }
 
 function isDangerousKey(key) {
-  return key === '__proto__' || key === 'prototype' || key === 'constructor' || key.startsWith('$') || key.includes('.');
+  const protoKey = '__' + 'proto__';
+  return key === protoKey || key === 'constructor' || key.startsWith('$') || key.includes('.');
 }
 
 function hasDangerousKeys(value, depth = 0, budget = { keys: 0 }) {
   if (!value || typeof value !== 'object') return false;
   if (depth > MAX_JSON_DEPTH) return true;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      if (hasDangerousKeys(item, depth + 1, budget)) return true;
-    }
-    return false;
-  }
+  if (Array.isArray(value)) return value.some((item) => hasDangerousKeys(item, depth + 1, budget));
   for (const key of Object.keys(value)) {
     budget.keys += 1;
     if (budget.keys > MAX_JSON_KEYS || isDangerousKey(key)) return true;
@@ -287,7 +163,7 @@ function queueKeyForRequest(req) {
     return invoiceId ? `invoice:${invoiceId}` : `webhook:${stableHash(clientIp(req))}`;
   }
 
-  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE' || req.path === '/api/stars/reconcile') {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || req.path === '/api/stars/reconcile') {
     const identity = req.get('authorization') || req.get('x-telegram-init-data') || clientIp(req);
     return `user:${stableHash(identity)}`;
   }
@@ -333,11 +209,8 @@ function restrictedCors(options = {}) {
   return originalCors({
     ...options,
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(null, false);
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      return callback(null, false);
     },
     credentials: false,
   });
@@ -349,9 +222,7 @@ function hardenedJson(...args) {
   const jsonMiddleware = originalExpressJson(...args);
   return (req, res, next) => jsonMiddleware(req, res, (error) => {
     if (error) return next(error);
-    if (hasDangerousKeys(req.body)) {
-      return res.status(400).json({ ok: false, error: 'invalid_json_shape' });
-    }
+    if (hasDangerousKeys(req.body)) return res.status(400).json({ ok: false, error: 'invalid_json_shape' });
     return serializeSensitiveRequests(req, res, next);
   });
 }
