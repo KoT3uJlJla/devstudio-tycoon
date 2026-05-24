@@ -8,6 +8,11 @@ import { registerStarsPaymentRoutes } from "./starsPayments.js";
 import { registerTonWalletRoutes } from "./tonWalletRoutes.js";
 import { ensureDefaultTaskConfigs, registerTasksConfigRoutes } from "./tasksConfig.js";
 import { registerBotStartRoutes } from "./botStartRoutes.js";
+import { ensureTrustAccessIndexes, ensureUserRole, loadGameStatus, canAccessGame } from "./trustAccess.js";
+import { ensureTrustedRatingIndexes, recordTrustedReleaseAndRating, upsertTrustedRating } from "./trustedRatings.js";
+import { mergeServerOwnedSaveData } from "./trustedSave.js";
+import { ensureReferralForUser, ensureReferralIndexes, qualifyReferralIfEligible, referralStartParamFromTelegramId } from "./referrals.js";
+import { ensureReferralCommissionIndexes } from "./referralCommissions.js";
 import {
   DEVELOPMENT_ACTION_STAR_COSTS,
   promoteDevelopmentAction,
@@ -103,11 +108,16 @@ function validateTelegramInitData(initData) {
   };
 }
 
-function requireTelegramUser(req, res, next) {
+async function requireTelegramUser(req, res, next) {
   try {
     const auth = req.get("authorization") || "";
     const initData = auth.startsWith("tma ") ? auth.slice(4) : req.get("x-telegram-init-data");
     req.telegramUser = validateTelegramInitData(initData);
+    req.userRole = await ensureUserRole(db, req.telegramUser);
+    req.gameStatus = await loadGameStatus(db);
+    if (!canAccessGame(req.userRole, req.gameStatus)) {
+      return res.status(423).json({ ok: false, error: "game_closed", role: req.userRole, gameStatus: req.gameStatus });
+    }
     next();
   } catch {
     res.status(401).json({ ok: false, error: "telegram_auth_failed" });
@@ -148,6 +158,7 @@ function publicEconomy(economy) {
     referralMilestoneClaims: isPlainObject(economy?.referralMilestoneClaims) ? economy.referralMilestoneClaims : {},
     dailyClaimedAt: economy?.dailyClaimedAt || null,
     lastRating: economy?.lastRating || null,
+    referralStartParam: referralStartParamFromTelegramId(economy?.telegramId),
     tonWalletAddress: typeof economy?.tonWalletAddress === "string" ? economy.tonWalletAddress : "",
   };
 }
@@ -186,15 +197,13 @@ async function getAuthoritativeSave(telegramUser, save, economy) {
 
 async function getOrCreateEconomy(telegramUser, saveData = null) {
   const telegramId = telegramUser.id;
+  await ensureReferralForUser(db, telegramUser);
   const existing = await db.collection("economy").findOne({ telegramId });
   if (existing) return existing;
   const now = new Date();
   const doc = {
     telegramId,
     telegramUser,
-    // Stars are authoritative and may only be created by server grants,
-    // Telegram invoice payments, or explicit server-side spend/grant ledgers.
-    // Never resurrect star balance from client saveData.
     stars: 0,
     qualifiedReferrals: 0,
     qualifiedSecondLevelReferrals: 0,
@@ -218,6 +227,9 @@ async function patchEconomy(telegramId, patch) {
 }
 function buildLedgerEntry(kind, amount, reason, meta = {}) {
   return { id: crypto.randomUUID(), kind, amount, reason, meta, createdAt: new Date() };
+}
+function referralDeps() {
+  return { db, getOrCreateEconomy, patchEconomy, buildLedgerEntry };
 }
 async function grantStars(economy, amount, reason, meta = {}) {
   const safeAmount = safeInt(amount, 0, 100000);
@@ -259,22 +271,13 @@ async function upsertRating(telegramUser, saveData) {
 }
 async function leaderboardForCurrentWeek() {
   const currentWeek = weekKey();
-  const rows = await db.collection("ratings").find({ weekKey: currentWeek }).sort({ score: -1, updatedAt: 1 }).limit(5).toArray();
+  const rows = await db.collection("ratings").find({ weekKey: currentWeek, trusted: true }).sort({ score: -1, updatedAt: 1 }).limit(5).toArray();
   return rows.map((row, index) => ({ place: index + 1, telegramId: row.telegramId, displayName: row.displayName, bestTitle: row.bestTitle, score: row.score, prize: PRIZE_DISTRIBUTION[index] || null }));
 }
 
 async function syncEconomyFromIncomingSave(telegramUser, incomingData, previousData) {
-  let economy = await getOrCreateEconomy(telegramUser, previousData || incomingData);
-  const today = todayKey();
-  if (incomingData?.dailyClaimedAt === today && economy.dailyClaimedAt !== today) {
-    economy = await grantStars(economy, 1, "daily_login", { day: today });
-    economy = await patchEconomy(economy.telegramId, { $set: { dailyClaimedAt: today } });
-  }
-  if (incomingData?.gamesReleased > 0) {
-    await upsertRating(telegramUser, incomingData);
-    economy = await db.collection("economy").findOne({ telegramId: telegramUser.id });
-  }
-  return economy;
+  const economy = await getOrCreateEconomy(telegramUser, previousData || incomingData);
+  return db.collection("economy").findOne({ telegramId: telegramUser.id }) || economy;
 }
 function applyRewardToSaveData(data, reward) {
   const next = isPlainObject(data) ? { ...data } : {};
@@ -310,9 +313,14 @@ async function runDevelopmentAction(req, res, action, handler, options = {}) {
       economy = paid.economy;
     }
     const authoritative = overlayProtectedEconomy(normalizeServerDevelopment(save?.data || {}), economy);
-    const nextData = overlayProtectedEconomy(handler(authoritative), economy);
+    let nextData = overlayProtectedEconomy(handler(authoritative), economy);
     await writeSave(req.telegramUser.id, req.telegramUser, nextData);
-    if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);
+    if (action === "release" && nextData.gamesReleased > 0) {
+      await recordTrustedReleaseAndRating(db, req.telegramUser, authoritative, nextData);
+      economy = await qualifyReferralIfEligible(referralDeps(), req.telegramUser, nextData, { source: "development:release" }) || economy;
+      nextData = overlayProtectedEconomy(nextData, economy);
+      await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+    }
     res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });
   } catch (error) {
     res.status(error.status || 500).json({ ok: false, error: error.code || error.message || "development_action_failed" });
@@ -324,6 +332,10 @@ async function start() {
   db = client.db("devstudio_tycoon");
   await db.collection("saves").createIndex({ telegramId: 1 }, { unique: true });
   await db.collection("economy").createIndex({ telegramId: 1 }, { unique: true });
+  await ensureTrustAccessIndexes(db);
+  await ensureTrustedRatingIndexes(db);
+  await ensureReferralIndexes(db);
+  await ensureReferralCommissionIndexes(db);
   await db.collection("ratings").createIndex({ weekKey: 1, score: -1 });
   await db.collection("ratings").createIndex({ telegramId: 1, weekKey: 1 }, { unique: true });
   await db.collection("stars_invoices").createIndex({ invoiceId: 1 }, { unique: true });
@@ -331,7 +343,7 @@ async function start() {
   await ensureDefaultTaskConfigs(db);
 
   app.get("/health", (req, res) => res.json({ ok: true }));
-  app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));
+  app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser, role: req.userRole, gameStatus: req.gameStatus }));
 
   app.get("/api/save", requireTelegramUser, async (req, res) => {
     const save = await getSave(req.telegramUser.id);
@@ -344,7 +356,8 @@ async function start() {
     if (!isPlainObject(data)) return res.status(400).json({ ok: false, error: "invalid_save_payload" });
     const previousSave = await getSave(req.telegramUser.id);
     if (!previousSave && data?.saveSchemaVersion !== 3) return res.status(409).json({ ok: false, error: "stale_client_save" });
-    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);
+    const trustedClientData = mergeServerOwnedSaveData(data, previousSave?.data);
+    const mergedDevelopment = mergeServerDevelopment(trustedClientData, previousSave?.data);
     const authoritativeData = normalizeServerDevelopment(mergedDevelopment, previousSave?.data);
     const economy = await syncEconomyFromIncomingSave(req.telegramUser, authoritativeData, previousSave?.data);
     const protectedData = overlayProtectedEconomy({ ...authoritativeData, saveSchemaVersion: 3 }, economy);
@@ -420,10 +433,8 @@ async function start() {
     res.json({ ok: true, economy: publicEconomy(economy), reward: milestone.reward, save: { data: nextData, updatedAt: new Date() } });
   });
   app.post("/api/economy/rating/submit", requireTelegramUser, async (req, res) => {
-    const save = await getSave(req.telegramUser.id);
-    const data = normalizeServerDevelopment(isPlainObject(req.body?.state) ? req.body.state : save?.data);
-    if (!data) return res.status(400).json({ ok: false, error: "missing_state" });
-    res.json({ ok: true, rating: await upsertRating(req.telegramUser, data), leaderboard: await leaderboardForCurrentWeek(), weekKey: weekKey() });
+    const rating = await upsertTrustedRating(db, req.telegramUser);
+    res.json({ ok: true, rating, leaderboard: await leaderboardForCurrentWeek(), weekKey: weekKey(), trusted: true });
   });
   registerStarsPaymentRoutes(app, { db, botToken, requireTelegramUser, SHOP_ITEMS, getSave, getOrCreateEconomy, overlayProtectedEconomy, applyRewardToSaveData, writeSave, patchEconomy });
   registerBotStartRoutes(app);
