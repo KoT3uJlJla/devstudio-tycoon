@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import { MongoClient } from "mongodb";
@@ -8,6 +7,7 @@ import { registerStarsPaymentRoutes } from "./starsPayments.js";
 import { registerTonWalletRoutes } from "./tonWalletRoutes.js";
 import { ensureDefaultTaskConfigs, registerTasksConfigRoutes } from "./tasksConfig.js";
 import { registerBotStartRoutes } from "./botStartRoutes.js";
+import { createGuardedJson, createRestrictedCors, installSecurityMiddleware } from "./serverSecurity.js";
 import { ensureTrustAccessIndexes, ensureUserRole, loadGameStatus, canAccessGame } from "./trustAccess.js";
 import { ensureTrustedRatingIndexes, recordTrustedReleaseAndRating, upsertTrustedRating } from "./trustedRatings.js";
 import { mergeServerOwnedSaveData } from "./trustedSave.js";
@@ -25,8 +25,9 @@ import {
 dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+installSecurityMiddleware(app);
+app.use(createRestrictedCors());
+app.use(createGuardedJson({ limit: "1mb" }));
 
 const mongoUri = process.env.MONGODB_URI;
 const botToken = process.env.BOT_TOKEN;
