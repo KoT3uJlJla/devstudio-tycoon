@@ -1,8 +1,8 @@
 const SERVER_OWNED_SAVE_FIELDS = [
-  "coins", "rp", "stars", "qualifiedReferrals", "qualifiedSecondLevelReferrals", "referralMilestoneClaims",
+  "coins", "stars", "qualifiedReferrals", "qualifiedSecondLevelReferrals", "referralMilestoneClaims",
   "level", "studioXp", "gamesReleased", "bestScore", "latestRelease", "activeGames", "releaseHistory",
   "employees", "hiredEmployeeIds", "unlockedResearchIds", "unlockedGenreIds", "unlockedThemeIds",
-  "dailyClaimedAt", "dailyStatsDate", "dailyGamesReleased", "dailyWorkTaps", "dailyResearchUnlocked",
+  "dailyClaimedAt", "dailyStatsDate", "dailyGamesReleased", "dailyWorkTaps",
   "dailyPassiveIncome", "dailyTaskClaims", "weeklyExpenseTotal", "unpaidSinceMonth", "closureWarningMonth",
   "ratingResetCount", "activeMarketEvents", "newsFeed", "audience", "lastLedger", "marketMustRecover",
   "tutorialDone", "tutorialStep", "tutorialRewardClaimed", "gameDay", "lastGameTickAt", "lastOfflineReward",

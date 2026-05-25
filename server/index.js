@@ -62,25 +62,33 @@ const REFERRAL_MILESTONES = [
 ];
 
 const SHOP_ITEMS = {
-  starter_pack: { title: "РЎС‚Р°СЂС‚РѕРІС‹Р№ РЅР°Р±РѕСЂ", costStars: 100, reward: { coins: 5000, rp: 50, offerSeen: true } },
-  coins_small: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
-  coin_small: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
-  coins_pack: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
-  coins_3000: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
-  money_small: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
-  coins_medium: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
-  coin_medium: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
-  coins_big: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
-  coins_18000: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
-  money_medium: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
-  research_boost: { title: "РЈСЃРєРѕСЂРµРЅРёРµ РЅР°СѓРєРё", costStars: 75, reward: { rp: 100 } },
-  rename_studio: { title: "РџРµСЂРµРёРјРµРЅРѕРІР°РЅРёРµ СЃС‚СѓРґРёРё", costStars: 25, reward: {} },
-  refresh_hires: { title: "РћР±РЅРѕРІР»РµРЅРёРµ РєР°РЅРґРёРґР°С‚РѕРІ", costStars: 10, reward: {} },
-  time_skip: { title: "РЈСЃРєРѕСЂРёС‚СЊ СЂР°Р·СЂР°Р±РѕС‚РєСѓ РЅР° 25%", costStars: 15, reward: { developmentAction: "skip" } },
-  promotion: { title: "РџСЂРѕРґРІРёР¶РµРЅРёРµ СЂРµР»РёР·Р°", costStars: 35, reward: { developmentAction: "promote" } },
-  product_instinct: { title: "РџСЂРѕРґСѓРєС‚РѕРІРѕРµ С‡СѓС‚СЊС‘", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
+  starter_pack: { title: "\u0421\u0442\u0430\u0440\u0442\u043e\u0432\u044b\u0439 \u043d\u0430\u0431\u043e\u0440", costStars: 79, reward: { coins: 5000, rp: 50, offerSeen: true } },
+
+  coins_5k: { title: "\u041d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 39, reward: { coins: 5000 } },
+  coins_25k: { title: "\u0411\u043e\u043b\u044c\u0448\u043e\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 149, reward: { coins: 25000 } },
+  coins_100k: { title: "\u041c\u0435\u0433\u0430-\u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 399, reward: { coins: 100000 } },
+
+  coins_small: { title: "\u041c\u0430\u043b\u044b\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 50, reward: { coins: 3000 } },
+  coin_small: { title: "\u041c\u0430\u043b\u044b\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 50, reward: { coins: 3000 } },
+  coins_pack: { title: "\u041c\u0430\u043b\u044b\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 50, reward: { coins: 3000 } },
+  coins_3000: { title: "\u041c\u0430\u043b\u044b\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 50, reward: { coins: 3000 } },
+  money_small: { title: "\u041c\u0430\u043b\u044b\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 50, reward: { coins: 3000 } },
+
+  coins_medium: { title: "\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 250, reward: { coins: 18000 } },
+  coin_medium: { title: "\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 250, reward: { coins: 18000 } },
+  coins_big: { title: "\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 250, reward: { coins: 18000 } },
+  coins_18000: { title: "\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 250, reward: { coins: 18000 } },
+  money_medium: { title: "\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u043d\u0430\u0431\u043e\u0440 \u043c\u043e\u043d\u0435\u0442", costStars: 250, reward: { coins: 18000 } },
+
+  research_boost: { title: "\u0423\u0441\u043a\u043e\u0440\u0435\u043d\u0438\u0435 \u043d\u0430\u0443\u043a\u0438", costStars: 69, reward: { rp: 50 } },
+  rename_studio: { title: "\u041f\u0435\u0440\u0435\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u0441\u0442\u0443\u0434\u0438\u0438", costStars: 15, reward: {} },
+  refresh_hires: { title: "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043a\u0430\u043d\u0434\u0438\u0434\u0430\u0442\u043e\u0432", costStars: 10, reward: {} },
+  time_skip: { title: "\u0423\u0441\u043a\u043e\u0440\u0438\u0442\u044c \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043d\u0430 25%", costStars: 15, reward: { developmentAction: "skip" } },
+  promotion: { title: "\u041f\u0440\u043e\u0434\u0432\u0438\u0436\u0435\u043d\u0438\u0435 \u0440\u0435\u043b\u0438\u0437\u0430", costStars: 35, reward: { developmentAction: "promote" } },
+  product_instinct: { title: "\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u043e\u0432\u043e\u0435 \u0447\u0443\u0442\u044c\u0451", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
 };
 
+function safeTimingEqual
 function safeTimingEqual(a, b) {
   const left = Buffer.from(a, "hex");
   const right = Buffer.from(b, "hex");
