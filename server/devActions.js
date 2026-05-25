@@ -8,6 +8,7 @@ const COMBOS = { "arcade:cyberpunk":"Great", "arcade:sport":"Great", "platformer
 const CRITICS = ["Пиксель Сегодня", "Инди Радар", "Отчёт об ошибках", "Игровая неделя"];
 const DEV_EVENT_IDS = ["team-burnout","ui-contrast","microtransaction-idea","community-poll","localization-gap","balance-drama","boss-cameo","testers-love","legal-name","publisher-call","crash-on-ios","meme-title","feature-flag","data-loss-rumor","speedrun-scene","tutorial-skip","boss-fight","store-art","qa-night","trend-shift","designer-duel","analytics-ping","combat-juice","chat-stickers","database-cleanup","streamer-feedback","pricing-debate","ai-voice","festival-slot","achievement-bug","modding-request","accessibility","boss-micromanage","mystery-influencer","economy-exploit","mobile-heat","npc-dialogue"];
 const STAR_COSTS = { skip:15, promote:35 };
+const MAX_DEVELOPMENT_SECONDS = 20 * 72;
 
 function isObj(v){ return Boolean(v && typeof v === "object" && !Array.isArray(v)); }
 function arr(v){ return Array.isArray(v) ? v : []; }
@@ -35,8 +36,8 @@ function income(data){
 function science(data){ return n(1+arr(data?.employees).reduce((s,e)=>s+(Number(e?.scienceBoost)||0),0),.75,2.2); }
 function teamScore(data){ return n(arr(data?.employees).reduce((s,e)=>s+(Number(e?.scoreBoost)||0),0),-.35,.9); }
 function releaseNumber(data){ return Math.max(1,i(data?.gamesReleased,0)+1); }
-function durationForRelease(release){ if(release<=1)return 5; if(release===2)return 30; if(release===3)return 60; const steps=[180,300,600,900,1800,2700,3600,5400,7200]; return steps[Math.min(steps.length-1,release-4)]||7200; }
-function duration(project,data){ return durationForRelease(releaseNumber(data)); }
+function durationForRelease(release){ if(release<=1)return 5; if(release===2)return 30; if(release===3)return 60; const steps=[180,300,600,900,1200,MAX_DEVELOPMENT_SECONDS]; return Math.min(MAX_DEVELOPMENT_SECONDS,steps[Math.min(steps.length-1,release-4)]||MAX_DEVELOPMENT_SECONDS); }
+function duration(project,data){ return Math.min(MAX_DEVELOPMENT_SECONDS,durationForRelease(releaseNumber(data))); }
 function cost(project,data){
   if(project.isTutorial)return 0;
   const tech=["engine-v2","sound-lab","liveops-lite","ai-assist","data-warehouse"].filter(x=>has(data,x)).length;
