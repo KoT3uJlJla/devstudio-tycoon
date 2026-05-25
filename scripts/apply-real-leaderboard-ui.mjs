@@ -94,7 +94,7 @@ async function fetchRealLeaderboard(): Promise<RealLeaderboardRow[]> {
 }
 `;
 
-const ratingScreen = `function RatingScreen({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
+const ratingScreen = `function RatingScreen({ state }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
   const rating = weeklyRatingBreakdown(state);
   const [leaderboard, setLeaderboard] = useState<RealLeaderboardRow[]>([]);
   const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
@@ -116,17 +116,11 @@ const ratingScreen = `function RatingScreen({ state, update }: { state: GameStat
   const currentPrize = yourIndex >= 0 ? prizeDistribution[yourIndex]?.[0] : null;
   const directRefs = state.qualifiedReferrals ?? 0;
   const secondRefs = state.qualifiedSecondLevelReferrals ?? 0;
-  const claimMilestone = (id: string) => update((current) => {
-    const milestone = REFERRAL_MILESTONES.find((item) => item.id === id);
-    if (!milestone || current.referralMilestoneClaims?.[id] || (current.qualifiedReferrals ?? 0) < milestone.target) return current;
-    haptic('success');
-    return {
-      ...current,
-      coins: current.coins + milestone.reward.coins,
-      rp: current.rp + milestone.reward.rp,
-      referralMilestoneClaims: { ...(current.referralMilestoneClaims ?? {}), [id]: true },
-    };
-  });
+  const claimMilestone = (id: string) => {
+    void claimBackendReferralMilestone(id).then((next) => {
+      haptic(next ? 'success' : 'warning');
+    });
+  };
   return <div className="stack">
     <section className="rating-hero comic-panel"><p className="eyebrow">Недельный топ-10</p><h2>Рейтинг лучших игр за неделю</h2><p className="muted">В топ попадают только проверенные релизы недели. Один игрок может занимать только одну позицию.</p></section>
     <div className="panel comic-card current-prize-card"><div><p className="eyebrow">Текущая награда</p><h3>{yourPlace ? \`Ты на #\${yourPlace}\` : 'Пока вне топ-10'}</h3><p className="muted">{currentPrize ? \`Если неделя закончится сейчас, твоя награда — \${currentPrize}.\` : 'Выпусти сильный релиз, чтобы попасть в призовую десятку.'}</p></div><strong>{currentPrize ?? '0 ⭐'}</strong></div>
@@ -150,6 +144,19 @@ patch('src/App.tsx', (src) => {
   let s = src;
   if (!s.includes('type RealLeaderboardRow')) {
     s = s.replace('function signedPercent(value: number) {', helpers + '\nfunction signedPercent(value: number) {');
+  }
+  if (!s.includes('claimBackendReferralMilestone')) {
+    if (s.includes("from './server-economy';")) {
+      s = s.replace(/import \{([^}]+)\} from '\.\/server-economy';/, (match, names) => {
+        const cleanNames = String(names).trim().replace(/,$/, '');
+        return `import { ${cleanNames}, claimBackendReferralMilestone } from './server-economy';`;
+      });
+    } else {
+      s = s.replace(
+        "import { haptic, initTelegram, shareRelease } from './telegram';",
+        "import { haptic, initTelegram, shareRelease } from './telegram';\nimport { claimBackendReferralMilestone } from './server-economy';",
+      );
+    }
   }
   if (!s.includes('function displayGameDay(day: number)')) {
     s = s.replace('function signedPercent(value: number) {', 'function displayGameDay(day: number) {\n  const safeDay = Math.max(1, Math.floor(Number(day) || 1));\n  return ((safeDay - 1) % 30) + 1;\n}\n\nfunction signedPercent(value: number) {');
@@ -190,6 +197,8 @@ patch('src/App.tsx', (src) => {
   s = s.replaceAll('Все списания проходят через сервер и сразу синхронизируют save/economy.', 'Покупки применяются сразу после успешной оплаты.');
   if (!s.includes('Призовой фонд 3000 ⭐')) throw new Error('apply-real-leaderboard-ui: prize pool text was not patched');
   if (!s.includes('День {displayGameDay(state.gameDay)}')) throw new Error('apply-real-leaderboard-ui: monthly display day was not patched');
+  if (!s.includes('claimBackendReferralMilestone')) throw new Error('apply-real-leaderboard-ui: backend referral claim is not wired');
+  if (s.includes('coins: current.coins + milestone.reward.coins') || s.includes('rp: current.rp + milestone.reward.rp')) throw new Error('apply-real-leaderboard-ui: local referral reward exploit still present');
   if (s.includes('72 сек/день')) throw new Error('apply-real-leaderboard-ui: redundant day duration text still present');
   if (s.includes('backend-релиз') || s.includes('trusted_releases') || s.includes('save/economy')) throw new Error('apply-real-leaderboard-ui: technical UI copy still present');
   return s;
