@@ -1,3 +1,4 @@
+import type { TaskCatalogOverrides } from './taskCatalog';
 import { normalizeState } from './gameLogic';
 import type { GameState } from './types';
 
@@ -30,6 +31,7 @@ type DevelopmentEndpoint = 'start' | 'skip' | 'promote' | 'release' | 'resolve-e
 export type ShopPurchaseStatus = 'checking_balance' | 'opening_invoice' | 'checking_payment' | 'credited' | 'cancelled' | 'failed';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
+const TASK_CONFIG_API_URL = API_URL || 'https://devstudio-tycoon-api.onrender.com';
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 
 function initData() {
@@ -187,7 +189,7 @@ async function payWithTelegramStars(itemId: string, onStatus?: (status: ShopPurc
   const invoice = await createInvoice(itemId);
   if (!invoice) {
     onStatus?.('failed');
-    window.Telegram?.WebApp?.showPopup?.({ message: 'Не удалось открыть инвойс Telegram Stars. Попробуй ещё раз позже.', buttons: [{ type: 'ok' }] });
+    window.Telegram?.WebApp?.showPopup?.({ message: 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ РѕРїР»Р°С‚Сѓ Telegram Stars. РџРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р· РїРѕР·Р¶Рµ.', buttons: [{ type: 'ok' }] });
     return null;
   }
   const status = await openInvoice(invoice.invoiceLink);
@@ -239,6 +241,14 @@ export async function purchaseShopItem(itemId: string, onStatus?: (status: ShopP
   return null;
 }
 
+export async function fetchTaskConfig(): Promise<TaskCatalogOverrides> {
+  return fetch(`${TASK_CONFIG_API_URL}/api/tasks/config?ts=${Date.now()}`, { cache: 'no-store' })
+    .then(async (response) => {
+      const data = await response.json().catch(() => null) as (BackendStatePayload & { tasksConfig?: TaskCatalogOverrides }) | null;
+      return response.ok && data?.ok && data.tasksConfig ? data.tasksConfig : {};
+    })
+    .catch(() => ({}));
+}
 export async function getTonWallet() {
   const payload = await fetchJson('/api/economy/ton-wallet');
   return economyWallet(payload);
@@ -265,3 +275,9 @@ export async function unlinkTonWallet() {
 export function hasBackendSession() {
   return canUseBackend();
 }
+
+export async function claimReferralMilestone(milestoneId: string) {
+  const payload = await postJson('/api/economy/referral/claim', { milestoneId });
+  return stateFromPayload(payload);
+}
+

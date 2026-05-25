@@ -34,11 +34,11 @@ const botToken = process.env.BOT_TOKEN;
 const maxInitDataAgeSeconds = Number(process.env.MAX_INIT_DATA_AGE_SECONDS || 604800);
 
 if (!mongoUri) {
-  console.error("MONGODB_URI не указан в Environment Variables");
+  console.error("MONGODB_URI РЅРµ СѓРєР°Р·Р°РЅ РІ Environment Variables");
   process.exit(1);
 }
 if (!botToken) {
-  console.error("BOT_TOKEN не указан в Environment Variables");
+  console.error("BOT_TOKEN РЅРµ СѓРєР°Р·Р°РЅ РІ Environment Variables");
   process.exit(1);
 }
 
@@ -62,23 +62,23 @@ const REFERRAL_MILESTONES = [
 ];
 
 const SHOP_ITEMS = {
-  starter_pack: { title: "Стартовый набор", costStars: 100, reward: { coins: 5000, rp: 50, offerSeen: true } },
-  coins_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
-  coin_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
-  coins_pack: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
-  coins_3000: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
-  money_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
-  coins_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
-  coin_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
-  coins_big: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
-  coins_18000: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
-  money_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
-  research_boost: { title: "Ускорение науки", costStars: 75, reward: { rp: 100 } },
-  rename_studio: { title: "Переименование студии", costStars: 25, reward: {} },
-  refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },
-  time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: { developmentAction: "skip" } },
-  promotion: { title: "Продвижение релиза", costStars: 35, reward: { developmentAction: "promote" } },
-  product_instinct: { title: "Продуктовое чутьё", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
+  starter_pack: { title: "РЎС‚Р°СЂС‚РѕРІС‹Р№ РЅР°Р±РѕСЂ", costStars: 100, reward: { coins: 5000, rp: 50, offerSeen: true } },
+  coins_small: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
+  coin_small: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
+  coins_pack: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
+  coins_3000: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
+  money_small: { title: "РњР°Р»С‹Р№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 50, reward: { coins: 3000 } },
+  coins_medium: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
+  coin_medium: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
+  coins_big: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
+  coins_18000: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
+  money_medium: { title: "РЎСЂРµРґРЅРёР№ РЅР°Р±РѕСЂ РјРѕРЅРµС‚", costStars: 250, reward: { coins: 18000 } },
+  research_boost: { title: "РЈСЃРєРѕСЂРµРЅРёРµ РЅР°СѓРєРё", costStars: 75, reward: { rp: 100 } },
+  rename_studio: { title: "РџРµСЂРµРёРјРµРЅРѕРІР°РЅРёРµ СЃС‚СѓРґРёРё", costStars: 25, reward: {} },
+  refresh_hires: { title: "РћР±РЅРѕРІР»РµРЅРёРµ РєР°РЅРґРёРґР°С‚РѕРІ", costStars: 10, reward: {} },
+  time_skip: { title: "РЈСЃРєРѕСЂРёС‚СЊ СЂР°Р·СЂР°Р±РѕС‚РєСѓ РЅР° 25%", costStars: 15, reward: { developmentAction: "skip" } },
+  promotion: { title: "РџСЂРѕРґРІРёР¶РµРЅРёРµ СЂРµР»РёР·Р°", costStars: 35, reward: { developmentAction: "promote" } },
+  product_instinct: { title: "РџСЂРѕРґСѓРєС‚РѕРІРѕРµ С‡СѓС‚СЊС‘", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
 };
 
 function safeTimingEqual(a, b) {
@@ -284,13 +284,13 @@ function ratingBreakdownFromSave(data) {
   const avgRecent = recent.length ? recent.reduce((sum, entry) => sum + clampNumber(entry?.score, 0, 10), 0) / recent.length : 0;
   const activeRevenue = Math.min(9000, activeGames.reduce((sum, game) => sum + safeInt(game?.totalEarned, 0), 0) / 16);
   const total = Math.max(0, Math.round(bestRecent * bestRecent * 930 + avgRecent * 1500 + activeRevenue + recent.length * 900 + safeInt(data?.studioXp, 0) / 2.4));
-  return { total, items: [["Лучший свежий релиз", Math.round(bestRecent * bestRecent * 930)], ["Среднее качество недели", Math.round(avgRecent * 1500)], ["Доход живых игр", Math.round(activeRevenue)]].filter(([, value]) => Number(value) !== 0) };
+  return { total, items: [["Р›СѓС‡С€РёР№ СЃРІРµР¶РёР№ СЂРµР»РёР·", Math.round(bestRecent * bestRecent * 930)], ["РЎСЂРµРґРЅРµРµ РєР°С‡РµСЃС‚РІРѕ РЅРµРґРµР»Рё", Math.round(avgRecent * 1500)], ["Р”РѕС…РѕРґ Р¶РёРІС‹С… РёРіСЂ", Math.round(activeRevenue)]].filter(([, value]) => Number(value) !== 0) };
 }
 async function upsertRating(telegramUser, saveData) {
   const currentWeek = weekKey();
   const breakdown = ratingBreakdownFromSave(saveData);
-  const displayName = sanitizeText(saveData?.studioName || telegramUser.username || telegramUser.firstName || `Игрок ${telegramUser.id}`, "Игрок");
-  const bestTitle = sanitizeText(saveData?.latestRelease?.projectName || saveData?.releaseHistory?.slice?.(-1)?.[0]?.title || "Твоя лучшая игра", "Твоя лучшая игра");
+  const displayName = sanitizeText(saveData?.studioName || telegramUser.username || telegramUser.firstName || `РРіСЂРѕРє ${telegramUser.id}`, "РРіСЂРѕРє");
+  const bestTitle = sanitizeText(saveData?.latestRelease?.projectName || saveData?.releaseHistory?.slice?.(-1)?.[0]?.title || "РўРІРѕСЏ Р»СѓС‡С€Р°СЏ РёРіСЂР°", "РўРІРѕСЏ Р»СѓС‡С€Р°СЏ РёРіСЂР°");
   const doc = { telegramId: telegramUser.id, telegramUser, weekKey: currentWeek, displayName, bestTitle, score: breakdown.total, breakdown: breakdown.items, updatedAt: new Date() };
   await db.collection("ratings").updateOne({ telegramId: telegramUser.id, weekKey: currentWeek }, { $set: doc, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
   await db.collection("economy").updateOne({ telegramId: telegramUser.id }, { $set: { lastRating: { weekKey: currentWeek, score: breakdown.total, updatedAt: new Date() } } });
@@ -469,10 +469,10 @@ async function start() {
   registerBotStartRoutes(app);
 
   const port = process.env.PORT || 3000;
-  app.listen(port, () => console.log(`Backend запущен: http://localhost:${port}`));
+  app.listen(port, () => console.log(`Backend Р·Р°РїСѓС‰РµРЅ: http://localhost:${port}`));
 }
 
 start().catch((error) => {
-  console.error("Ошибка запуска backend:", error);
+  console.error("РћС€РёР±РєР° Р·Р°РїСѓСЃРєР° backend:", error);
   process.exit(1);
 });

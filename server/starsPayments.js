@@ -159,7 +159,7 @@ async function createInvoiceLink(botToken, item, invoicePayload) {
 }
 
 async function answerPreCheckout(botToken, id, ok, errorMessage = "") {
-  return botApi(botToken, "answerPreCheckoutQuery", ok ? { pre_checkout_query_id: id, ok: true } : { pre_checkout_query_id: id, ok: false, error_message: errorMessage || "Заказ недоступен" });
+  return botApi(botToken, "answerPreCheckoutQuery", ok ? { pre_checkout_query_id: id, ok: true } : { pre_checkout_query_id: id, ok: false, error_message: errorMessage || "Р—Р°РєР°Р· РЅРµРґРѕСЃС‚СѓРїРµРЅ" });
 }
 
 async function ensureWebhook(botToken, webhookUrl, secretToken) {
@@ -170,9 +170,9 @@ async function ensureWebhook(botToken, webhookUrl, secretToken) {
       allowed_updates: ["message", "pre_checkout_query"],
       ...(secretToken ? { secret_token: secretToken } : {}),
     });
-    console.log(`Telegram webhook установлен: ${webhookUrl}`);
+    console.log(`Telegram webhook СѓСЃС‚Р°РЅРѕРІР»РµРЅ: ${webhookUrl}`);
   } catch (error) {
-    console.error("Не удалось установить Telegram webhook:", error.message || error);
+    console.error("РќРµ СѓРґР°Р»РѕСЃСЊ СѓСЃС‚Р°РЅРѕРІРёС‚СЊ Telegram webhook:", error.message || error);
   }
 }
 
@@ -257,9 +257,9 @@ async function applyPaidInvoice(deps, invoice, payment) {
 async function handlePreCheckout(deps, query) {
   const invoiceId = invoiceIdFromPayload(query?.invoice_payload);
   const invoice = invoiceId ? await deps.db.collection("stars_invoices").findOne({ invoiceId }) : null;
-  if (!invoice || invoice.status !== "pending") return answerPreCheckout(deps.botToken, query.id, false, "Этот счёт уже недоступен");
-  if (String(query.from?.id || "") !== invoice.telegramId) return answerPreCheckout(deps.botToken, query.id, false, "Этот счёт создан для другого игрока");
-  if (query.currency !== "XTR" || safeInt(query.total_amount, 0) !== invoice.amountStars) return answerPreCheckout(deps.botToken, query.id, false, "Сумма счёта изменилась. Создай новый счёт");
+  if (!invoice || invoice.status !== "pending") return answerPreCheckout(deps.botToken, query.id, false, "Р­С‚РѕС‚ СЃС‡С‘С‚ СѓР¶Рµ РЅРµРґРѕСЃС‚СѓРїРµРЅ");
+  if (String(query.from?.id || "") !== invoice.telegramId) return answerPreCheckout(deps.botToken, query.id, false, "Р­С‚РѕС‚ СЃС‡С‘С‚ СЃРѕР·РґР°РЅ РґР»СЏ РґСЂСѓРіРѕРіРѕ РёРіСЂРѕРєР°");
+  if (query.currency !== "XTR" || safeInt(query.total_amount, 0) !== invoice.amountStars) return answerPreCheckout(deps.botToken, query.id, false, "РЎСѓРјРјР° СЃС‡С‘С‚Р° РёР·РјРµРЅРёР»Р°СЃСЊ. РЎРѕР·РґР°Р№ РЅРѕРІС‹Р№ СЃС‡С‘С‚");
   return answerPreCheckout(deps.botToken, query.id, true);
 }
 
@@ -474,3 +474,4 @@ export function registerStarsPaymentRoutes(app, deps) {
 
   void ensureWebhook(deps.botToken, webhookUrl, webhookSecret);
 }
+
