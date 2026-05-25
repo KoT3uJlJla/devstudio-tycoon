@@ -27,6 +27,10 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function hasOwn(value, key) {
+  return isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, key);
+}
+
 export function initialTrustedSaveData() {
   const now = Date.now();
   return {
@@ -113,7 +117,9 @@ function mergeClientProjectRuntimeState(project, previousProject) {
   const previousProgress = safeInt(previousProject.progress, 0, 100);
   const incomingProgress = safeInt(project.progress, 0, 100);
   const queue = safeDevEventQueue(project.devEventQueue, previousProject.devEventQueue);
-  const pending = project.pendingDevEvent ? safePendingDevEvent(project.pendingDevEvent, previousProject) : previousProject.pendingDevEvent || null;
+  const pending = hasOwn(project, "pendingDevEvent")
+    ? (project.pendingDevEvent ? safePendingDevEvent(project.pendingDevEvent, previousProject) : null)
+    : previousProject.pendingDevEvent || null;
   return {
     ...previousProject,
     progress: Math.max(previousProgress, incomingProgress),
@@ -148,6 +154,7 @@ export function mergeServerOwnedSaveData(incomingData, previousData) {
   const trustedBase = isPlainObject(previousData) ? previousData : initialTrustedSaveData();
   const next = { ...incoming };
   for (const field of SERVER_OWNED_SAVE_FIELDS) next[field] = trustedBase[field];
+  if (hasOwn(incoming, "latestRelease") && incoming.latestRelease === null) next.latestRelease = null;
   next.selectedProject = safeClientProjectDraft(incoming.selectedProject, trustedBase.selectedProject);
   next.lastSavedAt = Date.now();
   next.saveSchemaVersion = 3;
