@@ -22,8 +22,7 @@ const prizeDistributionPatch = [
 
 const compactDayBadge = [
   '          <span className="badge kaboom date-badge compact-date-badge">',
-  '            <span>День {state.gameDay}</span>',
-  '            <span className="day-length">72 сек/день</span>',
+  '            <span>День {displayGameDay(state.gameDay)}</span>',
   "            <span className=\"day-dial\" style={{ '--day-progress': `${dayPercent}%` } as CSSProperties}>",
   '              <b>{secondsLeft}</b>',
   '              <small>сек</small>',
@@ -59,6 +58,11 @@ type RealLeaderboardRow = {
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+function displayGameDay(day: number) {
+  const safeDay = Math.max(1, Math.floor(Number(day) || 1));
+  return ((safeDay - 1) % 30) + 1;
+}
 
 function currentTelegramId() {
   const webApp = window.Telegram?.WebApp as unknown as { initDataUnsafe?: { user?: { id?: number | string } } } | undefined;
@@ -147,6 +151,9 @@ patch('src/App.tsx', (src) => {
   if (!s.includes('type RealLeaderboardRow')) {
     s = s.replace('function signedPercent(value: number) {', helpers + '\nfunction signedPercent(value: number) {');
   }
+  if (!s.includes('function displayGameDay(day: number)')) {
+    s = s.replace('function signedPercent(value: number) {', 'function displayGameDay(day: number) {\n  const safeDay = Math.max(1, Math.floor(Number(day) || 1));\n  return ((safeDay - 1) % 30) + 1;\n}\n\nfunction signedPercent(value: number) {');
+  }
   s = s.replace(/const prizeDistribution = \[[\s\S]*?\] as const;/, prizeDistributionPatch);
   s = replaceRatingScreen(s);
   s = s.replace(
@@ -159,7 +166,11 @@ patch('src/App.tsx', (src) => {
   );
   s = s.replace(
     /<div><p className="eyebrow">Игровое время<\/p><h3>[\s\S]*?<\/h3><p className="small muted">1 игровой день ≈ 72 секунды<\/p><\/div>/,
-    '<div><p className="eyebrow">Игровое время</p><h3>День {state.gameDay}</h3><p className="small muted">1 игровой день ≈ 72 секунды</p></div>',
+    '<div><p className="eyebrow">Игровое время</p><h3>День {displayGameDay(state.gameDay)}</h3></div>',
+  );
+  s = s.replace(
+    /<div><p className="eyebrow">Игровое время<\/p><h3>День \{state\.gameDay\}<\/h3><p className="small muted">1 игровой день ≈ 72 секунды<\/p><\/div>/,
+    '<div><p className="eyebrow">Игровое время</p><h3>День {displayGameDay(state.gameDay)}</h3></div>',
   );
   s = s.replace(
     /const month = gameMonthLabel\(state\.gameDay\);\s*const stage = state\.closureWarningMonth !== null/,
@@ -178,6 +189,8 @@ patch('src/App.tsx', (src) => {
   s = s.replaceAll('Желания месяца скрыты. Скан откроет только рекомендуемые жанр и сеттинг.', 'Интересы аудитории скрыты. Скан откроет рекомендуемые жанр и сеттинг.');
   s = s.replaceAll('Все списания проходят через сервер и сразу синхронизируют save/economy.', 'Покупки применяются сразу после успешной оплаты.');
   if (!s.includes('Призовой фонд 3000 ⭐')) throw new Error('apply-real-leaderboard-ui: prize pool text was not patched');
+  if (!s.includes('День {displayGameDay(state.gameDay)}')) throw new Error('apply-real-leaderboard-ui: monthly display day was not patched');
+  if (s.includes('72 сек/день')) throw new Error('apply-real-leaderboard-ui: redundant day duration text still present');
   if (s.includes('backend-релиз') || s.includes('trusted_releases') || s.includes('save/economy')) throw new Error('apply-real-leaderboard-ui: technical UI copy still present');
   return s;
 });
@@ -198,10 +211,10 @@ patch('src/gameLogic.ts', (src) => {
 patch('src/styles.css', (src) => {
   let s = src.replace(
     /background: conic-gradient\(from [^,]+, rgba\(5,6,13,\.22\) 0 var\(--day-progress\), var\(--cyan\) var\(--day-progress\) 100%\);/g,
-    'background: conic-gradient(from -90deg, rgba(5,6,13,.22) 0 var(--day-progress), var(--cyan) var(--day-progress) 100%);',
+    'background: conic-gradient(from 0deg, rgba(5,6,13,.22) 0 var(--day-progress), var(--cyan) var(--day-progress) 100%);',
   );
   if (!s.includes('/* Soft launch polish */')) {
-    s += '\n\n/* Soft launch polish */\n.day-length { color: rgba(5,6,13,.72); font-size: 11px; font-weight: 900; white-space: nowrap; }\n.compact-date-badge { gap: 7px; }\n@media (max-width: 390px) { .day-length { font-size: 10px; } }\n';
+    s += '\n\n/* Soft launch polish */\n.compact-date-badge { gap: 7px; }\n';
   }
   return s;
 });
