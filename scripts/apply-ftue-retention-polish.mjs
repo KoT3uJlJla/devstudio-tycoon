@@ -180,7 +180,7 @@ patchFile('src/App.tsx', (source) => {
     next = replaceOnce(next, '\n      <section className="screen-card">', '\n      <FirstSessionContractBar state={state} update={update} />\n      <section className="screen-card">', 'first session bar mount');
   }
   if (!next.includes('<DailyContractCard state={state} update={update} />')) {
-    next = replaceOnce(next, '      {dailyReady && <button className="daily-card comic-card" onClick={() => update((current) => ({ ...current, stars: current.stars + 1, coins: current.coins + 500, dailyClaimedAt: todayKey() }))}><span>ЕЖЕДНЕВНЫЙ ВХОД</span> Забрать +1 ⭐ и +500 🪙</button>}\n      <DailyTasks state={state} update={update} />', '      {dailyReady && <button className="daily-card comic-card" onClick={() => update((current) => ({ ...current, stars: current.stars + 1, coins: current.coins + 500, dailyClaimedAt: todayKey() }))}><span>ЕЖЕДНЕВНЫЙ ВХОД</span> Забрать +1 ⭐ и +500 🪙</button>}\n      <DailyContractCard state={state} update={update} />\n      <DailyTasks state={state} update={update} />', 'daily contract mount');
+    next = replaceOnce(next, '      <DailyTasks state={state} update={update} />', '      <DailyContractCard state={state} update={update} />\n      <DailyTasks state={state} update={update} />', 'daily contract mount');
   }
   if (!next.includes('const isFirstSessionPush = state.gamesReleased === 1;')) {
     next = replaceOnce(next, '  const showFinal = step >= result.critics.length + 1;\n  const showMoney = step >= finalStep;', '  const showFinal = step >= result.critics.length + 1;\n  const showMoney = step >= finalStep;\n  const isFirstSessionPush = state.gamesReleased === 1;', 'release modal ftue flag');
