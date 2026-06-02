@@ -34,19 +34,11 @@ patchFile('src/App.tsx', (source) => {
     );
   }
   next = next.replace('Мы единоразово дадим 24 🧪, чтобы можно было сразу взять первое улучшение.', 'У тебя уже есть стартовые очки науки, так что можно сразу открыть первое улучшение.');
-  if (!next.includes('const canUseFreeFirstPromotion =')) {
-    next = replaceRegex(
-      next,
-      /(\s*const canSkip = project\.progress < 100 && !project\.pendingDevEvent && state\.stars >= 25;\n)/,
-      `$1  const canUseFreeFirstPromotion = project.progress >= 100 && state.gamesReleased === 0 && !project.promotionUsed && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1']);\n  const canPromote = !project.promotionUsed && (canUseFreeFirstPromotion || state.stars >= 35);\n  const promotionLabel = project.promotionUsed ? \`Продвижение +\${(project.promotionBoost ?? 0).toFixed(1)}\` : canUseFreeFirstPromotion ? 'Продвижение бесплатно' : 'Продвижение ⭐35';\n`,
-      'promotion helpers',
-    );
-  }
-  if (!next.includes('disabled={!canPromote}>{promotionLabel}</button>')) {
+  if (!next.includes('Продвижение бесплатно')) {
     next = replaceRegex(
       next,
       /<button className="primary" onClick=\{\(\) => update\(promoteProject\)\} disabled=\{state\.stars < 35 \|\| Boolean\(project\.promotionUsed\)\}>\{project\.promotionUsed \? `Продвижение \+\$\{\(project\.promotionBoost \?\? 0\)\.toFixed\(1\)\}` : 'Продвижение ⭐35'\}<\/button>/,
-      `<button className="primary" onClick={() => update(promoteProject)} disabled={!canPromote}>{promotionLabel}</button>`,
+      `<button className="primary" onClick={() => update(promoteProject)} disabled={Boolean(project.promotionUsed) || (!(project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1'])) && state.stars < 35)}>{project.promotionUsed ? \`Продвижение +\${(project.promotionBoost ?? 0).toFixed(1)}\` : project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1']) ? 'Продвижение бесплатно' : 'Продвижение ⭐35'}</button>`,
       'promotion button',
     );
   }
