@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 function patchFile(path, patcher) {
-  const source = readFileSync(path, 'utf8');
+  const source = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
   const next = patcher(source);
   if (next !== source) writeFileSync(path, next);
 }
