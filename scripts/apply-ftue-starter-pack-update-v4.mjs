@@ -38,11 +38,11 @@ patchFile('src/gameLogic.ts', (source) => {
 
 patchFile('src/App.tsx', (source) => {
   let next = source;
-  if (!next.includes("Продвижение бесплатно")) {
-    next = replaceText(
+  if (!next.includes('Продвижение бесплатно')) {
+    next = replaceRegex(
       next,
-      "          <button className=\"primary\" onClick={() => update(promoteProject)} disabled={state.stars < 35 || Boolean(project.promotionUsed)}>{project.promotionUsed ? `Продвижение +${(project.promotionBoost ?? 0).toFixed(1)}` : 'Продвижение ⭐35'}</button>",
-      "          <button className=\"primary\" onClick={() => update(promoteProject)} disabled={Boolean(project.promotionUsed) || (!(project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1'])) && state.stars < 35)}>{project.promotionUsed ? `Продвижение +${(project.promotionBoost ?? 0).toFixed(1)}` : project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1']) ? 'Продвижение бесплатно' : 'Продвижение ⭐35'}</button>",
+      /<button className="primary" onClick=\{\(\) => update\(promoteProject\)\} disabled=\{[^}]+\}>\{project\.promotionUsed \? `Продвижение \+\$\{\(project\.promotionBoost \?\? 0\)\.toFixed\(1\)\}` : 'Продвижение ⭐35'\}<\/button>/,
+      `<button className="primary" onClick={() => update(promoteProject)} disabled={Boolean(project.promotionUsed) || (!(project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1'])) && state.stars < 35)}>{project.promotionUsed ? \`Продвижение +\${(project.promotionBoost ?? 0).toFixed(1)}\` : project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1']) ? 'Продвижение бесплатно' : 'Продвижение ⭐35'}</button>`,
       'promotion button',
     );
   }
