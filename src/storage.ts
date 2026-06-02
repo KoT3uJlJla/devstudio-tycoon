@@ -3,6 +3,7 @@ import { syncGlobalState } from './globalWorld';
 import type { GameState } from './types';
 
 export const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v3';
+const SAVE_TOKEN_STORAGE_KEY = 'devstudio_tycoon_mvp_save_sync_token_v1';
 const LEGACY_STORAGE_KEYS = ['devstudio_tycoon_mvp_save_v2', 'devstudio_tycoon_mvp_save_v1'];
 const BACKEND_UI_ACTION_KEY = 'devstudio_backend_ui_action_endpoint';
 const CLOUD_THROTTLE_MS = 15_000;
@@ -29,10 +30,11 @@ type BackendSavePayload = {
   ok?: boolean;
   save?: { data?: unknown } | null;
   economy?: { stars?: unknown } | null;
+  error?: string;
 };
 
 type ServerLoadResult =
-  | { kind: 'loaded'; state: GameState }
+  | { kind: 'loaded'; state: GameState; saveSyncToken: string | null }
   | { kind: 'empty' }
   | { kind: 'unavailable' };
 
@@ -91,6 +93,27 @@ function writeLocalStorage(key: string, value: string) {
   } catch {
     // ignore
   }
+}
+
+function removeLocalStorage(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function readSaveSyncToken() {
+  const token = readLocalStorage(SAVE_TOKEN_STORAGE_KEY);
+  return token && typeof token === 'string' ? token : null;
+}
+
+function writeSaveSyncToken(token: string | null) {
+  if (!token) {
+    removeLocalStorage(SAVE_TOKEN_STORAGE_KEY);
+    return;
+  }
+  writeLocalStorage(SAVE_TOKEN_STORAGE_KEY, token);
 }
 
 function clearLegacyLocalSaves() {
@@ -181,21 +204,30 @@ function applyWalletOverlay(state: GameState, wallet: WalletOverlay | null): Gam
   }));
 }
 
+function saveSyncTokenFromPayload(payload: BackendSavePayload | null) {
+  const rawSave = payload?.save?.data;
+  if (!rawSave || !isPlainObject(rawSave)) return null;
+  const token = rawSave.saveSyncToken;
+  return typeof token === 'string' && token ? token : null;
+}
+
 function stateFromBackendPayload(payload: BackendSavePayload | null): GameState | null {
   const rawSave = payload?.save?.data;
-  if (!payload?.ok || !rawSave || !isPlainObject(rawSave)) return null;
+  if (!rawSave || !isPlainObject(rawSave)) return null;
   try {
     const economyStars = safeWalletNumber(payload.economy?.stars);
-    const merged = economyStars !== undefined ? { ...rawSave, stars: economyStars } : rawSave;
+    const { saveSyncToken: _ignoredSaveSyncToken, ...saveData } = rawSave;
+    const merged = economyStars !== undefined ? { ...saveData, stars: economyStars } : saveData;
     return syncGlobalState(normalizeState(merged as Partial<GameState>));
   } catch {
     return null;
   }
 }
 
-function rememberAuthoritativeState(state: GameState) {
+function rememberAuthoritativeState(state: GameState, saveSyncToken: string | null = readSaveSyncToken()) {
   lastActionSnapshot = state;
   writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+  writeSaveSyncToken(saveSyncToken);
   dispatchAuthoritativeSave(state);
 }
 
@@ -205,7 +237,7 @@ async function fetchServerPayload(path: string, timeoutMs: number): Promise<Back
     fetch(`${API_URL}${path}`, {
       headers: { Authorization: `tma ${telegramInitData()}` },
     })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => response.json().catch(() => null))
       .catch(() => null),
     null,
     timeoutMs,
@@ -220,14 +252,16 @@ async function loadServerSave(): Promise<ServerLoadResult> {
   if (!payload) return { kind: 'unavailable' };
 
   const state = stateFromBackendPayload(payload);
-  if (state) return { kind: 'loaded', state };
+  if (state) return { kind: 'loaded', state, saveSyncToken: saveSyncTokenFromPayload(payload) };
 
   // Authenticated Telegram users are server-authoritative. If the backend says
   // there is no save, old localStorage/CloudStorage must not resurrect progress.
   if (payload.ok && !payload.save) {
     const reconciled = await fetchServerPayload('/api/stars/reconcile', 4200);
     const reconciledState = stateFromBackendPayload(reconciled);
-    return reconciledState ? { kind: 'loaded', state: reconciledState } : { kind: 'empty' };
+    return reconciledState
+      ? { kind: 'loaded', state: reconciledState, saveSyncToken: saveSyncTokenFromPayload(reconciled) }
+      : { kind: 'empty' };
   }
 
   return { kind: 'unavailable' };
@@ -235,20 +269,26 @@ async function loadServerSave(): Promise<ServerLoadResult> {
 
 async function saveServerState(state: GameState, keepalive = false) {
   if (!canUseServerSave()) return;
-  const payload = await fetch(`${API_URL}/api/save`, {
+  const currentSaveSyncToken = readSaveSyncToken();
+  const response = await fetch(`${API_URL}/api/save`, {
     method: 'POST',
     keepalive,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `tma ${telegramInitData()}`,
     },
-    body: JSON.stringify(state),
-  })
-    .then((response) => (response.ok ? response.json() : null))
-    .catch(() => null) as BackendSavePayload | null;
+    body: JSON.stringify({
+      ...state,
+      ...(currentSaveSyncToken ? { saveSyncToken: currentSaveSyncToken } : {}),
+    }),
+  }).catch(() => null);
 
+  const payload = response ? await response.json().catch(() => null) as BackendSavePayload | null : null;
   const authoritativeState = stateFromBackendPayload(payload);
-  if (authoritativeState) rememberAuthoritativeState(authoritativeState);
+  if (authoritativeState) {
+    rememberAuthoritativeState(authoritativeState, saveSyncTokenFromPayload(payload));
+    if (payload?.error === 'stale_server_save') pendingServerState = null;
+  }
 }
 
 async function postDevelopmentAction(action: DevelopmentAction) {
@@ -262,14 +302,14 @@ async function postDevelopmentAction(action: DevelopmentAction) {
       },
       body: JSON.stringify(action.body ?? {}),
     })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => response.json().catch(() => null))
       .catch(() => null),
     null,
     4500,
   );
 
   const normalized = stateFromBackendPayload(payload as BackendSavePayload | null);
-  if (normalized) rememberAuthoritativeState(normalized);
+  if (normalized) rememberAuthoritativeState(normalized, saveSyncTokenFromPayload(payload as BackendSavePayload | null));
 }
 
 function finalizeLoadedState(state: GameState): GameState {
@@ -312,13 +352,14 @@ export async function loadGame(): Promise<GameState> {
     const server = await loadServerSave();
     if (server.kind === 'loaded') {
       const state = finalizeLoadedState(server.state);
-      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+      rememberAuthoritativeState(state, server.saveSyncToken);
       return rememberLoadedState(state);
     }
 
     if (server.kind === 'empty' && canUseServerSave()) {
       const state = initialAuthoritativeState(await loadWalletOverlay());
-      writeLocalStorage(STORAGE_KEY, JSON.stringify(state));
+      writeSaveSyncToken(null);
+      rememberAuthoritativeState(state, null);
       // Create a clean server save from the current app version. This replaces
       // the old behavior where stale localStorage could recreate deleted users.
       void saveServerState(state);
@@ -344,6 +385,7 @@ let cloudFlushTimer: number | null = null;
 let lastServerWriteAt = 0;
 let pendingServerState: GameState | null = null;
 let serverFlushTimer: number | null = null;
+let serverRequestInFlight = false;
 let lifecycleFlushInstalled = false;
 let lastActionSnapshot: GameState | null = null;
 
@@ -380,16 +422,21 @@ function scheduleCloudWrite(payload: string) {
 
 function flushServer(keepalive = false) {
   serverFlushTimer = null;
-  if (!pendingServerState) return;
+  if (!pendingServerState || serverRequestInFlight) return;
   const state = pendingServerState;
   pendingServerState = null;
   lastServerWriteAt = Date.now();
-  void saveServerState(state, keepalive);
+  serverRequestInFlight = true;
+  void saveServerState(state, keepalive).finally(() => {
+    serverRequestInFlight = false;
+    if (pendingServerState) flushServer();
+  });
 }
 
 function scheduleServerWrite(state: GameState, immediate = false) {
   if (!canUseServerSave()) return;
   pendingServerState = state;
+  if (serverRequestInFlight) return;
   if (immediate) {
     flushServer();
     return;
@@ -490,6 +537,7 @@ export function saveGame(state: GameState) {
 export function resetGame() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SAVE_TOKEN_STORAGE_KEY);
     for (const key of LEGACY_STORAGE_KEYS) localStorage.removeItem(key);
   } catch {
     // ignore
@@ -497,6 +545,7 @@ export function resetGame() {
   pendingCloudPayload = null;
   pendingServerState = null;
   lastActionSnapshot = null;
+  serverRequestInFlight = false;
   if (cloudFlushTimer !== null) {
     window.clearTimeout(cloudFlushTimer);
     cloudFlushTimer = null;
