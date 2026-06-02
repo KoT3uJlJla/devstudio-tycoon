@@ -93,7 +93,7 @@ function firstSessionContractReady(state: GameState) {
 }
 
 function FirstSessionContractBar({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
-  if (!state.onboardingDone || !state.tutorialDone || firstSessionContractClaimed(state)) return null;
+  if (!state.onboardingDone || !state.tutorialDone || state.screen !== 'studio' || firstSessionContractClaimed(state)) return null;
   const progress = firstSessionContractProgress(state);
   const steps = [
     ['Первый релиз', progress.firstRelease],
@@ -130,7 +130,7 @@ function FirstSessionContractBar({ state, update }: { state: GameState; update: 
 }
 
 function DailyContractCard({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
-  if (!state.tutorialDone) return null;
+  if (!state.tutorialDone || state.screen !== 'studio') return null;
   const contract = activeDailyContract(state);
   const nextContract = nextDailyContractPreview();
   const currentValue = contract.current(state);
@@ -166,7 +166,7 @@ const releaseNudgeBlock = `
                 <p className="eyebrow">Следующий шаг</p>
                 <h3>Закрой контракт первой сессии</h3>
                 <p>Открой первое улучшение, а потом выпусти ещё одну игру. Так игрок быстрее чувствует рост студии и понимает, зачем возвращаться.</p>
-                <button className="primary wide" onClick={() => update((current) => ({ ...current, latestRelease: null, screen: 'research' }))}>Открыть первое улучшение</button>
+                <button className="primary wide" onClick={() => update((current) => ({ ...current, latestRelease: null, screen: 'research' as GameState['screen'] }))}>Открыть первое улучшение</button>
               </section>
             )}
 `;
@@ -197,7 +197,7 @@ patchFile('src/App.tsx', (source) => {
 patchFile('src/styles.css', (source) => {
   let next = source;
   if (!next.includes('/* FTUE retention polish */')) {
-    next += `\n\n/* FTUE retention polish */\n.first-session-contract,\n.daily-contract-card,\n.first-session-release-nudge {\n  border: 3px solid rgba(5, 6, 13, .12);\n  box-shadow: 0 10px 0 rgba(0,0,0,.10);\n  color: #0a1020;\n}\n.first-session-contract .muted,\n.daily-contract-card .muted,\n.first-session-release-nudge .muted {\n  color: rgba(10,16,32,.72);\n}\n.first-session-contract {\n  margin: 10px 12px 0;\n  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,255,250,.96));\n}\n.contract-steps {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 10px;\n}\n.contract-step {\n  border-radius: 14px;\n  padding: 9px 10px;\n  background: rgba(5,6,13,.06);\n  font-weight: 800;\n  font-size: 12px;\n}\n.contract-step.done {\n  background: rgba(47, 182, 109, .16);\n}\n.contract-actions {\n  align-items: center;\n  margin-top: 10px;\n}\n.daily-contract-card p {\n  margin: 6px 0 10px;\n}\n.daily-contract-footer,\n.daily-contract-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  margin-top: 10px;\n}\n.daily-contract-meta {\n  color: rgba(5,6,13,.68);\n  font-weight: 700;\n}\n.first-session-release-nudge {\n  margin: 12px 0 0;\n  background: rgba(255, 245, 183, .55);\n}\n@media (max-width: 720px) {\n  .contract-steps {\n    grid-template-columns: 1fr;\n  }\n  .daily-contract-footer,\n  .daily-contract-meta,\n  .contract-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n}\n`;
+    next += `\n\n/* FTUE retention polish */\n.first-session-contract,\n.daily-contract-card,\n.first-session-release-nudge {\n  border: 3px solid rgba(5, 6, 13, .18);\n  box-shadow: 0 8px 0 rgba(0,0,0,.10);\n  color: #0a1020;\n  opacity: 1;\n  position: relative;\n  z-index: 1;\n}\n.first-session-contract *,\n.daily-contract-card *,\n.first-session-release-nudge * {\n  color: inherit;\n}\n.first-session-contract .eyebrow,\n.daily-contract-card .eyebrow,\n.first-session-release-nudge .eyebrow {\n  color: #19d3ff;\n}\n.first-session-contract .muted,\n.daily-contract-card .muted,\n.first-session-release-nudge .muted,\n.first-session-contract .small,\n.daily-contract-card .small,\n.first-session-release-nudge .small {\n  color: rgba(10,16,32,.78);\n}\n.first-session-contract {\n  margin: 10px 12px 0;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(244,255,250,.98));\n}\n.first-session-contract h3,\n.daily-contract-card h3,\n.first-session-release-nudge h3 {\n  margin: 0;\n  font-size: 24px;\n  line-height: 1.05;\n}\n.first-session-contract .pill,\n.daily-contract-card .pill {\n  color: #0a1020;\n}\n.contract-steps {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 10px;\n}\n.contract-step {\n  border-radius: 14px;\n  padding: 9px 10px;\n  background: rgba(5,6,13,.06);\n  font-weight: 800;\n  font-size: 12px;\n}\n.contract-step.done {\n  background: rgba(47, 182, 109, .16);\n}\n.contract-actions {\n  align-items: stretch;\n  margin-top: 12px;\n}\n.contract-actions .primary {\n  width: 100%;\n}\n.daily-contract-card {\n  margin-bottom: 14px;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,247,255,.98));\n}\n.daily-contract-card p {\n  margin: 6px 0 10px;\n}\n.daily-contract-footer,\n.daily-contract-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  margin-top: 10px;\n}\n.daily-contract-meta {\n  color: rgba(5,6,13,.68);\n  font-weight: 700;\n}\n.first-session-release-nudge {\n  margin: 12px 0 0;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(255,245,183,.95), rgba(255,255,255,.96));\n}\n.first-session-release-nudge p {\n  margin: 6px 0 10px;\n}\n@media (max-width: 720px) {\n  .contract-steps {\n    grid-template-columns: 1fr;\n  }\n  .daily-contract-footer,\n  .daily-contract-meta,\n  .contract-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .first-session-contract h3,\n  .daily-contract-card h3,\n  .first-session-release-nudge h3 {\n    font-size: 20px;\n  }\n}\n`;
   }
   return next;
 });
