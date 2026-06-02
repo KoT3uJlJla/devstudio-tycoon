@@ -126,11 +126,11 @@ async function openFirstUpgradeStep(state: GameState, update: (fn: (state: GameS
   const initData = window.Telegram?.WebApp?.initData || '';
   if (apiUrl && initData) {
     try {
-      const response = await fetch(`${apiUrl}/api/ftue/upgrade-rp`, {
+      const response = await fetch(apiUrl + '/api/ftue/upgrade-rp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `tma ${initData}`,
+          Authorization: 'tma ' + initData,
         },
       });
       const payload = await response.json().catch(() => null) as { save?: { data?: unknown } | null } | null;
