@@ -93,7 +93,7 @@ function firstSessionContractReady(state: GameState) {
 }
 
 function FirstSessionContractBar({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
-  if (!state.onboardingDone || firstSessionContractClaimed(state)) return null;
+  if (!state.onboardingDone || !state.tutorialDone || firstSessionContractClaimed(state)) return null;
   const progress = firstSessionContractProgress(state);
   const steps = [
     ['Первый релиз', progress.firstRelease],
@@ -130,6 +130,7 @@ function FirstSessionContractBar({ state, update }: { state: GameState; update: 
 }
 
 function DailyContractCard({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
+  if (!state.tutorialDone) return null;
   const contract = activeDailyContract(state);
   const nextContract = nextDailyContractPreview();
   const currentValue = contract.current(state);
@@ -196,7 +197,7 @@ patchFile('src/App.tsx', (source) => {
 patchFile('src/styles.css', (source) => {
   let next = source;
   if (!next.includes('/* FTUE retention polish */')) {
-    next += `\n\n/* FTUE retention polish */\n.first-session-contract,\n.daily-contract-card,\n.first-session-release-nudge {\n  border: 3px solid rgba(5, 6, 13, .12);\n  box-shadow: 0 10px 0 rgba(0,0,0,.10);\n}\n.first-session-contract {\n  margin: 10px 12px 0;\n  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,255,250,.96));\n}\n.contract-steps {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 10px;\n}\n.contract-step {\n  border-radius: 14px;\n  padding: 9px 10px;\n  background: rgba(5,6,13,.06);\n  font-weight: 800;\n  font-size: 12px;\n}\n.contract-step.done {\n  background: rgba(47, 182, 109, .16);\n}\n.contract-actions {\n  align-items: center;\n  margin-top: 10px;\n}\n.daily-contract-card p {\n  margin: 6px 0 10px;\n}\n.daily-contract-footer,\n.daily-contract-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  margin-top: 10px;\n}\n.daily-contract-meta {\n  color: rgba(5,6,13,.68);\n  font-weight: 700;\n}\n.first-session-release-nudge {\n  margin: 12px 0 0;\n  background: rgba(255, 245, 183, .55);\n}\n@media (max-width: 720px) {\n  .contract-steps {\n    grid-template-columns: 1fr;\n  }\n  .daily-contract-footer,\n  .daily-contract-meta,\n  .contract-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n}\n`;
+    next += `\n\n/* FTUE retention polish */\n.first-session-contract,\n.daily-contract-card,\n.first-session-release-nudge {\n  border: 3px solid rgba(5, 6, 13, .12);\n  box-shadow: 0 10px 0 rgba(0,0,0,.10);\n  color: #0a1020;\n}\n.first-session-contract .muted,\n.daily-contract-card .muted,\n.first-session-release-nudge .muted {\n  color: rgba(10,16,32,.72);\n}\n.first-session-contract {\n  margin: 10px 12px 0;\n  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(244,255,250,.96));\n}\n.contract-steps {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 10px;\n}\n.contract-step {\n  border-radius: 14px;\n  padding: 9px 10px;\n  background: rgba(5,6,13,.06);\n  font-weight: 800;\n  font-size: 12px;\n}\n.contract-step.done {\n  background: rgba(47, 182, 109, .16);\n}\n.contract-actions {\n  align-items: center;\n  margin-top: 10px;\n}\n.daily-contract-card p {\n  margin: 6px 0 10px;\n}\n.daily-contract-footer,\n.daily-contract-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  margin-top: 10px;\n}\n.daily-contract-meta {\n  color: rgba(5,6,13,.68);\n  font-weight: 700;\n}\n.first-session-release-nudge {\n  margin: 12px 0 0;\n  background: rgba(255, 245, 183, .55);\n}\n@media (max-width: 720px) {\n  .contract-steps {\n    grid-template-columns: 1fr;\n  }\n  .daily-contract-footer,\n  .daily-contract-meta,\n  .contract-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n}\n`;
   }
   return next;
 });
