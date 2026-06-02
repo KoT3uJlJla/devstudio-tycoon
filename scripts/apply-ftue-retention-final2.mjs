@@ -102,11 +102,11 @@ function FirstSessionContractBar({ state, update }: { state: GameState; update: 
   ] as const;
   const ready = firstSessionContractReady(state);
   const nextAction: { label: string; apply: (current: GameState) => GameState } | null = !progress.firstRelease
-    ? { label: 'Запустить первый релиз', apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as Screen, selectedProject: current.selectedProject ?? createProject(false) }) }
+    ? { label: 'Запустить первый релиз', apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as GameState['screen'], selectedProject: current.selectedProject ?? createProject(false) }) }
     : !progress.upgrade
-      ? { label: 'Открыть первое улучшение', apply: (current: GameState): GameState => ({ ...current, screen: 'research' as Screen }) }
+      ? { label: 'Открыть первое улучшение', apply: (current: GameState): GameState => ({ ...current, screen: 'research' as GameState['screen'] }) }
       : !progress.secondRelease
-        ? { label: 'Собрать второй релиз', apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as Screen, selectedProject: current.selectedProject ?? createProject(false) }) }
+        ? { label: 'Собрать второй релиз', apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as GameState['screen'], selectedProject: current.selectedProject ?? createProject(false) }) }
         : null;
   const claim = () => update((current) => {
     if (firstSessionContractClaimed(current) || !firstSessionContractReady(current)) return current;
