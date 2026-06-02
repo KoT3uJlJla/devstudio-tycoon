@@ -20,10 +20,10 @@ function replaceRegex(source, pattern, replacement, label) {
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('coins: 5000,')) {
-    next = replaceText(next, '  coins: 3000,', '  coins: 5000,', 'initial coins');
+    next = replaceRegex(next, /(export const initialState: GameState = \{[\s\S]*?\n\s*coins:\s*)\d+(,)/, '$15000$2', 'initial coins');
   }
   if (!next.includes('rp: 50,')) {
-    next = replaceText(next, '  rp: 0,', '  rp: 50,', 'initial rp');
+    next = replaceRegex(next, /(export const initialState: GameState = \{[\s\S]*?\n\s*rp:\s*)\d+(,)/, '$150$2', 'initial rp');
   }
   if (!next.includes('const freeFirstPromotion = current.gamesReleased === 0')) {
     next = replaceRegex(
