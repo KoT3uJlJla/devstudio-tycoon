@@ -12,6 +12,11 @@ function replaceRegex(source, pattern, replacement, label) {
   return source.replace(pattern, replacement);
 }
 
+function replaceOnceText(source, from, to, label) {
+  if (!source.includes(from)) throw new Error(`ftue-starter-pack: missing ${label}`);
+  return source.replace(from, to);
+}
+
 patchFile('src/gameLogic.ts', (source) => {
   let next = source;
   if (!next.includes('coins: 5000,')) {
@@ -35,9 +40,9 @@ patchFile('src/App.tsx', (source) => {
   }
   next = next.replace('Мы единоразово дадим 24 🧪, чтобы можно было сразу взять первое улучшение.', 'У тебя уже есть стартовые очки науки, так что можно сразу открыть первое улучшение.');
   if (!next.includes('Продвижение бесплатно')) {
-    next = replaceRegex(
+    next = replaceOnceText(
       next,
-      /<button className="primary" onClick=\{\(\) => update\(promoteProject\)\} disabled=\{state\.stars < 35 \|\| Boolean\(project\.promotionUsed\)\}>\{project\.promotionUsed \? `Продвижение \+\$\{\(project\.promotionBoost \?\? 0\)\.toFixed\(1\)\}` : 'Продвижение ⭐35'\}<\/button>/,
+      `<button className="primary" onClick={() => update(promoteProject)} disabled={state.stars < 35 || Boolean(project.promotionUsed)}>{project.promotionUsed ? \`Продвижение +\${(project.promotionBoost ?? 0).toFixed(1)}\` : 'Продвижение ⭐35'}</button>`,
       `<button className="primary" onClick={() => update(promoteProject)} disabled={Boolean(project.promotionUsed) || (!(project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1'])) && state.stars < 35)}>{project.promotionUsed ? \`Продвижение +\${(project.promotionBoost ?? 0).toFixed(1)}\` : project.progress >= 100 && state.gamesReleased === 0 && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1']) ? 'Продвижение бесплатно' : 'Продвижение ⭐35'}</button>`,
       'promotion button',
     );
