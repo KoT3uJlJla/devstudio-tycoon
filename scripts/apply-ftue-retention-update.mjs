@@ -53,7 +53,7 @@ function contractForDay(dayKey: string) {
 }
 
 function dailyContractClaimKey(contractId: string) {
-  return `${todayKey()}:contract:${contractId}`;
+  return todayKey() + ':contract:' + contractId;
 }
 
 function nextDayKey() {
@@ -155,7 +155,7 @@ function DailyContractCard({ state, update }: { state: GameState; update: (fn: (
     <div className="section-head compact"><div><p className="eyebrow">Контракт дня</p><h3>{contract.title}</h3></div><span className="pill">+{money(contract.reward.coins)} 🪙 +{contract.reward.rp} 🧪</span></div>
     <p>{contract.desc}</p>
     <ProgressBar value={progress} />
-    <div className="daily-contract-footer"><span>{claimed ? 'Контракт закрыт' : ready ? 'Можно забирать награду' : `${Math.min(Math.round(currentValue), contract.target)}/${contract.target}`}</span><button className="primary" disabled={!ready || claimed} onClick={claim}>{claimed ? 'Получено' : 'Забрать награду'}</button></div>
+    <div className="daily-contract-footer"><span>{claimed ? 'Контракт закрыт' : ready ? 'Можно забирать награду' : String(Math.min(Math.round(currentValue), contract.target)) + '/' + String(contract.target)}</span><button className="primary" disabled={!ready || claimed} onClick={claim}>{claimed ? 'Получено' : 'Забрать награду'}</button></div>
     <div className="daily-contract-meta"><small>{contract.note}</small><small>Завтра: {nextContract.title}</small></div>
   </section>;
 }
