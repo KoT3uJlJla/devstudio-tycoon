@@ -35,6 +35,100 @@ patchFile('index.js', (source) => {
   );
 
   next = next.replace(
+    'function sanitizeText(value, fallback = "") {\n  return String(value || fallback).replace(/[<>"\'`]/g, "").replace(/\\s+/g, " ").trim().slice(0, 80);\n}\n',
+    [
+      'function sanitizeText(value, fallback = "") {',
+      '  return String(value || fallback).replace(/[<>"\'`]/g, "").replace(/\\s+/g, " ").trim().slice(0, 80);',
+      '}',
+      '',
+      'function stableStringify(value) {',
+      '  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;',
+      '  if (value && typeof value === "object") {',
+      '    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;',
+      '  }',
+      '  return JSON.stringify(value ?? null);',
+      '}',
+      '',
+      'function stripSaveSyncToken(data) {',
+      '  if (!isPlainObject(data)) return data;',
+      '  const nextData = { ...data };',
+      '  delete nextData.saveSyncToken;',
+      '  return nextData;',
+      '}',
+      '',
+      'function saveSyncTokenFor(data) {',
+      '  return crypto.createHash("sha256").update(stableStringify(stripSaveSyncToken(data))).digest("hex").slice(0, 24);',
+      '}',
+      '',
+      'function attachSaveSyncToken(data) {',
+      '  if (!isPlainObject(data)) return data;',
+      '  const withoutToken = stripSaveSyncToken(data);',
+      '  return { ...withoutToken, saveSyncToken: saveSyncTokenFor(withoutToken) };',
+      '}',
+      '',
+    ].join('\n'),
+  );
+
+  next = next.replace(
+    'async function writeSave(telegramId, telegramUser, data) {\n  await db.collection("saves").updateOne(\n    { telegramId },\n    { $set: { telegramId, telegramUser, data, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },\n    { upsert: true },\n  );\n}',
+    [
+      'async function writeSave(telegramId, telegramUser, data) {',
+      '  const authoritativeData = attachSaveSyncToken(data);',
+      '  if (isPlainObject(data)) {',
+      '    delete data.saveSyncToken;',
+      '    Object.assign(data, authoritativeData);',
+      '  }',
+      '  await db.collection("saves").updateOne(',
+      '    { telegramId },',
+      '    { $set: { telegramId, telegramUser, data: authoritativeData, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },',
+      '    { upsert: true },',
+      '  );',
+      '  return authoritativeData;',
+      '}',
+    ].join('\n'),
+  );
+
+  next = next.replace(
+    'async function getAuthoritativeSave(telegramUser, save, economy) {\n  if (!save) return null;\n  const normalizedData = overlayProtectedEconomy(normalizeServerDevelopment(save.data), economy);\n  if (JSON.stringify(normalizedData) !== JSON.stringify(save.data)) {\n    await writeSave(telegramUser.id, telegramUser, normalizedData);\n  }\n  return { data: normalizedData, updatedAt: save.updatedAt ?? null };\n}',
+    [
+      'async function getAuthoritativeSave(telegramUser, save, economy) {',
+      '  if (!save) return null;',
+      '  const normalizedData = attachSaveSyncToken(overlayProtectedEconomy(normalizeServerDevelopment(save.data), economy));',
+      '  if (JSON.stringify(normalizedData) !== JSON.stringify(save.data)) {',
+      '    await writeSave(telegramUser.id, telegramUser, normalizedData);',
+      '  }',
+      '  return { data: normalizedData, updatedAt: save.updatedAt ?? null };',
+      '}',
+    ].join('\n'),
+  );
+
+  next = next.replace(
+    '  app.post("/api/save", requireTelegramUser, async (req, res) => {\n    const data = req.body;\n    if (!isPlainObject(data)) return res.status(400).json({ ok: false, error: "invalid_save_payload" });\n    const previousSave = await getSave(req.telegramUser.id);\n    if (!previousSave && data?.saveSchemaVersion !== 3) return res.status(409).json({ ok: false, error: "stale_client_save" });\n    const mergedDevelopment = mergeServerDevelopment(data, previousSave?.data);\n    const authoritativeData = normalizeServerDevelopment(mergedDevelopment, previousSave?.data);\n    const economy = await syncEconomyFromIncomingSave(req.telegramUser, authoritativeData, previousSave?.data);\n    const protectedData = overlayProtectedEconomy({ ...authoritativeData, saveSchemaVersion: 3 }, economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);\n    res.json({ ok: true, economy: publicEconomy(economy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() } });\n  });',
+    [
+      '  app.post("/api/save", requireTelegramUser, async (req, res) => {',
+      '    const data = req.body;',
+      '    if (!isPlainObject(data)) return res.status(400).json({ ok: false, error: "invalid_save_payload" });',
+      '    const previousSave = await getSave(req.telegramUser.id);',
+      '    const economy = await getOrCreateEconomy(req.telegramUser, previousSave?.data);',
+      '    if (!previousSave && data?.saveSchemaVersion !== 3) return res.status(409).json({ ok: false, error: "stale_client_save" });',
+      '    const incomingSyncToken = typeof data.saveSyncToken === "string" ? data.saveSyncToken : "";',
+      '    const previousAuthoritativeData = previousSave?.data ? attachSaveSyncToken(overlayProtectedEconomy(normalizeServerDevelopment(previousSave.data), economy)) : null;',
+      '    if (previousSave && incomingSyncToken !== String(previousAuthoritativeData?.saveSyncToken || "")) {',
+      '      return res.status(409).json({ ok: false, error: "stale_server_save", economy: publicEconomy(economy), development: publicDevelopmentStatus(previousAuthoritativeData), save: { data: previousAuthoritativeData, updatedAt: previousSave.updatedAt ?? new Date() } });',
+      '    }',
+      '    const sanitizedIncoming = { ...data };',
+      '    delete sanitizedIncoming.saveSyncToken;',
+      '    const mergedDevelopment = mergeServerDevelopment(sanitizedIncoming, previousSave?.data);',
+      '    const authoritativeData = normalizeServerDevelopment(mergedDevelopment, previousSave?.data);',
+      '    const syncedEconomy = await syncEconomyFromIncomingSave(req.telegramUser, authoritativeData, previousSave?.data);',
+      '    const protectedData = overlayProtectedEconomy({ ...authoritativeData, saveSchemaVersion: 3 }, syncedEconomy);',
+      '    await writeSave(req.telegramUser.id, req.telegramUser, protectedData);',
+      '    res.json({ ok: true, economy: publicEconomy(syncedEconomy), development: publicDevelopmentStatus(protectedData), save: { data: protectedData, updatedAt: new Date() } });',
+      '  });',
+    ].join('\n'),
+  );
+
+  next = next.replace(
     '    const nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (nextData.gamesReleased > 0) await upsertRating(req.telegramUser, nextData);\n    if (action === "release") economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" });\n    res.json({ ok: true, save: { data: overlayProtectedEconomy(nextData, economy), updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
     '    let nextData = overlayProtectedEconomy(handler(authoritative), economy);\n    await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n    if (action === "release" && nextData.gamesReleased > 0) {\n      await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);\n      if (typeof qualifyReferralIfEligible === "function") {\n        economy = await qualifyReferralIfEligible(req.telegramUser, nextData, { source: "development:release" }) || economy;\n        nextData = overlayProtectedEconomy(nextData, economy);\n        await writeSave(req.telegramUser.id, req.telegramUser, nextData);\n      }\n    }\n    res.json({ ok: true, save: { data: nextData, updatedAt: new Date() }, economy: publicEconomy(economy), development: publicDevelopmentStatus(nextData) });',
   );
@@ -60,6 +154,8 @@ patchFile('index.js', (source) => {
     ].join('\n'),
   );
 
+  requirePatch(next, 'saveSyncTokenFor', 'save sync token helpers');
+  requirePatch(next, 'stale_server_save', 'stale server save conflict');
   requirePatch(next, 'await recordTrustedReleaseAndRating(req.telegramUser, authoritative, nextData);', 'trusted release action');
   requirePatch(next, 'find({ weekKey: currentWeek, trusted: true })', 'trusted leaderboard filter');
   requirePatch(next, '.limit(10).toArray();', 'top-10 leaderboard limit');
