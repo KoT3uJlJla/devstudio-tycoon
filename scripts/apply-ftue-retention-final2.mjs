@@ -19,6 +19,7 @@ function replaceOnceIfFound(source, from, to) {
 const helpers = `
 const FIRST_SESSION_CONTRACT_ID = 'ftue-contract-v1';
 const FIRST_SESSION_CONTRACT_REWARD = { coins: 2500, rp: 18 } as const;
+const FTUE_UPGRADE_RP_CLAIM_ID = 'ftue-upgrade-rp-v1';
 
 type DailyContractDefinition = {
   id: string;
@@ -79,6 +80,10 @@ function firstSessionContractClaimed(state: GameState) {
   return Boolean(state.dailyTaskClaims[FIRST_SESSION_CONTRACT_ID]);
 }
 
+function ftueUpgradeRewardClaimed(state: GameState) {
+  return Boolean(state.studioGoalClaims?.[FTUE_UPGRADE_RP_CLAIM_ID]);
+}
+
 function firstSessionContractProgress(state: GameState) {
   return {
     firstRelease: state.gamesReleased >= 1,
@@ -90,6 +95,54 @@ function firstSessionContractProgress(state: GameState) {
 function firstSessionContractReady(state: GameState) {
   const progress = firstSessionContractProgress(state);
   return progress.firstRelease && progress.upgrade && progress.secondRelease;
+}
+
+function mergeFtueRewardSave(current: GameState, rawSave: unknown): GameState {
+  if (!rawSave || typeof rawSave !== 'object' || Array.isArray(rawSave)) return current;
+  const saveData = rawSave as Record<string, unknown>;
+  const studioGoalClaims = saveData.studioGoalClaims;
+  const dailyTaskClaims = saveData.dailyTaskClaims;
+  return {
+    ...current,
+    ...(Number.isFinite(Number(saveData.coins)) ? { coins: Number(saveData.coins) } : {}),
+    ...(Number.isFinite(Number(saveData.rp)) ? { rp: Number(saveData.rp) } : {}),
+    ...(Number.isFinite(Number(saveData.lastSavedAt)) ? { lastSavedAt: Number(saveData.lastSavedAt) } : {}),
+    ...(studioGoalClaims && typeof studioGoalClaims === 'object' && !Array.isArray(studioGoalClaims)
+      ? { studioGoalClaims: Object.fromEntries(Object.entries(studioGoalClaims as Record<string, unknown>).map(([key, value]) => [String(key), Boolean(value)])) }
+      : {}),
+    ...(dailyTaskClaims && typeof dailyTaskClaims === 'object' && !Array.isArray(dailyTaskClaims)
+      ? { dailyTaskClaims: Object.fromEntries(Object.entries(dailyTaskClaims as Record<string, unknown>).map(([key, value]) => [String(key), Boolean(value)])) }
+      : {}),
+  };
+}
+
+async function openFirstUpgradeStep(state: GameState, update: (fn: (state: GameState) => GameState) => void) {
+  const nextScreen = { latestRelease: null, screen: 'research' as GameState['screen'] };
+  if (ftueUpgradeRewardClaimed(state)) {
+    update((current) => ({ ...current, ...nextScreen }));
+    return;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL ?? '';
+  const initData = window.Telegram?.WebApp?.initData || '';
+  if (apiUrl && initData) {
+    try {
+      const response = await fetch(`${apiUrl}/api/ftue/upgrade-rp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `tma ${initData}`,
+        },
+      });
+      const payload = await response.json().catch(() => null) as { save?: { data?: unknown } | null } | null;
+      if (payload?.save?.data) {
+        update((current) => ({ ...mergeFtueRewardSave(current, payload.save?.data), ...nextScreen }));
+        return;
+      }
+    } catch {
+      // fall through to plain navigation when the backend is temporarily unavailable
+    }
+  }
+  update((current) => ({ ...current, ...nextScreen }));
 }
 
 function FirstSessionContractBar({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -118,12 +171,17 @@ function FirstSessionContractBar({ state, update }: { state: GameState; update: 
       dailyTaskClaims: { ...(current.dailyTaskClaims ?? {}), [FIRST_SESSION_CONTRACT_ID]: true },
     };
   });
+  const handleNextAction = nextAction?.label === 'Открыть первое улучшение'
+    ? () => { void openFirstUpgradeStep(state, update); }
+    : nextAction
+      ? () => update(nextAction.apply)
+      : undefined;
   return <section className="first-session-contract comic-card">
     <div className="section-head compact"><div><p className="eyebrow">Контракт первой сессии</p><h3>Дойди до второго релиза</h3></div><span className="pill">+{money(FIRST_SESSION_CONTRACT_REWARD.coins)} 🪙 +{FIRST_SESSION_CONTRACT_REWARD.rp} 🧪</span></div>
     <p className="muted">За первые 5 минут игрок должен увидеть полный цикл студии дважды: релиз, улучшение и новый релиз уже по своей стратегии.</p>
     <div className="contract-steps">{steps.map(([label, done]) => <span key={label} className={done ? 'contract-step done' : 'contract-step'}>{done ? '✅' : '•'} {label}</span>)}</div>
     <div className="inline-actions contract-actions">
-      {ready ? <button className="primary" onClick={claim}>Забрать бонус первой сессии</button> : nextAction ? <button className="primary" onClick={() => update(nextAction.apply)}>{nextAction.label}</button> : null}
+      {ready ? <button className="primary" onClick={claim}>Забрать бонус первой сессии</button> : handleNextAction ? <button className="primary" onClick={handleNextAction}>{nextAction?.label}</button> : null}
       <span className="small muted">После второго релиза игрок уже видит, как студия растёт и зачем возвращаться.</span>
     </div>
   </section>;
@@ -161,19 +219,19 @@ function DailyContractCard({ state, update }: { state: GameState; update: (fn: (
 `;
 
 const releaseNudgeBlock = `
-            {isFirstSessionPush && (
+            {isFirstSessionPush && state.tutorialDone && (
               <section className="first-session-release-nudge comic-card">
                 <p className="eyebrow">Следующий шаг</p>
                 <h3>Закрой контракт первой сессии</h3>
-                <p>Открой первое улучшение, а потом выпусти ещё одну игру. Так игрок быстрее чувствует рост студии и понимает, зачем возвращаться.</p>
-                <button className="primary wide" onClick={() => update((current) => ({ ...current, latestRelease: null, screen: 'research' as GameState['screen'] }))}>Открыть первое улучшение</button>
+                <p>Открой первое улучшение, а потом выпусти ещё одну игру. Мы единоразово дадим 24 🧪, чтобы можно было сразу взять первое улучшение.</p>
+                <button className="primary wide" onClick={() => { void openFirstUpgradeStep(state, update); }}>Открыть первое улучшение</button>
               </section>
             )}
 `;
 
 patchFile('src/App.tsx', (source) => {
   let next = source;
-  if (!next.includes('FIRST_SESSION_CONTRACT_ID')) {
+  if (!next.includes('FTUE_UPGRADE_RP_CLAIM_ID')) {
     next = insertBefore(next, 'export default function App()', helpers, 'App helper insertion');
   }
   if (!next.includes('<FirstSessionContractBar state={state} update={update} />')) {
@@ -185,7 +243,7 @@ patchFile('src/App.tsx', (source) => {
   if (!next.includes('const isFirstSessionPush = state.gamesReleased === 1;')) {
     next = replaceOnceIfFound(next, '  const showFinal = step >= result.critics.length + 1;\n  const showMoney = step >= finalStep;', '  const showFinal = step >= result.critics.length + 1;\n  const showMoney = step >= finalStep;\n  const isFirstSessionPush = state.gamesReleased === 1;');
   }
-  if (!next.includes('first-session-release-nudge')) {
+  if (!next.includes('openFirstUpgradeStep(state, update)')) {
     next = replaceOnceIfFound(next, '            <div className="life-result">', `${releaseNudgeBlock}            <div className="life-result">`);
   }
   if (!next.includes('FirstSessionContractBar') || !next.includes('DailyContractCard')) {
@@ -197,7 +255,7 @@ patchFile('src/App.tsx', (source) => {
 patchFile('src/styles.css', (source) => {
   let next = source;
   if (!next.includes('/* FTUE retention polish */')) {
-    next += `\n\n/* FTUE retention polish */\n.first-session-contract,\n.daily-contract-card,\n.first-session-release-nudge {\n  border: 3px solid rgba(5, 6, 13, .18);\n  box-shadow: 0 8px 0 rgba(0,0,0,.10);\n  color: #0a1020;\n  opacity: 1;\n  position: relative;\n  z-index: 1;\n}\n.first-session-contract *,\n.daily-contract-card *,\n.first-session-release-nudge * {\n  color: inherit;\n}\n.first-session-contract .eyebrow,\n.daily-contract-card .eyebrow,\n.first-session-release-nudge .eyebrow {\n  color: #19d3ff;\n}\n.first-session-contract .muted,\n.daily-contract-card .muted,\n.first-session-release-nudge .muted,\n.first-session-contract .small,\n.daily-contract-card .small,\n.first-session-release-nudge .small {\n  color: rgba(10,16,32,.78);\n}\n.first-session-contract {\n  margin: 10px 12px 0;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(244,255,250,.98));\n}\n.first-session-contract h3,\n.daily-contract-card h3,\n.first-session-release-nudge h3 {\n  margin: 0;\n  font-size: 24px;\n  line-height: 1.05;\n}\n.first-session-contract .pill,\n.daily-contract-card .pill {\n  color: #0a1020;\n}\n.contract-steps {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 10px;\n}\n.contract-step {\n  border-radius: 14px;\n  padding: 9px 10px;\n  background: rgba(5,6,13,.06);\n  font-weight: 800;\n  font-size: 12px;\n}\n.contract-step.done {\n  background: rgba(47, 182, 109, .16);\n}\n.contract-actions {\n  align-items: stretch;\n  margin-top: 12px;\n}\n.contract-actions .primary {\n  width: 100%;\n}\n.daily-contract-card {\n  margin-bottom: 14px;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,247,255,.98));\n}\n.daily-contract-card p {\n  margin: 6px 0 10px;\n}\n.daily-contract-footer,\n.daily-contract-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  margin-top: 10px;\n}\n.daily-contract-meta {\n  color: rgba(5,6,13,.68);\n  font-weight: 700;\n}\n.first-session-release-nudge {\n  margin: 12px 0 0;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(255,245,183,.95), rgba(255,255,255,.96));\n}\n.first-session-release-nudge p {\n  margin: 6px 0 10px;\n}\n@media (max-width: 720px) {\n  .contract-steps {\n    grid-template-columns: 1fr;\n  }\n  .daily-contract-footer,\n  .daily-contract-meta,\n  .contract-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .first-session-contract h3,\n  .daily-contract-card h3,\n  .first-session-release-nudge h3 {\n    font-size: 20px;\n  }\n}\n`;
+    next += `\n\n/* FTUE retention polish */\n.first-session-contract,\n.daily-contract-card,\n.first-session-release-nudge {\n  border: 2px solid rgba(255, 220, 110, .22);\n  box-shadow: 0 8px 0 rgba(0, 0, 0, .22);\n  color: #f7f7ff !important;\n  opacity: 1;\n  position: relative;\n  z-index: 1;\n}\n.first-session-contract {\n  margin: 10px 12px 0;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(51, 40, 96, .98), rgba(12, 20, 56, .98));\n}\n.daily-contract-card {\n  margin-bottom: 14px;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(43, 36, 88, .98), rgba(10, 22, 58, .98));\n}\n.first-session-release-nudge {\n  margin: 12px 0 0;\n  padding: 14px;\n  background: linear-gradient(180deg, rgba(58, 44, 108, .98), rgba(17, 25, 63, .98));\n}\n.first-session-contract h3,\n.daily-contract-card h3,\n.first-session-release-nudge h3 {\n  margin: 0;\n  font-size: 20px;\n  line-height: 1.05;\n  letter-spacing: 0;\n  text-transform: none;\n  color: #ffffff !important;\n}\n.first-session-contract p,\n.daily-contract-card p,\n.first-session-release-nudge p,\n.first-session-contract span,\n.daily-contract-card span,\n.first-session-release-nudge span,\n.first-session-contract small,\n.daily-contract-card small,\n.first-session-release-nudge small {\n  color: inherit;\n}\n.first-session-contract .eyebrow,\n.daily-contract-card .eyebrow,\n.first-session-release-nudge .eyebrow {\n  color: #27d8ff !important;\n}\n.first-session-contract .muted,\n.daily-contract-card .muted,\n.first-session-release-nudge .muted,\n.first-session-contract .small,\n.daily-contract-card .small,\n.first-session-release-nudge .small {\n  color: rgba(244, 244, 255, .84) !important;\n}\n.first-session-contract .pill,\n.daily-contract-card .pill {\n  color: #0a1020 !important;\n}\n.contract-steps {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: 8px;\n  margin-top: 10px;\n}\n.contract-step {\n  border-radius: 14px;\n  padding: 9px 10px;\n  background: rgba(255, 255, 255, .08);\n  font-weight: 800;\n  font-size: 12px;\n}\n.contract-step.done {\n  background: rgba(65, 201, 141, .20);\n}\n.contract-actions {\n  align-items: stretch;\n  margin-top: 12px;\n}\n.contract-actions .primary {\n  width: 100%;\n}\n.daily-contract-card p,\n.first-session-release-nudge p {\n  margin: 6px 0 10px;\n}\n.daily-contract-footer,\n.daily-contract-meta {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 10px;\n  margin-top: 10px;\n}\n.daily-contract-meta {\n  color: rgba(244, 244, 255, .76) !important;\n  font-weight: 700;\n}\n@media (max-width: 720px) {\n  .contract-steps {\n    grid-template-columns: 1fr;\n  }\n  .daily-contract-footer,\n  .daily-contract-meta,\n  .contract-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .first-session-contract h3,\n  .daily-contract-card h3,\n  .first-session-release-nudge h3 {\n    font-size: 18px;\n  }\n}\n`;
   }
   return next;
 });
