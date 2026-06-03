@@ -1,81 +1,49 @@
-/* Studio Office mobile layout overrides */
-.studio-office-card {
-  max-width: 100%;
-  overflow: hidden;
+﻿/* Studio Office final mobile layout + static art fallback */
+.studio-office-card { max-width: 100% !important; overflow: hidden !important; padding: 16px !important; }
+.studio-office-copy { display: grid !important; grid-template-columns: 1fr !important; gap: 14px !important; align-items: start !important; min-width: 0 !important; margin-bottom: 14px !important; }
+.studio-office-copy > div { display: grid !important; gap: 7px !important; min-width: 0 !important; }
+.studio-office-copy .eyebrow { margin: 0 !important; font-size: 11px !important; line-height: 1.05 !important; }
+.studio-office-copy h2 { max-width: 100% !important; margin: 0 !important; font-size: clamp(26px, 8.2vw, 38px) !important; line-height: 0.92 !important; letter-spacing: -0.055em !important; overflow-wrap: anywhere !important; }
+.studio-office-copy .muted { max-width: 100% !important; margin: 0 !important; font-size: clamp(14px, 4vw, 17px) !important; line-height: 1.18 !important; overflow-wrap: anywhere !important; }
+.studio-office-copy .primary { width: 100% !important; max-width: 100% !important; white-space: normal !important; text-align: center !important; justify-content: center !important; margin: 0 !important; }
+
+.studio-office-preview,
+.studio-office-modal-scene,
+.studio-office-preview .pixi-canvas-host,
+.studio-office-modal-scene .pixi-canvas-host {
+  background-color: #070812 !important;
+  background-image: url('/assets/studio-office/office-base.webp') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
 }
 
-.studio-office-copy {
-  display: grid !important;
-  grid-template-columns: 1fr !important;
-  gap: 10px !important;
-  min-width: 0;
-}
+.studio-office-preview { display: block !important; position: relative !important; width: 100% !important; max-width: 100% !important; height: clamp(190px, 52vw, 260px) !important; min-height: 190px !important; overflow: hidden !important; border-radius: 22px !important; }
 
-.studio-office-copy > div {
-  min-width: 0;
-}
-
-.studio-office-copy h2 {
-  max-width: 100%;
-  font-size: clamp(30px, 10vw, 48px);
-  line-height: 0.9;
-  letter-spacing: -0.04em;
-  overflow-wrap: anywhere;
-}
-
-.studio-office-copy .muted {
-  max-width: 100%;
-  font-size: clamp(15px, 4.4vw, 19px);
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.studio-office-copy .primary {
-  width: fit-content;
-  max-width: 100%;
-  white-space: normal;
-  text-align: center;
-}
-
-.studio-office-preview {
+.studio-office-preview .pixi-canvas-host,
+.studio-office-preview .pixi-canvas-surface,
+.studio-office-modal-scene .pixi-canvas-host,
+.studio-office-modal-scene .pixi-canvas-surface {
+  position: absolute !important;
+  inset: 0 !important;
   width: 100% !important;
-  max-width: 100% !important;
-  height: 220px !important;
-  min-height: 180px !important;
-  overflow: hidden !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  background-color: transparent !important;
 }
 
-.studio-office-modal {
-  width: min(920px, calc(100vw - 24px)) !important;
-  max-width: calc(100vw - 24px) !important;
-}
-
-.studio-office-modal-head {
-  align-items: flex-start !important;
-}
-
-.studio-office-modal-head h2 {
-  font-size: clamp(34px, 10vw, 58px);
-  line-height: 0.9;
-  overflow-wrap: anywhere;
-}
-
-.studio-office-modal-scene {
-  width: 100% !important;
-  min-height: 320px !important;
-  overflow: hidden !important;
-}
+.studio-office-modal { width: min(920px, calc(100vw - 24px)) !important; max-width: calc(100vw - 24px) !important; padding: 18px !important; gap: 16px !important; }
+.studio-office-modal-head { display: grid !important; grid-template-columns: 1fr auto !important; gap: 12px !important; align-items: start !important; }
+.studio-office-modal-head h2 { margin: 0 !important; max-width: 100% !important; font-size: clamp(30px, 8.4vw, 54px) !important; line-height: 0.92 !important; overflow-wrap: anywhere !important; }
+.studio-office-close { position: relative !important; z-index: 2 !important; flex: 0 0 auto !important; }
+.studio-office-modal-scene { display: block !important; position: relative !important; width: 100% !important; min-height: 320px !important; height: min(58vh, 520px) !important; overflow: hidden !important; border-radius: 24px !important; }
 
 @media (max-width: 560px) {
-  .studio-office-copy .primary {
-    width: 100%;
-  }
-
-  .studio-office-preview {
-    height: 220px !important;
-  }
-
-  .studio-office-modal-scene {
-    height: min(58vh, 520px) !important;
-  }
+  .studio-office-card { padding: 14px !important; }
+  .studio-office-copy { gap: 12px !important; margin-bottom: 12px !important; }
+  .studio-office-copy h2 { font-size: clamp(24px, 7.8vw, 34px) !important; }
+  .studio-office-copy .muted { font-size: 14px !important; }
+  .studio-office-preview { height: 210px !important; min-height: 210px !important; }
+  .studio-office-modal { padding: 14px !important; }
+  .studio-office-modal-scene { min-height: 330px !important; height: min(56vh, 500px) !important; }
 }

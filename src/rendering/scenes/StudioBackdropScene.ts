@@ -1,4 +1,4 @@
-import { Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
+﻿import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { createGlowOrb } from '../effects/createGlowOrb';
 import { createParticleField } from '../effects/createParticleField';
 
@@ -49,9 +49,27 @@ function makeSparkTexture(color: string) {
   return Texture.from(canvas);
 }
 
+function loadImageAsset(assetPath: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      console.info('Studio office asset check', {
+        url: assetPath,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      });
+      resolve(image);
+    };
+    image.onerror = () => reject(new Error(`Studio office image failed to load: ${assetPath}`));
+    image.src = assetPath;
+  });
+}
+
 async function loadTexture(assetPath: string) {
-  const texture = await Assets.load<Texture>(assetPath);
-  if (!texture) throw new Error(`Studio office texture failed to load: ${assetPath}`);
+  const image = await loadImageAsset(assetPath);
+  const texture = Texture.from(image);
+  if (!texture) throw new Error(`Studio office texture failed to create: ${assetPath}`);
   return texture;
 }
 
