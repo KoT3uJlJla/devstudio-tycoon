@@ -55,8 +55,8 @@ import {
 import { loadGame, saveGame } from './storage';
 import { haptic, initTelegram, shareRelease } from './telegram';
 import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet, claimReferralMilestone, fetchTaskConfig, hasBackendSession, runDevelopmentAction } from './backendClient';
-import { applyTaskReward, buildDailyTasks, buildStudioGoals, rewardLabel, taskProgressPercent, type DailyTaskModel, type StudioGoalModel, type TaskCatalogOverrides } from './taskCatalog';
 import { claimBackendDailyReward, claimBackendReferralMilestone, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
+import { applyTaskReward, buildDailyTasks, buildStudioGoals, rewardLabel, taskProgressPercent, type DailyTaskModel, type StudioGoalModel, type TaskCatalogOverrides } from './taskCatalog';
 import { PixiCanvas } from './rendering/PixiCanvas';
 import type { DailyTaskId, DevEventChoice, Employee, Focus, GameState, GenreId, PhaseId, PlatformId, Project, ScoreBreakdownItem, ThemeId } from './types';
 
@@ -595,6 +595,7 @@ export default function App() {
   const [gameClosed, setGameClosed] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState('Ведутся технические работы. Возвращайтесь позже');
   const [momentumOpen, setMomentumOpen] = useState(false);
+  const [studioOfficeOpen, setStudioOfficeOpen] = useState(false);
   const [studioNamingMode, setStudioNamingMode] = useState<'initial' | 'rename' | null>(null);
   const [taskOverrides, setTaskOverrides] = useState<TaskCatalogOverrides>({});
 
@@ -662,9 +663,8 @@ export default function App() {
       <TopBar state={state} onMomentumOpen={() => setMomentumOpen(true)} />
       <GuidedTutorialOverlay state={state} onSkip={() => update((current) => ({ ...current, tutorialDone: true }))} />
       <section className={`screen-card ${state.screen === 'studio' ? 'screen-card--studio' : ''}`}>
-        {state.screen === 'studio' && <PixiCanvas className="studio-backdrop-canvas" />}
         <div className="screen-card-content">
-        {state.screen === 'studio' && <StudioScreen state={state} onNewProject={startNewProject} update={update} taskOverrides={taskOverrides} />}
+        {state.screen === 'studio' && <StudioScreen state={state} onNewProject={startNewProject} update={update} taskOverrides={taskOverrides} onOfficeOpen={() => setStudioOfficeOpen(true)} />}
         {state.screen === 'develop' && <DevelopScreen state={state} update={update} />}
         {state.screen === 'hire' && <HireScreen state={state} update={update} />}
         {state.screen === 'research' && <ResearchScreen state={state} update={update} />}
@@ -678,6 +678,7 @@ export default function App() {
       {studioNamingMode && <StudioNamingModal mode={studioNamingMode} currentName={state.studioName} onCancel={studioNamingMode === 'rename' ? () => setStudioNamingMode(null) : undefined} onSubmit={(name) => { update((current) => ({ ...current, studioName: name })); setStudioNamingMode(null); }} />}
       {state.latestRelease && <ReleaseModal state={state} update={update} />}
       {momentumOpen && <MomentumInfoModal state={state} onClose={() => setMomentumOpen(false)} />}
+      {studioOfficeOpen && <StudioOfficeModal onClose={() => setStudioOfficeOpen(false)} />}
       {state.selectedProject?.pendingDevEvent && <DevelopmentEventModal state={state} update={update} />}
       {!state.offerSeen && state.tutorialDone && state.gamesReleased >= 3 && <StarterOffer update={update} />}
     </main>
@@ -890,7 +891,7 @@ function TutorialBanner({ state, onAction, onSkip }: { state: GameState; onActio
   return <GuidedTutorialOverlay state={state} onSkip={onSkip} />;
 }
 
-function StudioScreen({ state, onNewProject, update, taskOverrides }: { state: GameState; onNewProject: () => void; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {
+function StudioScreen({ state, onNewProject, update, taskOverrides, onOfficeOpen }: { state: GameState; onNewProject: () => void; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides; onOfficeOpen: () => void }) {
   const project = state.selectedProject;
   const dailyReady = state.dailyClaimedAt !== todayKey();
   const speed = speedMultiplier(state);
@@ -909,6 +910,7 @@ function StudioScreen({ state, onNewProject, update, taskOverrides }: { state: G
         <div className="mini-ledger"><span>Слоты</span><b>{state.employees.length}/{employeeSlotsForLevel(state.level)}</b><span>Активные игры</span><b>{state.activeGames.length}</b></div>
       </section>
 
+      <StudioOfficeCard onOpen={onOfficeOpen} />
       <GameClock state={state} expenses={expenses.total} nextRentDay={nextRentDay} />
       <BankruptcyNotice state={state} />
       <StudioUpgradePanel state={state} update={update} />
@@ -933,6 +935,51 @@ function StudioScreen({ state, onNewProject, update, taskOverrides }: { state: G
   );
 }
 
+
+function StudioOfficeCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <section className="studio-office-card comic-card">
+      <div className="studio-office-copy">
+        <div>
+          <p className="eyebrow">Офис студии</p>
+          <h2>Офис студии</h2>
+          <p className="muted">Твой рабочий штаб, где рождаются проекты</p>
+        </div>
+        <button className="primary" type="button" onClick={onOpen}>Посмотреть офис</button>
+      </div>
+      <div className="studio-office-preview">
+        <PixiCanvas mode="preview" />
+      </div>
+    </section>
+  );
+}
+
+function StudioOfficeModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop studio-office-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="studio-office-modal-title" onClick={onClose}>
+      <section className="release-modal comic-card studio-office-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="studio-office-modal-head">
+          <div>
+            <p className="eyebrow">рабочий штаб</p>
+            <h2 id="studio-office-modal-title">Офис студии</h2>
+          </div>
+          <button className="ghost studio-office-close" type="button" onClick={onClose} aria-label="Закрыть офис студии">×</button>
+        </div>
+        <div className="studio-office-modal-scene">
+          <PixiCanvas mode="modal" />
+        </div>
+      </section>
+    </div>
+  );
+}
 
 function HireEntryCard({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
   const slots = employeeSlotsForLevel(state.level);
@@ -1612,7 +1659,7 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
               <div className="section-head compact"><h3>Как сложилась итоговая оценка</h3><span className="pill">итог {result.score}/10</span></div>
               <p>Карточки изданий выше — это отдельные оценки прессы. Итоговая оценка релиза не равна их среднему арифметическому: она считается из базового качества проекта и модификаторов ниже.</p>
               <div className="score-breakdown-list">
-                                {result.scoreBreakdown.map((item) => {
+                                                {result.scoreBreakdown.map((item) => {
                   const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;
                   const info = scoreExplanation(item);
                   const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';

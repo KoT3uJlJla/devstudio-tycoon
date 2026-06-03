@@ -2,8 +2,11 @@ import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { createGlowOrb } from '../effects/createGlowOrb';
 import { createParticleField } from '../effects/createParticleField';
 
+type StudioBackdropMode = 'preview' | 'modal';
+
 type StudioBackdropSceneOptions = {
   reducedMotion?: boolean;
+  mode?: StudioBackdropMode;
 };
 
 type Spark = {
@@ -52,17 +55,19 @@ export class StudioBackdropScene {
   private readonly particleLayer = new Container();
   private readonly hazeLayer = new Container();
   private readonly reducedMotion: boolean;
+  private readonly mode: StudioBackdropMode;
   private readonly particles;
   private readonly monitorGlows = [createGlowOrb(0x1df7ff, 180, 0.52), createGlowOrb(0xff3bbd, 160, 0.33), createGlowOrb(0xffe04e, 210, 0.22)];
   private readonly rimGlow = createGlowOrb(0x5b6cff, 420, 0.16);
   private readonly sparks: Spark[] = [];
   private elapsed = 0;
-  private width = 1;
-  private height = 1;
+  private width = 0;
+  private height = 0;
 
   constructor(options: StudioBackdropSceneOptions = {}) {
     this.reducedMotion = Boolean(options.reducedMotion);
-    this.particles = createParticleField({ reducedMotion: this.reducedMotion });
+    this.mode = options.mode ?? 'preview';
+    this.particles = createParticleField({ reducedMotion: this.reducedMotion, mode: this.mode });
 
     this.view.eventMode = 'none';
     this.view.interactiveChildren = false;
@@ -73,18 +78,21 @@ export class StudioBackdropScene {
   }
 
   resize(width: number, height: number) {
-    this.width = Math.max(1, width);
-    this.height = Math.max(1, height);
+    const nextWidth = Math.max(1, width);
+    const nextHeight = Math.max(1, height);
+    if (Math.round(nextWidth) === Math.round(this.width) && Math.round(nextHeight) === Math.round(this.height)) return;
+    this.width = nextWidth;
+    this.height = nextHeight;
     this.drawStaticScene();
     this.particles.resize(this.width, this.height);
     this.positionAnimatedElements();
   }
 
   update(ticker: { elapsedMS?: number; deltaMS?: number }) {
-    const elapsedSeconds = ((ticker.elapsedMS ?? ticker.deltaMS ?? 16.67) / 1000);
+    const elapsedSeconds = Math.min((ticker.elapsedMS ?? ticker.deltaMS ?? 16.67) / 1000, 0.05);
     this.elapsed += elapsedSeconds;
 
-    const parallax = this.reducedMotion ? 0 : Math.sin(this.elapsed * 0.18);
+    const parallax = this.reducedMotion || this.mode === 'preview' ? 0 : Math.sin(this.elapsed * 0.18);
     this.roomLayer.x = parallax * 4;
     this.deskLayer.x = parallax * -3;
     this.monitorsLayer.x = parallax * -5;
@@ -163,12 +171,15 @@ export class StudioBackdropScene {
     this.deskLayer.addChild(desk);
 
     const monitors = new Graphics();
-    this.drawMonitor(monitors, width * 0.24, height * 0.41, width * 0.23, height * 0.17, 0x1df7ff);
-    this.drawMonitor(monitors, width * 0.49, height * 0.37, width * 0.27, height * 0.2, 0xff3bbd);
-    rect(monitors, width * 0.35, height * 0.6, width * 0.05, height * 0.055, 0x080a14, 0.9, 6);
-    rect(monitors, width * 0.6, height * 0.59, width * 0.055, height * 0.06, 0x080a14, 0.9, 6);
-    rect(monitors, width * 0.28, height * 0.64, width * 0.18, height * 0.022, 0x070812, 0.94, 7);
-    rect(monitors, width * 0.53, height * 0.64, width * 0.17, height * 0.022, 0x070812, 0.94, 7);
+    this.drawMonitor(monitors, width * 0.18, height * 0.43, width * 0.2, height * 0.16, 0x1df7ff);
+    this.drawMonitor(monitors, width * 0.4, height * 0.36, width * 0.25, height * 0.21, 0xff3bbd);
+    this.drawMonitor(monitors, width * 0.67, height * 0.44, width * 0.18, height * 0.145, 0xffe04e);
+    rect(monitors, width * 0.27, height * 0.59, width * 0.045, height * 0.06, 0x080a14, 0.9, 6);
+    rect(monitors, width * 0.5, height * 0.58, width * 0.055, height * 0.07, 0x080a14, 0.9, 6);
+    rect(monitors, width * 0.745, height * 0.59, width * 0.042, height * 0.06, 0x080a14, 0.9, 6);
+    rect(monitors, width * 0.2, height * 0.64, width * 0.17, height * 0.022, 0x070812, 0.94, 7);
+    rect(monitors, width * 0.44, height * 0.64, width * 0.17, height * 0.022, 0x070812, 0.94, 7);
+    rect(monitors, width * 0.68, height * 0.64, width * 0.16, height * 0.022, 0x070812, 0.94, 7);
     this.monitorsLayer.addChild(monitors);
 
     const haze = new Graphics();
@@ -191,7 +202,7 @@ export class StudioBackdropScene {
   private createMonitorSparks() {
     const cyan = makeSparkTexture('rgba(29, 247, 255, 1)');
     const pink = makeSparkTexture('rgba(255, 59, 189, 1)');
-    const count = this.reducedMotion ? 3 : 8;
+    const count = this.reducedMotion ? (this.mode === 'modal' ? 3 : 1) : this.mode === 'modal' ? 7 : 3;
     for (let index = 0; index < count; index += 1) {
       const sprite = new Sprite(index % 2 ? pink : cyan);
       sprite.anchor.set(0.5);
@@ -203,7 +214,7 @@ export class StudioBackdropScene {
         xRatio: 0.28 + Math.random() * 0.44,
         yRatio: 0.34 + Math.random() * 0.26,
         phase: Math.random() * Math.PI * 2,
-        speed: 0.35 + Math.random() * 0.4,
+        speed: this.mode === 'modal' ? 0.28 + Math.random() * 0.34 : 0.16 + Math.random() * 0.18,
       });
     }
   }
@@ -211,11 +222,11 @@ export class StudioBackdropScene {
   private positionAnimatedElements() {
     this.rimGlow.position.set(this.width * 0.5, this.height * 0.22);
     this.rimGlow.scale.set(Math.max(this.width, this.height) / 300);
-    this.monitorGlows[0].position.set(this.width * 0.36, this.height * 0.49);
+    this.monitorGlows[0].position.set(this.width * 0.28, this.height * 0.5);
     this.monitorGlows[0].scale.set(this.width / 360, this.height / 460);
-    this.monitorGlows[1].position.set(this.width * 0.63, this.height * 0.48);
+    this.monitorGlows[1].position.set(this.width * 0.53, this.height * 0.48);
     this.monitorGlows[1].scale.set(this.width / 360, this.height / 460);
-    this.monitorGlows[2].position.set(this.width * 0.5, this.height * 0.69);
+    this.monitorGlows[2].position.set(this.width * 0.76, this.height * 0.51);
     this.monitorGlows[2].scale.set(this.width / 340, this.height / 520);
     this.sparks.forEach((spark) => {
       spark.sprite.x = spark.xRatio * this.width;

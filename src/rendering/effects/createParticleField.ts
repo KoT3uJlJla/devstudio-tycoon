@@ -13,8 +13,11 @@ type Particle = {
   kind: ParticleKind;
 };
 
+type ParticleFieldMode = 'preview' | 'modal';
+
 type ParticleFieldOptions = {
   reducedMotion?: boolean;
+  mode?: ParticleFieldMode;
 };
 
 const codeGlyphs = ['{ }', '</>', '01', 'fn', '++', '#'];
@@ -53,7 +56,8 @@ export function createParticleField(options: ParticleFieldOptions = {}) {
   const container = new Container();
   const particles: Particle[] = [];
   const reducedMotion = Boolean(options.reducedMotion);
-  const targetCount = reducedMotion ? 14 : 42;
+  const mode = options.mode ?? 'preview';
+  const targetCount = reducedMotion ? (mode === 'modal' ? 8 : 4) : mode === 'modal' ? 22 : 8;
   const textures = {
     dust: makeParticleTexture('dust', 'rgba(255, 239, 184, 1)'),
     code: makeParticleTexture('code', 'rgba(29, 247, 255, 1)'),
@@ -91,12 +95,13 @@ export function createParticleField(options: ParticleFieldOptions = {}) {
     },
     update(elapsedSeconds: number, width: number, height: number) {
       if (reducedMotion) return;
+      const cappedElapsed = Math.min(elapsedSeconds, 0.05);
       particles.forEach((particle, index) => {
-        particle.phase += elapsedSeconds * particle.speed;
+        particle.phase += cappedElapsed * particle.speed;
         particle.sprite.x = ((particle.baseX + Math.sin(particle.phase + index) * particle.drift + 1) % 1) * width;
         particle.sprite.y = ((particle.baseY - particle.phase * 0.018 + 1) % 1) * height;
         particle.sprite.alpha = (particle.kind === 'dust' ? 0.13 : 0.2) + Math.sin(particle.phase * 6) * 0.06;
-        particle.sprite.rotation += elapsedSeconds * (particle.kind === 'code' ? 0.08 : 0.02);
+        particle.sprite.rotation += cappedElapsed * (particle.kind === 'code' ? 0.08 : 0.02);
       });
     },
     destroy() {
