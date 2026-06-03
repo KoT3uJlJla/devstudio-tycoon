@@ -1,7 +1,5 @@
 import { Container, Sprite, Texture } from 'pixi.js';
 
-type ParticleKind = 'dust' | 'code' | 'coin';
-
 type Particle = {
   sprite: Sprite;
   baseX: number;
@@ -10,7 +8,6 @@ type Particle = {
   drift: number;
   phase: number;
   size: number;
-  kind: ParticleKind;
 };
 
 type ParticleFieldMode = 'preview' | 'modal';
@@ -20,34 +17,21 @@ type ParticleFieldOptions = {
   mode?: ParticleFieldMode;
 };
 
-const codeGlyphs = ['{ }', '</>', '01', 'fn', '++', '#'];
-
-function makeParticleTexture(kind: ParticleKind, color: string) {
+function makeDustTexture(color: string) {
   const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
+  canvas.width = 32;
+  canvas.height = 32;
   const context = canvas.getContext('2d');
   if (!context) return Texture.WHITE;
 
-  context.clearRect(0, 0, 48, 48);
-  if (kind === 'code') {
-    context.font = '900 15px ui-monospace, SFMono-Regular, Menlo, monospace';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.shadowColor = color;
-    context.shadowBlur = 8;
-    context.fillStyle = color;
-    context.fillText(codeGlyphs[Math.floor(Math.random() * codeGlyphs.length)], 24, 24);
-  } else {
-    const gradient = context.createRadialGradient(24, 24, 1, 24, 24, kind === 'coin' ? 10 : 7);
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(0.55, color.replace('1)', '0.34)'));
-    gradient.addColorStop(1, color.replace('1)', '0)'));
-    context.fillStyle = gradient;
-    context.beginPath();
-    context.arc(24, 24, kind === 'coin' ? 10 : 7, 0, Math.PI * 2);
-    context.fill();
-  }
+  const gradient = context.createRadialGradient(16, 16, 1, 16, 16, 7);
+  gradient.addColorStop(0, color);
+  gradient.addColorStop(0.55, color.replace('1)', '0.25)'));
+  gradient.addColorStop(1, color.replace('1)', '0)'));
+  context.fillStyle = gradient;
+  context.beginPath();
+  context.arc(16, 16, 7, 0, Math.PI * 2);
+  context.fill();
 
   return Texture.from(canvas);
 }
@@ -57,18 +41,13 @@ export function createParticleField(options: ParticleFieldOptions = {}) {
   const particles: Particle[] = [];
   const reducedMotion = Boolean(options.reducedMotion);
   const mode = options.mode ?? 'preview';
-  const targetCount = reducedMotion ? (mode === 'modal' ? 8 : 4) : mode === 'modal' ? 22 : 8;
-  const textures = {
-    dust: makeParticleTexture('dust', 'rgba(255, 239, 184, 1)'),
-    code: makeParticleTexture('code', 'rgba(29, 247, 255, 1)'),
-    coin: makeParticleTexture('coin', 'rgba(255, 224, 78, 1)'),
-  };
+  const targetCount = reducedMotion ? (mode === 'modal' ? 5 : 2) : mode === 'modal' ? 14 : 4;
+  const texture = makeDustTexture('rgba(255, 239, 184, 1)');
 
   for (let index = 0; index < targetCount; index += 1) {
-    const kind: ParticleKind = index % 7 === 0 ? 'code' : index % 11 === 0 ? 'coin' : 'dust';
-    const sprite = new Sprite(textures[kind]);
+    const sprite = new Sprite(texture);
     sprite.anchor.set(0.5);
-    sprite.alpha = kind === 'dust' ? 0.18 : 0.26;
+    sprite.alpha = 0.12;
     sprite.blendMode = 'add';
     container.addChild(sprite);
 
@@ -76,11 +55,10 @@ export function createParticleField(options: ParticleFieldOptions = {}) {
       sprite,
       baseX: Math.random(),
       baseY: Math.random(),
-      speed: 0.008 + Math.random() * 0.022,
-      drift: 0.006 + Math.random() * 0.018,
+      speed: 0.006 + Math.random() * 0.014,
+      drift: 0.004 + Math.random() * 0.012,
       phase: Math.random() * Math.PI * 2,
-      size: kind === 'code' ? 0.38 + Math.random() * 0.24 : 0.1 + Math.random() * 0.18,
-      kind,
+      size: 0.08 + Math.random() * 0.13,
     });
   }
 
@@ -99,9 +77,9 @@ export function createParticleField(options: ParticleFieldOptions = {}) {
       particles.forEach((particle, index) => {
         particle.phase += cappedElapsed * particle.speed;
         particle.sprite.x = ((particle.baseX + Math.sin(particle.phase + index) * particle.drift + 1) % 1) * width;
-        particle.sprite.y = ((particle.baseY - particle.phase * 0.018 + 1) % 1) * height;
-        particle.sprite.alpha = (particle.kind === 'dust' ? 0.13 : 0.2) + Math.sin(particle.phase * 6) * 0.06;
-        particle.sprite.rotation += cappedElapsed * (particle.kind === 'code' ? 0.08 : 0.02);
+        particle.sprite.y = ((particle.baseY - particle.phase * 0.012 + 1) % 1) * height;
+        particle.sprite.alpha = 0.08 + Math.sin(particle.phase * 5) * 0.035;
+        particle.sprite.rotation += cappedElapsed * 0.015;
       });
     },
     destroy() {
