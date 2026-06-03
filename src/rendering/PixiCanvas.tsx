@@ -1,3 +1,4 @@
+import 'pixi.js/unsafe-eval';
 import { useEffect, useRef, useState } from 'react';
 import { Application } from 'pixi.js';
 import { StudioBackdropScene } from './scenes/StudioBackdropScene';
