@@ -1,4 +1,4 @@
-export type Screen = 'studio' | 'develop' | 'hire' | 'research' | 'shop' | 'menu';
+export type Screen = 'studio' | 'develop' | 'hire' | 'research' | 'shop' | 'menu' | 'release';
 export type GenreId = string;
 export type ThemeId = string;
 export type PlatformId = string;
