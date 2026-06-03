@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import './studio-office-layout-fix.css';
 import './mobile-topbar.css';
 import './v8-ui-patch.css';
 import './predeploy-hardening.css';
