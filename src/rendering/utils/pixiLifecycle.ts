@@ -17,5 +17,9 @@ export function observePixiVisibility(app: Application) {
 }
 
 export function destroyPixiApp(app: Application) {
-  app.destroy(true, { children: true, texture: true });
+  try {
+    app.destroy(true, { children: true, texture: true });
+  } catch (error) {
+    console.warn('Pixi destroy skipped', error);
+  }
 }
