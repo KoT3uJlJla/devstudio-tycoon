@@ -948,7 +948,18 @@ function StudioOfficeCard({ onOpen }: { onOpen: () => void }) {
         <button className="primary" type="button" onClick={onOpen}>Посмотреть офис</button>
       </div>
       <div className="studio-office-preview">
-        <PixiCanvas mode="preview" />
+        style={{
+    display: 'block',
+    position: 'relative',
+    width: '100%',
+    height: '220px',
+    minHeight: '180px',
+    overflow: 'hidden',
+    borderRadius: '24px',
+    background: '#070812',
+  }}
+>
+  <PixiCanvas mode="preview" />
       </div>
     </section>
   );
@@ -974,7 +985,18 @@ function StudioOfficeModal({ onClose }: { onClose: () => void }) {
           <button className="ghost studio-office-close" type="button" onClick={onClose} aria-label="Закрыть офис студии">×</button>
         </div>
         <div className="studio-office-modal-scene">
-          <PixiCanvas mode="modal" />
+          style={{
+    display: 'block',
+    position: 'relative',
+    width: '100%',
+    height: 'min(56vh, 520px)',
+    minHeight: '320px',
+    overflow: 'hidden',
+    borderRadius: '24px',
+    background: '#070812',
+  }}
+>
+  <PixiCanvas mode="modal" />
         </div>
       </section>
     </div>
