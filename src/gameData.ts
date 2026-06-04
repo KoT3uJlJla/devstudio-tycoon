@@ -126,7 +126,7 @@ export const employeePool: Employee[] = [
 ];
 
 export const researchNodes: ResearchNode[] = [
-  { id: 'product-instinct', title: 'Продуктовое чутьё', description: 'Показывает силу жанр × сеттинг и рекомендуемый фокус по фазам.', cost: 18, effect: 'Комбо + фокус' },
+  { id: 'product-instinct', title: 'Продуктовое чутьё', description: 'На 7 дней показывает силу жанр × сеттинг и мягкие подсказки по фокусу разработки.', cost: 0, effect: '7 дней подсказок' },
   { id: 'market-analysis', title: 'Маркетинговый анализ', description: 'Дешевле раскрывать настроение живой аудитории.', cost: 22, effect: '-35% цена скана' },
   { id: 'fast-prototype', title: 'Быстрый прототип', description: 'Команда быстрее доводит проект до играбельного прототипа.', cost: 24, effect: '+10% скорость' },
   { id: 'budget-ops', title: 'Бюджетный продакшен', description: 'Сокращает стоимость разработки без потери качества.', cost: 30, effect: '-10% стоимость разработки' },

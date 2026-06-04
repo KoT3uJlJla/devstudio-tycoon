@@ -6,9 +6,13 @@ export default defineConfig({
   build: {
     target: 'es2020',
     sourcemap: false,
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks(id) {
+          if (id.includes('node_modules/pixi.js')) return 'vendor-pixi';
+          return undefined;
+        },
       },
     },
   },

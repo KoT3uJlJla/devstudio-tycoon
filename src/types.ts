@@ -227,6 +227,7 @@ export type GameState = {
   employees: Employee[];
   hiredEmployeeIds: string[];
   unlockedResearchIds: string[];
+  productInstinctExpiresAt: number | null;
   unlockedGenreIds: GenreId[];
   unlockedThemeIds: ThemeId[];
   dailyClaimedAt: string | null;

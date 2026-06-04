@@ -28,6 +28,8 @@ type WalletOverlay = { stars?: number };
 
 type BackendSavePayload = {
   ok?: boolean;
+  gameStatus?: { status?: string; closed?: boolean; message?: string } | null;
+  role?: string;
   save?: { data?: unknown } | null;
   economy?: { stars?: unknown } | null;
   error?: string;
@@ -36,10 +38,30 @@ type BackendSavePayload = {
 type ServerLoadResult =
   | { kind: 'loaded'; state: GameState; saveSyncToken: string | null }
   | { kind: 'empty' }
+  | { kind: 'closed' }
   | { kind: 'unavailable' };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function markGameClosed(payload: BackendSavePayload | null) {
+  const status = isPlainObject(payload?.gameStatus) ? payload?.gameStatus : null;
+  const message = typeof status?.message === 'string' && status.message.trim() ? status.message : 'Ведутся технические работы. Возвращайтесь позже';
+  try {
+    (window as unknown as { __devstudioGameClosed?: boolean }).__devstudioGameClosed = true;
+    window.dispatchEvent(new CustomEvent('devstudio:game-closed', { detail: { message, role: payload?.role || 'user', status } }));
+  } catch { }
+}
+
+function isGameClosedPayload(payload: BackendSavePayload | null) {
+  return Boolean(payload && payload.error === 'game_closed');
+}
+
+async function backendJsonOrNull(response: globalThis.Response): Promise<BackendSavePayload | null> {
+  const data = await response.json().catch(() => null) as BackendSavePayload | null;
+  if (!response.ok && isGameClosedPayload(data)) return data;
+  return response.ok ? data : null;
 }
 
 function telegramInitData(): string {
@@ -188,7 +210,7 @@ async function loadWalletOverlay(): Promise<WalletOverlay | null> {
     fetch(`${API_URL}/api/wallet/state`, {
       headers: { Authorization: `tma ${telegramInitData()}` },
     })
-      .then((response) => (response.ok ? response.json() : null))
+      .then(backendJsonOrNull)
       .catch(() => null),
     null,
     4200,
