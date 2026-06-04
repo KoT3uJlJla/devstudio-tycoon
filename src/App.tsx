@@ -21,7 +21,6 @@ import {
   GAME_DAY_MS,
   gameMonthLabel,
   incomeMultiplier,
-  initialState,
   employeeScoreBonus,
   scienceMultiplier,
   releaseVelocityBoost,
@@ -625,8 +624,7 @@ export default function App() {
 
   useEffect(() => {
     if (!state) return;
-    const timer = window.setTimeout(() => saveGame(state), 1200);
-    return () => window.clearTimeout(timer);
+    saveGame(state);
   }, [state]);
 
   useEffect(() => {
@@ -1307,9 +1305,11 @@ function HireScreen({ state, update }: { state: GameState; update: (fn: (state: 
   });
   const refreshPool = () => {
     if (!canRefresh) { haptic('warning'); return; }
-    update((current) => ({ ...current, stars: Math.max(0, current.stars - 10) }));
-    setPoolOffset((value) => value + Math.max(1, Math.floor(allCandidates.length / 2)));
-    haptic('success');
+    void purchaseBackendItem('refresh_hires').then((next) => {
+      if (!next) return;
+      setPoolOffset((value) => value + Math.max(1, Math.floor(allCandidates.length / 2)));
+      haptic('success');
+    });
   };
   return (
     <div className="stack">
@@ -1683,7 +1683,7 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
               <div className="section-head compact"><h3>Как сложилась итоговая оценка</h3><span className="pill">итог {result.score}/10</span></div>
               <p>Карточки изданий выше — это отдельные оценки прессы. Итоговая оценка релиза не равна их среднему арифметическому: она считается из базового качества проекта и модификаторов ниже.</p>
               <div className="score-breakdown-list">
-                                                                {result.scoreBreakdown.map((item) => {
+                                                                                                                                {result.scoreBreakdown.map((item) => {
                   const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;
                   const info = scoreExplanation(item);
                   const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';

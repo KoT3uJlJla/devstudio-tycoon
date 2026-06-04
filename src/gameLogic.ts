@@ -1,8 +1,12 @@
-import { baseGenreIds, baseThemeIds, comboMatrix, critics, developmentEventScenarios, gameNameParts, genres, negativeMarketEvents, platforms, positiveMarketEvents, themes } from './gameData';
+import { baseGenreIds, baseThemeIds, comboMatrix, developmentEventScenarios, gameNameParts, genres, negativeMarketEvents, platforms, positiveMarketEvents, themes } from './gameData';
+import { criticOutlets, getPressComment } from './pressData';
 import type { AudienceState, ComboQuality, DevEventChoice, Focus, FocusTriple, GameState, GenreId, LedgerEntry, MarketEvent, NewsEntry, PhaseId, PlatformId, Project, ReleaseResult, ReleasedGame, ScoreBreakdownItem, ScheduledDevEvent, ThemeId } from './types';
 
 // Сутки замедлены ещё в 2 раза после v0.6.3: 1 игровой день = 72 секунды реального времени.
 export const GAME_DAY_MS = 72_000;
+export const PRODUCT_INSTINCT_ID = 'product-instinct';
+export const PRODUCT_INSTINCT_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+export const PRODUCT_INSTINCT_PATCH_STARTED_AT = Date.parse('2026-05-21T00:00:00.000Z');
 const DAYS_PER_MONTH = 30;
 const MIN_COINS = -50_000;
 const MARKET_EVENT_DURATION_DAYS = 14;
@@ -19,6 +23,20 @@ export const phaseLabels: Record<PhaseId, string[]> = {
   post: ['Мир', 'Визуал', 'Звук'],
 };
 
+export function gameDateParts(day: number) {
+  const normalized = Math.max(1, Math.floor(Number(day) || 1));
+  const daysPerYear = DAYS_PER_MONTH * 12;
+  const year = Math.floor((normalized - 1) / daysPerYear) + 1;
+  const dayOfYear = (normalized - 1) % daysPerYear;
+  const month = Math.floor(dayOfYear / DAYS_PER_MONTH) + 1;
+  const dayOfMonth = (dayOfYear % DAYS_PER_MONTH) + 1;
+  return { year, month, day: dayOfMonth };
+}
+
+export function gameDateLabel(day: number) {
+  const date = gameDateParts(day);
+  return `Год ${date.year} · Месяц ${date.month} · День ${date.day}`;
+}
 export function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -108,6 +126,7 @@ function defaultAudience(): AudienceState {
     mood: 0.66,
     desiredGenreId: 'arcade',
     desiredThemeId: 'cyberpunk',
+    desiredPlatformId: 'micro_pc',
     vibe: 'Ждут быстрые, яркие игры с понятным вау-моментом.',
     lastUpdatedMonth: 0,
     revealedUntilMonth: -1,
@@ -116,8 +135,8 @@ function defaultAudience(): AudienceState {
 }
 
 export const initialState: GameState = {
-  coins: 3000,
-  rp: 0,
+  coins: 5000,
+  rp: 50,
   stars: 0,
   qualifiedReferrals: 0,
   qualifiedSecondLevelReferrals: 0,
@@ -129,8 +148,8 @@ export const initialState: GameState = {
   bestScore: 0,
   screen: 'develop',
   onboardingDone: false,
-  tutorialDone: false,
-  tutorialStep: 0,
+  tutorialDone: true,
+  tutorialStep: 5,
   tutorialRewardClaimed: false,
   lastSavedAt: Date.now(),
   lastGameTickAt: Date.now(),
@@ -143,6 +162,7 @@ export const initialState: GameState = {
   employees: [],
   hiredEmployeeIds: [],
   unlockedResearchIds: [],
+  productInstinctExpiresAt: null,
   unlockedGenreIds: baseGenreIds,
   unlockedThemeIds: baseThemeIds,
   dailyClaimedAt: null,
@@ -152,6 +172,7 @@ export const initialState: GameState = {
   dailyResearchUnlocked: 0,
   dailyPassiveIncome: 0,
   dailyTaskClaims: {},
+  studioGoalClaims: {},
   weeklyExpenseTotal: 0,
   unpaidSinceMonth: null,
   closureWarningMonth: null,
@@ -163,6 +184,29 @@ export const initialState: GameState = {
   marketMustRecover: false,
   offerSeen: false,
 };
+
+export function productInstinctExpiresAtFrom(startedAt = Date.now()) {
+  return startedAt + PRODUCT_INSTINCT_DURATION_MS;
+}
+
+export function productInstinctRemainingMs(state: Pick<GameState, 'productInstinctExpiresAt'>, now = Date.now()) {
+  return Math.max(0, Number(state.productInstinctExpiresAt || 0) - now);
+}
+
+export function isProductInstinctActive(state: Pick<GameState, 'productInstinctExpiresAt'>, now = Date.now()) {
+  return productInstinctRemainingMs(state, now) > 0;
+}
+
+export function activateProductInstinct(state: GameState, startedAt = Date.now()): GameState {
+  const alreadyActive = isProductInstinctActive(state, startedAt);
+  const ids = state.unlockedResearchIds.filter((id) => id !== PRODUCT_INSTINCT_ID);
+  return {
+    ...state,
+    productInstinctExpiresAt: productInstinctExpiresAtFrom(startedAt),
+    unlockedResearchIds: [PRODUCT_INSTINCT_ID, ...ids],
+    dailyResearchUnlocked: state.dailyResearchUnlocked + (alreadyActive ? 0 : 1),
+  };
+}
 
 export function ensureDailyState(state: GameState): GameState {
   const key = todayKey();
@@ -195,7 +239,7 @@ function normalizeProject(project: Partial<Project> | null | undefined): Project
       post: normalizeTriple(project.focus?.post ?? defaultFocus.post),
     },
     progress: clamp(Number(project.progress) || 0, 0, 100),
-    durationSeconds: clamp(Number(project.durationSeconds) || 180, 20, 900),
+    durationSeconds: clamp(Number(project.durationSeconds) || 180, 5, 7200),
     devCost: Math.max(0, Math.floor(Number(project.devCost) || 0)),
     techComplexity: clamp(Number(project.techComplexity) || 1, 0.5, 5),
     startedAt: project.startedAt ? Number(project.startedAt) : null,
@@ -228,17 +272,18 @@ function normalizeAudience(value: unknown, stateMonth: number): AudienceState {
   const raw = value && typeof value === 'object' ? value as Partial<AudienceState> : {};
   const genre = raw.desiredGenreId && genres.some((item) => item.id === raw.desiredGenreId) ? raw.desiredGenreId : 'arcade';
   const theme = raw.desiredThemeId && themes.some((item) => item.id === raw.desiredThemeId) ? raw.desiredThemeId : 'cyberpunk';
+  const platform = raw.desiredPlatformId && platforms.some((item) => item.id === raw.desiredPlatformId) ? raw.desiredPlatformId : 'micro_pc';
   return {
     mood: clamp(Number.isFinite(Number(raw.mood)) ? Number(raw.mood) : 0.66, 0.1, 1),
     desiredGenreId: genre,
     desiredThemeId: theme,
-    vibe: String(raw.vibe || 'Ждут быстрые, яркие игры с понятным вау-моментом.').slice(0, 120),
+    desiredPlatformId: platform,
+    vibe: String(raw.vibe || 'Ждут быстрые, яркие игры с понятным вау-моментом.').slice(0, 140),
     lastUpdatedMonth: Math.max(0, Math.floor(Number.isFinite(Number(raw.lastUpdatedMonth)) ? Number(raw.lastUpdatedMonth) : stateMonth)),
     revealedUntilMonth: Math.floor(Number.isFinite(Number(raw.revealedUntilMonth)) ? Number(raw.revealedUntilMonth) : -1),
     learnedFrom: safeArray<string>(raw.learnedFrom).slice(0, 4).map((item) => String(item).slice(0, 32)),
   };
 }
-
 
 function normalizeMarketEvent(value: Partial<MarketEvent>): MarketEvent | null {
   if (!value.id || !value.title) return null;
@@ -335,6 +380,12 @@ export function normalizeState(partial?: Partial<GameState>): GameState {
   const unlockedGenreIds = safeArray<GenreId>(merged.unlockedGenreIds);
   const unlockedThemeIds = safeArray<ThemeId>(merged.unlockedThemeIds);
   const unlockedResearchIds = safeArray<string>(merged.unlockedResearchIds).filter((id) => typeof id === 'string').slice(0, 100);
+  const legacyProductInstinctUnlocked = unlockedResearchIds.includes(PRODUCT_INSTINCT_ID);
+  const rawProductInstinctExpiresAt = Number((merged as unknown as { productInstinctExpiresAt?: unknown }).productInstinctExpiresAt);
+  const migratedProductInstinctExpiresAt = rawProductInstinctExpiresAt > 0 ? rawProductInstinctExpiresAt : legacyProductInstinctUnlocked ? productInstinctExpiresAtFrom(PRODUCT_INSTINCT_PATCH_STARTED_AT) : null;
+  const productInstinctActive = Boolean(migratedProductInstinctExpiresAt && migratedProductInstinctExpiresAt > Date.now());
+  const researchIdsWithoutProductInstinct = unlockedResearchIds.filter((id) => id !== PRODUCT_INSTINCT_ID);
+  const normalizedResearchIds = productInstinctActive ? [PRODUCT_INSTINCT_ID, ...researchIdsWithoutProductInstinct] : researchIdsWithoutProductInstinct;
   const selectedProject = normalizeProject(merged.selectedProject);
   const activeGames = safeArray<Partial<ReleasedGame>>(merged.activeGames).map(normalizeReleasedGame).filter(Boolean) as ReleasedGame[];
   const releaseHistory = safeArray<any>(merged.releaseHistory).slice(-16).map((item) => ({
@@ -369,7 +420,8 @@ export function normalizeState(partial?: Partial<GameState>): GameState {
     releaseHistory,
     employees: safeArray<any>(merged.employees).slice(0, employeeSlotsForLevel(clamp(Math.floor(Number(merged.level) || 1), 1, 4))),
     hiredEmployeeIds: safeArray<string>(merged.hiredEmployeeIds).filter((id) => typeof id === 'string'),
-    unlockedResearchIds,
+    unlockedResearchIds: Array.from(new Set(normalizedResearchIds)),
+    productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,
     unlockedGenreIds: Array.from(new Set([...baseGenreIds, ...unlockedGenreIds.filter((id) => genres.some((genre) => genre.id === id))])),
     unlockedThemeIds: Array.from(new Set([...baseThemeIds, ...unlockedThemeIds.filter((id) => themes.some((theme) => theme.id === id))])),
     dailyTaskClaims: (() => {
@@ -380,7 +432,16 @@ export function normalizeState(partial?: Partial<GameState>): GameState {
           .slice(0, 32)
           .map(([k, v]) => [String(k).slice(0, 64), Boolean(v)]),
       );
+    })(),    studioGoalClaims: (() => {
+      const raw = (merged as unknown as { studioGoalClaims?: unknown }).studioGoalClaims;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      return Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>)
+          .slice(0, 80)
+          .map(([k, v]) => [String(k).slice(0, 96), Boolean(v)]),
+      );
     })(),
+
     dailyPassiveIncome: Math.max(0, Math.floor(Number(merged.dailyPassiveIncome) || 0)),
     weeklyExpenseTotal: Math.max(0, Math.floor(Number(merged.weeklyExpenseTotal) || 0)),
     unpaidSinceMonth: merged.unpaidSinceMonth === null || merged.unpaidSinceMonth === undefined ? null : Math.max(0, Math.floor(Number(merged.unpaidSinceMonth) || 0)),
@@ -408,11 +469,11 @@ export function createProject(isTutorial: boolean, overrides?: Partial<Project>)
     platform: 'micro_pc',
     focus: cloneFocus(),
     progress: 0,
-    durationSeconds: isTutorial ? 30 : 180,
+    durationSeconds: 180,
     devCost: 0,
     techComplexity: 1,
     startedAt: null,
-    isTutorial,
+    isTutorial: false,
     promotionUsed: false,
     promotionBoost: 0,
     devGlitchTriggered: false,
@@ -553,13 +614,28 @@ export function devCostMultiplier(state: GameState) {
   return (researchHas(state, 'budget-ops') ? 0.9 : 1) * (researchHas(state, 'reusable-tech') ? 0.92 : 1);
 }
 
+export function projectDurationSecondsForReleaseCount(gamesReleased: number) {
+  const releaseNumber = Math.max(1, Math.floor(gamesReleased) + 1);
+  if (releaseNumber === 1) return 5;
+  if (releaseNumber === 2) return 30;
+  if (releaseNumber === 3) return 60;
+  const steps = [180, 300, 600, 900, 1800, 2700, 3600, 5400, 7200];
+  return steps[Math.min(steps.length - 1, releaseNumber - 4)] ?? 7200;
+}
+
 export function estimateProjectDuration(project: Project, state: GameState) {
-  if (project.isTutorial) return 30;
+  const releaseNumber = Math.max(1, Math.floor(Number(state.gamesReleased) || 0) + 1);
+  if (releaseNumber <= 1) return 5;
+  if (releaseNumber === 2) return 30;
+  if (releaseNumber === 3) return 60;
+  const maxDurationSeconds = Math.round((20 * GAME_DAY_MS) / 1000);
   const genre = genres.find((item) => item.id === project.genre);
   const platform = platforms.find((item) => item.id === project.platform) ?? platforms[0];
   const difficulty = genre?.difficulty ?? 1;
-  const seconds = 130 + difficulty * 52 + platform.techComplexity * 28;
-  return Math.round(clamp(seconds, 120, 420));
+  const baseSeconds = 130 + difficulty * 52 + platform.techComplexity * 28;
+  const releaseSteps = [180, 300, 600, 900, 1200, maxDurationSeconds];
+  const releaseTarget = releaseSteps[Math.min(releaseSteps.length - 1, releaseNumber - 4)] ?? maxDurationSeconds;
+  return Math.round(clamp(Math.max(baseSeconds, releaseTarget), 120, maxDurationSeconds));
 }
 
 export function estimateDevelopmentCost(project: Project, state: GameState) {
@@ -598,31 +674,31 @@ function seededIndex(seed: number, length: number, salt = 0) {
 function updateAudience(state: GameState, newMonth: number): AudienceState {
   const recent = state.releaseHistory.slice(-8);
   const top = [...recent].sort((a, b) => b.score - a.score)[0];
-  // Желания месяца теперь берутся из полного каталога игры, а не из открытого контента игрока.
-  // Индексы детерминированы от игрового месяца, поэтому у всех игроков с одним месяцем одинаковая рекомендация.
   const desiredGenreId = genres[seededIndex(newMonth, genres.length, 7)]?.id ?? 'arcade';
   const desiredThemeId = themes[seededIndex(newMonth, themes.length, 19)]?.id ?? 'cyberpunk';
+  const desiredPlatformId = platforms[seededIndex(newMonth, platforms.length, 31)]?.id ?? 'micro_pc';
   const avgScore = recent.length ? recent.reduce((acc, item) => acc + item.score, 0) / recent.length : 6.4;
   const marketMood = state.activeMarketEvents.reduce((acc, event) => acc + (event.tone === 'positive' ? 0.03 : -0.04), 0);
   const mood = clamp(0.31 + avgScore / 17 + marketMood + Math.random() * 0.16 - 0.08, 0.1, 1);
   const genre = genres.find((item) => item.id === desiredGenreId)?.name ?? 'Аркада';
   const theme = themes.find((item) => item.id === desiredThemeId)?.name ?? 'Киберпанк';
+  const platform = platforms.find((item) => item.id === desiredPlatformId)?.name ?? 'Микро-ПК';
   const vibe = mood >= 0.75
-    ? `Глобальная аудитория в хайпе: просит ${genre} в сеттинге «${theme}» и активно спорит в чатах.`
+    ? `Глобальная аудитория в хайпе: просит ${genre}, сеттинг «${theme}» и платформу ${platform}.`
     : mood >= 0.48
-      ? `Глобальный спрос ровный: хотят ${genre} + «${theme}», но ждут качества.`
-      : `Глобальная аудитория устала от однотипных релизов: ${genre} + «${theme}» может вернуть интерес.`;
+      ? `Глобальный спрос ровный: хотят ${genre} + «${theme}» на ${platform}, но ждут качества.`
+      : `Глобальная аудитория устала от однотипных релизов: ${genre} + «${theme}» на ${platform} может вернуть интерес.`;
   return {
     mood,
     desiredGenreId,
     desiredThemeId,
+    desiredPlatformId,
     vibe,
     lastUpdatedMonth: newMonth,
     revealedUntilMonth: state.audience.revealedUntilMonth,
     learnedFrom: top ? [top.title, ...state.audience.learnedFrom.filter((item) => item !== top.title)].slice(0, 4) : state.audience.learnedFrom,
   };
 }
-
 
 function makeMarketEvent(day: number, tone: 'positive' | 'negative'): MarketEvent {
   const pool = tone === 'positive' ? positiveMarketEvents : negativeMarketEvents;
@@ -829,7 +905,7 @@ export function startProject(state: GameState): GameState {
       promotionUsed: false,
       promotionBoost: 0,
       devGlitchTriggered: false,
-      devEventQueue: makeDevelopmentEventQueue(project.isTutorial),
+      devEventQueue: makeDevelopmentEventQueue(current.gamesReleased),
       pendingDevEvent: null,
       devDecisionScoreBonus: 0,
       devDecisionSalesMultiplier: 1,
@@ -844,18 +920,31 @@ export function startProject(state: GameState): GameState {
 }
 
 
-function makeDevelopmentEventQueue(isTutorial: boolean): ScheduledDevEvent[] {
-  if (isTutorial) return [];
-  const count = randomInt(1, 3);
-  // Fisher-Yates shuffle avoids the infinite-loop risk of rejection sampling.
+function developmentEventCountForReleaseCount(gamesReleased: number) {
+  const releaseNumber = Math.max(1, Math.floor(gamesReleased) + 1);
+  if (releaseNumber === 1) return 0;
+  if (releaseNumber === 2) return 1;
+  if (releaseNumber === 3) return 3;
+  if (releaseNumber <= 5) return 2;
+  if (releaseNumber <= 7) return 3;
+  if (releaseNumber <= 9) return 4;
+  return randomInt(1, 5);
+}
+
+function makeDevelopmentEventQueue(gamesReleased: number): ScheduledDevEvent[] {
+  const count = developmentEventCountForReleaseCount(gamesReleased);
+  if (count <= 0) return [];
   const indices = developmentEventScenarios.map((_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
     const j = randomInt(0, i);
     const tmp = indices[i]; indices[i] = indices[j]; indices[j] = tmp;
   }
   const queue: ScheduledDevEvent[] = [];
-  for (let index = 0; index < Math.min(count, indices.length); index += 1) {
-    const progressAt = clamp(randomInt(18 + index * 18, 48 + index * 18), 15, 88);
+  const safeCount = Math.min(count, indices.length);
+  for (let index = 0; index < safeCount; index += 1) {
+    const min = 16 + Math.floor((index * 70) / safeCount);
+    const max = Math.min(90, min + Math.max(10, Math.floor(58 / safeCount)));
+    const progressAt = clamp(randomInt(min, max), 12, 92);
     queue.push({ instanceId: nowId(), scenarioId: developmentEventScenarios[indices[index]].id, progressAt, triggered: false });
   }
   return queue.sort((a, b) => a.progressAt - b.progressAt);
@@ -997,7 +1086,7 @@ export function timeSkipProject(state: GameState): GameState {
   const project = current.selectedProject;
   const cost = 25;
   if (!project?.startedAt || project.progress >= 100 || project.pendingDevEvent || current.stars < cost) return current;
-  const nextProgress = clamp(project.progress + 45, 0, 100);
+  const nextProgress = clamp(project.progress + 25, 0, 100);
   window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
   return {
     ...current,
@@ -1006,7 +1095,7 @@ export function timeSkipProject(state: GameState): GameState {
       ...project,
       progress: nextProgress,
       startedAt: startedAtForProgress(project, current, nextProgress),
-    }, 'ПРОПУСК +1Ч'),
+    }, 'УСКОРЕНИЕ +25%'),
   };
 }
 
@@ -1031,18 +1120,20 @@ export function workTap(state: GameState): GameState {
   };
 }
 
-function audienceDemandMultiplier(state: GameState, genre: GenreId, theme: ThemeId) {
+function audienceDemandMultiplier(state: GameState, genre: GenreId, theme: ThemeId, platform: PlatformId) {
   const genreHit = state.audience.desiredGenreId === genre;
   const themeHit = state.audience.desiredThemeId === theme;
-  const matchBonus = (genreHit ? 0.42 : -0.16) + (themeHit ? 0.34 : -0.12);
+  const platformHit = state.audience.desiredPlatformId === platform;
+  const matchBonus = (genreHit ? 0.34 : -0.13) + (themeHit ? 0.28 : -0.1) + (platformHit ? 0.22 : -0.08);
   const moodSwing = (state.audience.mood - 0.52) * 0.95;
   return clamp(0.92 + moodSwing + matchBonus, 0.48, 1.95);
 }
 
-function audienceScoreModifier(state: GameState, genre: GenreId, theme: ThemeId) {
+function audienceScoreModifier(state: GameState, genre: GenreId, theme: ThemeId, platform: PlatformId) {
   const genreHit = state.audience.desiredGenreId === genre;
   const themeHit = state.audience.desiredThemeId === theme;
-  const match = (genreHit ? 0.55 : -0.34) + (themeHit ? 0.45 : -0.28);
+  const platformHit = state.audience.desiredPlatformId === platform;
+  const match = (genreHit ? 0.44 : -0.27) + (themeHit ? 0.36 : -0.22) + (platformHit ? 0.28 : -0.16);
   const mood = (state.audience.mood - 0.55) * 1.15;
   return clamp(match + mood, -1.35, 1.25);
 }
@@ -1053,7 +1144,7 @@ export function releaseProject(state: GameState): GameState {
   if (!project?.genre || !project.theme || !project.platform) return current;
   const combo = comboFor(project.genre, project.theme);
   const platform = platforms.find((item) => item.id === project.platform) ?? platforms[0];
-  const audienceScore = audienceScoreModifier(current, project.genre, project.theme);
+  const audienceScore = audienceScoreModifier(current, project.genre, project.theme, project.platform);
   const marketScore = marketScoreModifier(current.activeMarketEvents);
   const focusQualityScore = 2.7 + focusFit(project) * 4.05;
   const comboScore = (comboMultiplier(combo) - 1) * 1.75;
@@ -1087,18 +1178,22 @@ export function releaseProject(state: GameState): GameState {
     { label: 'Непредсказуемость прессы', value: randomFlavor, kind: 'random' as const },
   ].filter((item) => Math.abs(item.value) >= 0.005);
 
-  const criticResults = critics.map((critic) => ({
-    name: critic.name,
-    quote: critic.quote,
-    score: Number(clamp(score + Math.random() * 2.2 - 1.1 + audienceScore * 0.18 + marketScore * 0.15, 1, 10).toFixed(1)),
-  }));
+  const shuffledCritics = [...criticOutlets].sort(() => Math.random() - 0.5).slice(0, 4);
+  const criticResults = shuffledCritics.map((criticName) => {
+    const criticScore = Number(clamp(score + Math.random() * 2.2 - 1.1 + audienceScore * 0.18 + marketScore * 0.15, 1, 10).toFixed(1));
+    return {
+      name: `«${criticName}»`,
+      quote: getPressComment(criticScore),
+      score: criticScore,
+    };
+  });
 
   const criticAverage = Number((criticResults.reduce((sum, critic) => sum + critic.score, 0) / criticResults.length).toFixed(1));
 
   const reviewMultiplier = 0.48 + score / 8.7;
   const highScoreMultiplier = score > 8 ? 1 + Math.pow((score - 8) / 2, 1.35) * 1.8 : 1;
   const viralMultiplier = score >= 9 && researchHas(current, 'viral-hooks') ? 1.15 : 1;
-  const demand = audienceDemandMultiplier(current, project.genre, project.theme);
+  const demand = audienceDemandMultiplier(current, project.genre, project.theme, project.platform);
   const marketSales = marketSalesMultiplier(current.activeMarketEvents);
   const immediateSales = Math.round((project.isTutorial ? 1000 : 1500) * reviewMultiplier * comboMultiplier(combo) * platform.userbase * incomeMultiplier(current) * momentumRevenue * viralMultiplier * highScoreMultiplier * demand * marketSales * decisionSales);
   const rp = Math.max(5, Math.round(score * (project.isTutorial ? 1 : 1.45) * scienceMultiplier(current)));
@@ -1147,7 +1242,7 @@ export function releaseProject(state: GameState): GameState {
       ...(decisionSales !== 1 ? [`Решения повлияли на продажи: ×${decisionSales.toFixed(2)}`] : []),
     ],
     combo,
-    qualityLabel: score >= 9 ? 'Хит!' : score >= 7.5 ? 'Сильный релиз' : score >= 6 ? 'Ок для MVP' : 'Нужно полировать',
+    qualityLabel: score >= 9 ? 'Хит!' : score >= 7.5 ? 'Сильный релиз' : score >= 6 ? 'Ок для старта' : 'Нужно полировать',
     createdAt: Date.now(),
   };
 
@@ -1166,7 +1261,7 @@ export function releaseProject(state: GameState): GameState {
     selectedProject: null,
     activeGames: [activeGame, ...current.activeGames].slice(0, 12),
     releaseHistory: [...current.releaseHistory, { title: sanitizeProjectName(project.name), genre: project.genre, theme: project.theme, score, day: current.gameDay }].slice(-16),
-    tutorialDone: current.tutorialDone || project.isTutorial,
+    tutorialDone: current.tutorialDone || project.isTutorial || !current.tutorialDone || current.gamesReleased === 0,
     tutorialRewardClaimed: current.tutorialRewardClaimed || tutorialBonusActive,
     tutorialStep: project.isTutorial ? 5 : current.tutorialStep,
     screen: 'develop',
@@ -1179,12 +1274,18 @@ export function promoteProject(state: GameState): GameState {
   const current = ensureDailyState(state);
   const project = current.selectedProject;
   const cost = 35;
-  if (!project?.startedAt || project.progress < 100 || project.promotionUsed || current.stars < cost) return current;
+  const freeFirstPromotion = current.gamesReleased === 0
+    && Boolean(project?.startedAt)
+    && (project?.progress ?? 0) >= 100
+    && !project?.promotionUsed
+    && !Boolean(current.studioGoalClaims?.['ftue-free-promotion-v1']);
+  if (!project?.startedAt || project.progress < 100 || project.promotionUsed || (!freeFirstPromotion && current.stars < cost)) return current;
   const boost = Number((0.1 + Math.random() * 1.1).toFixed(1));
   window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
   return {
     ...current,
-    stars: current.stars - cost,
+    stars: freeFirstPromotion ? current.stars : current.stars - cost,
+    studioGoalClaims: freeFirstPromotion ? { ...(current.studioGoalClaims ?? {}), ['ftue-free-promotion-v1']: true } : current.studioGoalClaims,
     selectedProject: {
       ...project,
       promotionUsed: true,
@@ -1239,7 +1340,8 @@ export function applyOfflineReward(state: GameState): GameState {
   const advanced = advanceGameTime(normalized, Date.now(), 30);
   const idleBoost = researchHas(advanced, 'async-standups') ? 1.2 : 1;
   const passiveDelta = Math.max(0, advanced.coins - beforeCoins);
-  const studioIdle = advanced.gamesReleased > 0 ? Math.round((90 + advanced.level * 28 + advanced.employees.length * 70) * idleBoost) : 0;
+  const hadOfflineDays = advanced.gameDay > normalized.gameDay;
+  const studioIdle = hadOfflineDays && advanced.gamesReleased > 0 ? Math.round((90 + advanced.level * 28 + advanced.employees.length * 70) * idleBoost) : 0;
   return {
     ...advanced,
     coins: advanced.coins + studioIdle,

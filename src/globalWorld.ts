@@ -1,4 +1,4 @@
-import { genres, negativeMarketEvents, positiveMarketEvents, themes } from './gameData';
+import { genres, negativeMarketEvents, platforms, positiveMarketEvents, themes } from './gameData';
 import type { AudienceState, GameState, MarketEvent, NewsEntry } from './types';
 import { GAME_DAY_MS } from './gameLogic';
 
@@ -66,22 +66,25 @@ export function globalAudienceForDay(day: number, previous?: AudienceState): Aud
   const month = Math.floor(Math.max(1, day) / DAYS_PER_MONTH);
   const desiredGenreId = genres[seededIndex(month, genres.length, 7)]?.id ?? 'arcade';
   const desiredThemeId = themes[seededIndex(month, themes.length, 19)]?.id ?? 'cyberpunk';
+  const desiredPlatformId = platforms[seededIndex(month, platforms.length, 31)]?.id ?? 'micro_pc';
   const activeEvents = globalMarketEventsForDay(day);
   const eventMood = activeEvents.reduce((acc, event) => acc + (event.tone === 'positive' ? 0.08 : -0.1), 0);
   const baseMood = 0.54 + (seededIndex(month, 100, 133) - 50) / 500;
   const mood = clamp(baseMood + eventMood, 0.1, 1);
   const genreName = genres.find((item) => item.id === desiredGenreId)?.name ?? 'Аркада';
   const themeName = themes.find((item) => item.id === desiredThemeId)?.name ?? 'Киберпанк';
+  const platformName = platforms.find((item) => item.id === desiredPlatformId)?.name ?? 'Микро-ПК';
   const vibe = mood >= 0.75
-    ? `Глобальная аудитория в хайпе: просит ${genreName} в сеттинге «${themeName}».`
+    ? `Глобальная аудитория в хайпе: просит ${genreName}, сеттинг «${themeName}» и платформу ${platformName}.`
     : mood >= 0.48
-      ? `Глобальный спрос ровный: хотят ${genreName} + «${themeName}», но ждут качества.`
-      : `Аудитория осторожна: ${genreName} + «${themeName}» может вернуть интерес, если релиз будет сильным.`;
+      ? `Глобальный спрос ровный: хотят ${genreName} + «${themeName}» на ${platformName}, но ждут качества.`
+      : `Аудитория осторожна: ${genreName} + «${themeName}» на ${platformName} может вернуть интерес, если релиз будет сильным.`;
 
   return {
     mood,
     desiredGenreId,
     desiredThemeId,
+    desiredPlatformId,
     vibe,
     lastUpdatedMonth: month,
     revealedUntilMonth: previous?.revealedUntilMonth ?? -1,
