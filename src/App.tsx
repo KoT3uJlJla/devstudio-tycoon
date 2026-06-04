@@ -1683,7 +1683,7 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
               <div className="section-head compact"><h3>Как сложилась итоговая оценка</h3><span className="pill">итог {result.score}/10</span></div>
               <p>Карточки изданий выше — это отдельные оценки прессы. Итоговая оценка релиза не равна их среднему арифметическому: она считается из базового качества проекта и модификаторов ниже.</p>
               <div className="score-breakdown-list">
-                                                                                                                                {result.scoreBreakdown.map((item) => {
+                                                                                                                                                {result.scoreBreakdown.map((item) => {
                   const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;
                   const info = scoreExplanation(item);
                   const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';
