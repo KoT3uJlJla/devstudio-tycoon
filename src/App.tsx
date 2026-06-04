@@ -187,7 +187,7 @@ const REFERRAL_MILESTONES = [
   { id: 'm1', target: 1, reward: { coins: 1500, rp: 8 }, label: '1 активный друг' },
   { id: 'm3', target: 3, reward: { coins: 5000, rp: 20 }, label: '3 активных друга' },
   { id: 'm5', target: 5, reward: { coins: 11000, rp: 40 }, label: '5 активных друзей' },
-  { id: 'm10', target: 10, reward: { coins: 28000, rp: 90 }, label: '10 активных друзей' },
+  { id: 'm10', target: 10, reward: { coins: 30000, rp: 90 }, label: '10 активных друзей' },
   { id: 'm25', target: 25, reward: { coins: 90000, rp: 260 }, label: '25 активных друзей' },
 ] as const;
 
@@ -1683,7 +1683,7 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
               <div className="section-head compact"><h3>Как сложилась итоговая оценка</h3><span className="pill">итог {result.score}/10</span></div>
               <p>Карточки изданий выше — это отдельные оценки прессы. Итоговая оценка релиза не равна их среднему арифметическому: она считается из базового качества проекта и модификаторов ниже.</p>
               <div className="score-breakdown-list">
-                                                {result.scoreBreakdown.map((item) => {
+                                                                {result.scoreBreakdown.map((item) => {
                   const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;
                   const info = scoreExplanation(item);
                   const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';
