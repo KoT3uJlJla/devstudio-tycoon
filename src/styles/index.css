@@ -1,0 +1,15 @@
+/*
+ * DevStudio Tycoon frontend style layer.
+ *
+ * This file is the single import point for app styling. Historical CSS patches
+ * are intentionally loaded here in deterministic order so production UI no
+ * longer depends on build-time string replacement scripts.
+ */
+@import '../styles.css';
+@import '../mobile-topbar.css';
+@import '../v8-ui-patch.css';
+@import '../predeploy-hardening.css';
+@import '../gameplay-ui-polish.css';
+@import '../ton-connect-overrides.css';
+@import '../release-results-update.css';
+@import '../studio-office-layout-fix.css';

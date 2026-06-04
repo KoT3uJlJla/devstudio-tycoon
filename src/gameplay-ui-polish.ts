@@ -341,7 +341,11 @@ async function runSecureAction(button: HTMLButtonElement, action: SecureAction) 
       return;
     }
     button.textContent = 'Готово';
-    window.setTimeout(() => window.location.reload(), 180);
+    window.setTimeout(() => {
+      button.textContent = originalText;
+      button.disabled = false;
+      delete button.dataset.secureStarAction;
+    }, 700);
   } catch {
     button.textContent = 'Ошибка';
     window.setTimeout(() => {

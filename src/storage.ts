@@ -335,10 +335,11 @@ async function postDevelopmentAction(action: DevelopmentAction) {
 }
 
 function finalizeLoadedState(state: GameState): GameState {
+  const withoutTransientRelease = { ...state, latestRelease: null, screen: state.screen === 'release' ? 'studio' : state.screen };
   try {
-    return syncGlobalState(applyOfflineReward(state));
+    return syncGlobalState(applyOfflineReward(withoutTransientRelease));
   } catch {
-    return syncGlobalState(normalizeState(state));
+    return syncGlobalState(normalizeState(withoutTransientRelease));
   }
 }
 
