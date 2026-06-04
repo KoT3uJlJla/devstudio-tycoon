@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-import AppShell from './app/AppShell';
-
-export default AppShell;
-=======
 import {
   useEffect,
   useMemo,
@@ -1938,4 +1933,3 @@ function ProgressBar({ value, label }: { value: number; label?: string }) {
 function Stat({ label, value, icon }: { label: string; value: string; icon: IconName }) {
   return <div className="stat-card comic-card"><Icon name={icon} /><strong>{value}</strong><p>{label}</p></div>;
 }
->>>>>>> origin/main
