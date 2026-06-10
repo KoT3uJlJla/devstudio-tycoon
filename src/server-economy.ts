@@ -182,6 +182,7 @@ export async function claimBackendStudioGoalResult(goalId: string) {
     error: result.error,
     eligibleAt: typeof result.payload?.studioGoal?.eligibleAt === 'string' ? result.payload.studioGoal.eligibleAt : null,
     claimed: Boolean(result.payload?.studioGoal?.claimed),
+    clickedAt: typeof result.payload?.studioGoal?.clickedAt === 'string' ? result.payload.studioGoal.clickedAt : null,
   };
 }
 

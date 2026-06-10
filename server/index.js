@@ -543,7 +543,7 @@ async function start() {
       const goalId = String(req.params.goalId || "");
       const goal = goalId === SUBSCRIBE_HATCH_MIND_STUDIO_GOAL.id ? SUBSCRIBE_HATCH_MIND_STUDIO_GOAL : null;
       if (!goal) return res.status(404).json({ ok: false, error: "unknown_studio_goal" });
-      const logStudioGoalClaim = (status) => console.log("studio goal claim", { telegramId: req.telegramUser.id, goalId, status });
+      const logStudioGoalClaim = (status) => console.log("studio_goal_claim", { telegramId: req.telegramUser.id, goalId, status });
 
       const save = await getSave(req.telegramUser.id);
       let economy = await getOrCreateEconomy(req.telegramUser, save?.data);
@@ -559,7 +559,7 @@ async function start() {
         { $set: { claimedAt: now, completedAt: now, updatedAt: now } },
         { returnDocument: "after" },
       );
-      const claimedAction = claimResult?.goalId ? claimResult : claimResult?.value;
+      const claimedAction = claimResult?.goalId === goal.id ? claimResult : claimResult?.value?.goalId === goal.id ? claimResult.value : null;
 
       if (!claimedAction) {
         const existing = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
@@ -569,7 +569,12 @@ async function start() {
         }
         if (existing.claimedAt || existing.completedAt) {
           logStudioGoalClaim("already_claimed");
-          return res.status(409).json({ ok: false, error: "studio_goal_already_claimed", economy: publicEconomy(economy), studioGoal: studioGoalActionPayload(existing) });
+          return res.json({
+            ok: true,
+            economy: publicEconomy(economy),
+            save: { data: currentData, updatedAt: save?.updatedAt ?? existing.completedAt ?? existing.claimedAt ?? new Date() },
+            studioGoal: studioGoalActionPayload(existing),
+          });
         }
         logStudioGoalClaim("not_ready");
         return res.status(425).json({ ok: false, error: "studio_goal_not_ready", studioGoal: studioGoalActionPayload(existing) });
@@ -589,6 +594,7 @@ async function start() {
       logStudioGoalClaim("claimed");
       res.json({ ok: true, economy: publicEconomy(economy), reward: goal.reward, save: { data: nextData, updatedAt: new Date() }, studioGoal: studioGoalActionPayload(claimedAction) });
     } catch (error) {
+      console.log("studio_goal_claim", { telegramId: req.telegramUser?.id, goalId: String(req.params.goalId || ""), status: "failed" });
       console.error("Studio goal claim failed:", error);
       res.status(500).json({ ok: false, error: "studio_goal_claim_failed" });
     }
