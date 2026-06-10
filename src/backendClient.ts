@@ -1,5 +1,6 @@
 import type { TaskCatalogOverrides } from './taskCatalog';
 import { normalizeState } from './gameLogic';
+import { t } from './i18n';
 import type { GameState } from './types';
 
 type BackendStatePayload = {
@@ -189,7 +190,7 @@ async function payWithTelegramStars(itemId: string, onStatus?: (status: ShopPurc
   const invoice = await createInvoice(itemId);
   if (!invoice) {
     onStatus?.('failed');
-    window.Telegram?.WebApp?.showPopup?.({ message: 'Не удалось открыть оплату Telegram Stars. Попробуй ещё раз позже.', buttons: [{ type: 'ok' }] });
+    window.Telegram?.WebApp?.showPopup?.({ message: t('shop.failed'), buttons: [{ type: 'ok' }] });
     return null;
   }
   const status = await openInvoice(invoice.invoiceLink);

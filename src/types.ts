@@ -12,6 +12,7 @@ export type Focus = Record<PhaseId, FocusTriple>;
 export type Genre = {
   id: GenreId;
   name: string;
+  nameEn?: string;
   emoji: string;
   ideal: Focus;
   difficulty: number;
@@ -21,6 +22,7 @@ export type Genre = {
 export type Theme = {
   id: ThemeId;
   name: string;
+  nameEn?: string;
   emoji: string;
   focusBias: Partial<Record<PhaseId, FocusTriple>>;
   isBase?: boolean;
@@ -29,6 +31,7 @@ export type Theme = {
 export type Platform = {
   id: PlatformId;
   name: string;
+  nameEn?: string;
   emoji: string;
   userbase: number;
   techComplexity: number;
@@ -48,14 +51,18 @@ export type DevEventEffect = {
 export type DevEventChoice = {
   id: 'a' | 'b';
   label: string;
+  labelEn?: string;
   result: string;
+  resultEn?: string;
   effect: DevEventEffect;
 };
 
 export type DevEventScenario = {
   id: string;
   title: string;
+  titleEn?: string;
   body: string;
+  bodyEn?: string;
   tone: 'neutral' | 'risk' | 'opportunity';
   choices: [DevEventChoice, DevEventChoice];
 };
@@ -142,6 +149,7 @@ export type ReleasedGame = {
 export type Employee = {
   id: string;
   role: 'Программист' | 'Дизайнер' | 'Художник' | 'Маркетолог' | 'Продюсер' | 'Аналитик';
+  roleEn?: 'Programmer' | 'Designer' | 'Artist' | 'Marketer' | 'Producer' | 'Analyst';
   name: string;
   level: number;
   cost: number;
@@ -150,14 +158,18 @@ export type Employee = {
   scienceBoost?: number;
   scoreBoost?: number;
   specialization: string;
+  specializationEn?: string;
 };
 
 export type ResearchNode = {
   id: string;
   title: string;
+  titleEn?: string;
   description: string;
+  descriptionEn?: string;
   cost: number;
   effect: string;
+  effectEn?: string;
   requires?: string;
 };
 

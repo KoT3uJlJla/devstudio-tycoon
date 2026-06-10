@@ -1,5 +1,6 @@
 import { applyOfflineReward, initialState, normalizeState } from './gameLogic';
 import { syncGlobalState } from './globalWorld';
+import { t } from './i18n';
 import type { GameState } from './types';
 
 export const STORAGE_KEY = 'devstudio_tycoon_mvp_save_v3';
@@ -47,7 +48,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function markGameClosed(payload: BackendSavePayload | null) {
   const status = isPlainObject(payload?.gameStatus) ? payload?.gameStatus : null;
-  const message = typeof status?.message === 'string' && status.message.trim() ? status.message : 'Ведутся технические работы. Возвращайтесь позже';
+  const message = typeof status?.message === 'string' && status.message.trim() ? status.message : t('maintenance.default');
   try {
     (window as unknown as { __devstudioGameClosed?: boolean }).__devstudioGameClosed = true;
     window.dispatchEvent(new CustomEvent('devstudio:game-closed', { detail: { message, role: payload?.role || 'user', status } }));

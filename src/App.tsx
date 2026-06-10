@@ -30,7 +30,6 @@ import {
   momentumSpeedMultiplier,
   isAudienceRevealed,
   normalizeFocus,
-  phaseLabels,
   projectInsight,
   promoteProject,
   releaseProject,
@@ -53,18 +52,19 @@ import {
 } from './gameLogic';
 import { loadGame, saveGame } from './storage';
 import { haptic, initTelegram, shareRelease } from './telegram';
-import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet, claimReferralMilestone, fetchTaskConfig, hasBackendSession, runDevelopmentAction } from './backendClient';
 import { claimBackendDailyReward, claimBackendReferralMilestone, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
+import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet, claimReferralMilestone, fetchTaskConfig, hasBackendSession, runDevelopmentAction } from './backendClient';
 import { applyTaskReward, buildDailyTasks, buildStudioGoals, rewardLabel, taskProgressPercent, type DailyTaskModel, type StudioGoalModel, type TaskCatalogOverrides } from './taskCatalog';
+import { getLanguage, getLocale, localizedDescription, localizedEffect, localizedName, localizedTitle, t, type TranslationKey } from './i18n';
 import { PixiCanvas } from './rendering/PixiCanvas';
 import type { DailyTaskId, DevEventChoice, Employee, Focus, GameState, GenreId, PhaseId, PlatformId, Project, ScoreBreakdownItem, ThemeId } from './types';
 
 const navItems = [
-  ['develop', 'Разработка', 'develop'],
-  ['research', 'Наука', 'research'],
-  ['studio', 'Студия', 'studio'],
-  ['shop', 'Магазин', 'shop'],
-  ['menu', 'Награды', 'rating'],
+  ['develop', 'nav.develop', 'develop'],
+  ['research', 'nav.research', 'research'],
+  ['studio', 'nav.studio', 'studio'],
+  ['shop', 'nav.shop', 'shop'],
+  ['menu', 'nav.rewards', 'rating'],
 ] as const;
 
 const prizeDistribution = [
@@ -73,7 +73,7 @@ const prizeDistribution = [
 ] as const;
 
 function money(value: number) {
-  return Math.round(value).toLocaleString('ru-RU');
+  return Math.round(value).toLocaleString(getLocale());
 }
 
 function scoreDelta(value: number) {
@@ -82,7 +82,12 @@ function scoreDelta(value: number) {
 }
 
 function comboLabel(value: 'Great' | 'Good' | 'Neutral' | 'Bad') {
-  return ({ Great: 'Отличное', Good: 'Хорошее', Neutral: 'Нейтральное', Bad: 'Слабое' } as const)[value] ?? value;
+  return ({
+    Great: t('combo.great'),
+    Good: t('combo.good'),
+    Neutral: t('combo.neutral'),
+    Bad: t('combo.bad'),
+  } as const)[value] ?? value;
 }
 
 
@@ -145,10 +150,10 @@ function signedScore(value = 0) {
 
 function employeeMetrics(employee: Employee) {
   return [
-    `Скорость ${signedPercent(employee.speedBoost)}`,
-    `Доход ${signedPercent(employee.incomeBoost)}`,
-    `Наука ${signedPercent(employee.scienceBoost ?? 0)}`,
-    `Оценка ${signedScore(employee.scoreBoost ?? 0)}`,
+    `${t('metric.speed')} ${signedPercent(employee.speedBoost)}`,
+    `${t('metric.income')} ${signedPercent(employee.incomeBoost)}`,
+    `${t('metric.science')} ${signedPercent(employee.scienceBoost ?? 0)}`,
+    `${t('metric.score')} ${signedScore(employee.scoreBoost ?? 0)}`,
   ].join(' · ');
 }
 
@@ -169,25 +174,65 @@ function weeklyRatingBreakdown(state: GameState) {
     total,
     recent,
     items: [
-      ['Лучший свежий релиз', Math.round(bestRecent * bestRecent * 930)],
-      ['Среднее качество недели', Math.round(avgRecent * 1500)],
-      ['Доход живых игр', Math.round(activeRevenue)],
-      ['Релизный ритм', Math.round(releaseVolume)],
-      ['Импульс студии', Math.round(momentum)],
-      ['Уровень студии', Math.round(studioLevel)],
-      ['Сезонный PR', Math.round(seasonal)],
-      ['Штраф за сбросы', -Math.round(resetPenalty)],
-      ['Штраф за долг', -Math.round(debtPenalty)],
+      [t('rating.bestFreshRelease'), Math.round(bestRecent * bestRecent * 930)],
+      [t('rating.weekAverageScore'), Math.round(avgRecent * 1500)],
+      [t('rating.liveGameIncome'), Math.round(activeRevenue)],
+      [t('rating.releaseRhythm'), Math.round(releaseVolume)],
+      [t('rating.studioMomentum'), Math.round(momentum)],
+      [t('rating.studioLevel'), Math.round(studioLevel)],
+      [t('rating.seasonalPr'), Math.round(seasonal)],
+      [t('rating.resetPenalty'), -Math.round(resetPenalty)],
+      [t('rating.debtPenalty'), -Math.round(debtPenalty)],
     ].filter(([, value]) => Number(value) !== 0) as [string, number][],
   };
 }
 
+const marketEventCopyEn: Record<string, { title: string; description: string }> = {
+  'streamer-boom': { title: 'Streamers want indie hits', description: 'Short, bright games show up in recommendations more often.' },
+  'school-holidays': { title: 'Players are on holiday', description: 'Players have more free time and more patience for experiments.' },
+  'retro-wave': { title: 'Retro wave', description: 'Small studios are getting extra press attention.' },
+  'ugc-trend': { title: 'User content boom', description: 'Games with a strong idea pick up organic buzz faster.' },
+  'mobile-festival': { title: 'Mobile festival', description: 'Mobile releases are getting talked about more than usual.' },
+  'press-week': { title: 'Games media week', description: 'Critics are hunting for new projects more actively.' },
+  'meme-season': { title: 'Meme season', description: 'Unusual genre and setting combos have a better shot at taking off.' },
+  'platform-grants': { title: 'Platform grants', description: 'Platforms are boosting visibility for fresh games.' },
+  'market-fatigue': { title: 'Market fatigue', description: 'Players are harsher on samey releases.' },
+  'server-drama': { title: 'Server drama', description: 'Audiences are suspicious of new online features.' },
+  'ad-prices-up': { title: 'Ads got pricier', description: 'Organic reach is down, so launching games is harder.' },
+  'big-release': { title: 'Big publisher release', description: 'A huge release has stolen attention from players and press.' },
+  'review-burnout': { title: 'Critics are overloaded', description: 'Media outlets are scoring average projects more harshly.' },
+  'wallet-crunch': { title: 'Players are saving money', description: 'Players buy less, especially games that miss the trend.' },
+  'clone-backlash': { title: 'Clone backlash', description: 'Similar-looking games are getting rough community reactions.' },
+  'platform-bugs': { title: 'Platform issues', description: 'Stores are having trouble with storefronts and recommendations.' },
+};
+
+function localizedMarketEventTitle(event: { id: string; title: string }) {
+  const baseId = event.id.replace(/^global-/, '').replace(/-\d+$/, '');
+  return getLanguage() === 'en' ? marketEventCopyEn[baseId]?.title ?? 'Market event' : event.title;
+}
+
+function localizedMarketEventDescription(event: { id: string; description: string }) {
+  const baseId = event.id.replace(/^global-/, '').replace(/-\d+$/, '');
+  return getLanguage() === 'en' ? marketEventCopyEn[baseId]?.description ?? 'The market is shifting for a short time.' : event.description;
+}
+
+function localizedSavedText(text: string) {
+  if (getLanguage() === 'ru' || !/[\u0400-\u04ff]/.test(text)) return text;
+  return 'Game event';
+}
+
+function localizedProjectInsightNote() {
+  return getLanguage() === 'ru'
+    ? null
+    : 'This project has its own genre, setting, and platform pressure. Use the focus hints below as a quick production read.';
+}
+
 const REFERRAL_MILESTONES = [
-  { id: 'm1', target: 1, reward: { coins: 1500, rp: 8 }, label: '1 активный друг' },
-  { id: 'm3', target: 3, reward: { coins: 5000, rp: 20 }, label: '3 активных друга' },
-  { id: 'm5', target: 5, reward: { coins: 11000, rp: 40 }, label: '5 активных друзей' },
-  { id: 'm10', target: 10, reward: { coins: 30000, rp: 90 }, label: '10 активных друзей' },
-  { id: 'm25', target: 25, reward: { coins: 90000, rp: 260 }, label: '25 активных друзей' },
+  { id: 'm1', target: 1, reward: { coins: 1500, rp: 8 }, labelKey: 'referrals.m1' },
+  { id: 'm3', target: 3, reward: { coins: 5000, rp: 20 }, labelKey: 'referrals.m3' },
+  { id: 'm5', target: 5, reward: { coins: 11000, rp: 40 }, labelKey: 'referrals.m5' },
+  { id: 'm10', target: 10, reward: { coins: 30000, rp: 90 }, labelKey: 'referrals.m10' },
+  { id: 'm25', target: 25, reward: { coins: 90000, rp: 260 }, labelKey: 'referrals.m25' },
 ] as const;
 
 function applyReferralReward(state: GameState, tier: 'direct' | 'second'): GameState {
@@ -260,25 +305,45 @@ function getTaskKey(id: DailyTaskId) {
 }
 
 function fmtFocus(focus: Focus, phase: PhaseId) {
-  return phaseLabels[phase].map((label, index) => `${label} ${focus[phase][index]}%`).join(' · ');
+  return phaseLabelsForUi(phase).map((label, index) => `${label} ${focus[phase][index]}%`).join(' · ');
 }
 
-const priorityLabels: Record<PhaseId, string[]> = {
-  pre: ['техоснова', 'геймплей', 'нарратив'],
-  production: ['сценарий', 'уровни', 'ИИ'],
-  post: ['мир', 'арт', 'звук'],
+const phaseTitleKeys: Record<PhaseId, TranslationKey> = {
+  pre: 'phase.pre',
+  production: 'phase.production',
+  post: 'phase.post',
 };
+
+const phaseLabelKeys: Record<PhaseId, TranslationKey[]> = {
+  pre: ['phase.pre.tech', 'phase.pre.gameplay', 'phase.pre.story'],
+  production: ['phase.production.dialogue', 'phase.production.levels', 'phase.production.ai'],
+  post: ['phase.post.world', 'phase.post.visual', 'phase.post.sound'],
+};
+
+const priorityLabelKeys: Record<PhaseId, TranslationKey[]> = {
+  pre: ['priority.techBase', 'priority.gameplay', 'priority.narrative'],
+  production: ['priority.script', 'priority.levels', 'priority.ai'],
+  post: ['priority.world', 'priority.art', 'priority.sound'],
+};
+
+function phaseTitle(phase: PhaseId) {
+  return t(phaseTitleKeys[phase]);
+}
+
+function phaseLabelsForUi(phase: PhaseId) {
+  return phaseLabelKeys[phase].map((key) => t(key));
+}
 
 function prioritySentence(focus: Focus, phase: PhaseId) {
   const values = focus[phase];
   const index = values.indexOf(Math.max(...values));
-  const label = priorityLabels[phase][index];
-  if (phase === 'production' && label === 'ИИ') return 'Сборка игры: для этого жанра нужен сильный ИИ.';
-  if (phase === 'pre' && label === 'геймплей') return 'Фокус разработки: лучше делать упор на геймплей.';
-  if (phase === 'pre' && label === 'нарратив') return 'Фокус разработки: игроки ждут сильный нарратив.';
-  if (phase === 'post' && label === 'звук') return 'Полировка: звук должен продавать эмоцию.';
-  if (phase === 'post' && label === 'арт') return 'Полировка: арт должен стать главным крючком.';
-  return `${phase === 'pre' ? 'Идея и прототип' : phase === 'production' ? 'Сборка игры' : 'Полировка'}: главный упор — ${label}.`;
+  const key = priorityLabelKeys[phase][index];
+  if (phase === 'production' && key === 'priority.ai') return t('priority.aiHint');
+  if (phase === 'pre' && key === 'priority.gameplay') return t('priority.gameplayHint');
+  if (phase === 'pre' && key === 'priority.narrative') return t('priority.narrativeHint');
+  if (phase === 'post' && key === 'priority.sound') return t('priority.soundHint');
+  if (phase === 'post' && key === 'priority.art') return t('priority.artHint');
+  return t('priority.default', { phase: phaseTitle(phase), label: t(key) });
 }
 
 
@@ -380,13 +445,63 @@ function ItemIcon({ id, fallback }: { id: string; fallback: IconName }) {
   return <svg className="item-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{itemIconPaths[id] ?? iconPaths[fallback]}</svg>;
 }
 
+const employeeRoleValues = {
+  designer: '\u0414\u0438\u0437\u0430\u0439\u043d\u0435\u0440',
+  artist: '\u0425\u0443\u0434\u043e\u0436\u043d\u0438\u043a',
+  marketer: '\u041c\u0430\u0440\u043a\u0435\u0442\u043e\u043b\u043e\u0433',
+  producer: '\u041f\u0440\u043e\u0434\u044e\u0441\u0435\u0440',
+  analyst: '\u0410\u043d\u0430\u043b\u0438\u0442\u0438\u043a',
+} as const;
+
 function roleIcon(role: string): IconName {
-  if (role === 'Художник') return 'paint';
-  if (role === 'Маркетолог') return 'megaphone';
-  if (role === 'Дизайнер') return 'brain';
-  if (role === 'Продюсер') return 'producer';
-  if (role === 'Аналитик') return 'analyst';
+  if (role === employeeRoleValues.artist) return 'paint';
+  if (role === employeeRoleValues.marketer) return 'megaphone';
+  if (role === employeeRoleValues.designer) return 'brain';
+  if (role === employeeRoleValues.producer) return 'producer';
+  if (role === employeeRoleValues.analyst) return 'analyst';
   return 'code';
+}
+
+function roleLabel(role: Employee['role']) {
+  if (role === employeeRoleValues.artist) return t('role.artist');
+  if (role === employeeRoleValues.marketer) return t('role.marketer');
+  if (role === employeeRoleValues.designer) return t('role.designer');
+  if (role === employeeRoleValues.producer) return t('role.producer');
+  if (role === employeeRoleValues.analyst) return t('role.analyst');
+  return t('role.programmer');
+}
+
+const employeeSpecializationEnById: Record<string, string> = {
+  'dev-lena': '+ engine',
+  'art-kai': '+ visuals',
+  'design-mira': '+ gameplay',
+  'marketing-tom': '+ hype, -polish',
+  'producer-nika': '- schedule chaos',
+  'analyst-zen': '+ audience',
+  'dev-oleg': '+ stable builds',
+  'qa-ira': '+ quality, -speed',
+  'mark-roma': '+ sales, -pace',
+  'prod-sasha': '+ deadlines',
+  'artist-ava': '+ style',
+  'designer-lev': '+ balance',
+  'dev-maya': '+ tech debt',
+  'monet-gleb': '+ monetization, -score',
+  'ux-nora': '+ retention',
+  'sci-yun': '+ science points',
+  'prod-kira': '+ release rhythm',
+  'sound-vik': '+ sound and vibe',
+  'lead-anna': '+ big projects',
+  'creative-pasha': '+ strong score, -pace',
+  'biz-alisa': '+ profit, -speed',
+  'lab-dan': '+ science',
+  'exec-mila': '+ everything, expensive',
+  'ghost-den': '+ speed, -quality',
+  'trend-lika': '+ trends',
+  'mentor-boris': '+ team growth',
+};
+
+function specializationLabel(employee: Employee) {
+  return getLanguage() === 'en' ? employee.specializationEn ?? employeeSpecializationEnById[employee.id] ?? employee.specialization : employee.specialization;
 }
 
 
@@ -396,19 +511,19 @@ const FTUE_UPGRADE_RP_CLAIM_ID = 'ftue-upgrade-rp-v1';
 
 type DailyContractDefinition = {
   id: string;
-  title: string;
-  desc: string;
+  titleKey: TranslationKey;
+  descKey: TranslationKey;
   target: number;
   reward: { coins: number; rp: number };
-  note: string;
+  noteKey: TranslationKey;
   current: (state: GameState) => number;
 };
 
 const DAILY_CONTRACTS: DailyContractDefinition[] = [
-  { id: 'release', title: 'Контракт дня: релиз', desc: 'Выпусти 1 игру сегодня.', target: 1, reward: { coins: 1200, rp: 12 }, note: 'Хорош для быстрого рывка в недельном рейтинге.', current: (state) => state.dailyGamesReleased },
-  { id: 'work', title: 'Контракт дня: решение', desc: 'Прими 1 решение во время разработки.', target: 1, reward: { coins: 900, rp: 10 }, note: 'Подходит, когда хочешь быстро продвинуть проект.', current: (state) => state.dailyWorkTaps },
-  { id: 'research', title: 'Контракт дня: рост студии', desc: 'Открой 1 исследование, жанр или сеттинг.', target: 1, reward: { coins: 850, rp: 14 }, note: 'Помогает подготовить сильный следующий релиз.', current: (state) => state.dailyResearchUnlocked },
-  { id: 'income', title: 'Контракт дня: доход', desc: 'Получи 1200 монет пассивно от живых релизов.', target: 1200, reward: { coins: 1500, rp: 8 }, note: 'Лучше закрывать после пары живых игр.', current: (state) => state.dailyPassiveIncome },
+  { id: 'release', titleKey: 'dailyContract.release.title', descKey: 'dailyContract.release.desc', target: 1, reward: { coins: 1200, rp: 12 }, noteKey: 'dailyContract.release.note', current: (state) => state.dailyGamesReleased },
+  { id: 'work', titleKey: 'dailyContract.work.title', descKey: 'dailyContract.work.desc', target: 1, reward: { coins: 900, rp: 10 }, noteKey: 'dailyContract.work.note', current: (state) => state.dailyWorkTaps },
+  { id: 'research', titleKey: 'dailyContract.research.title', descKey: 'dailyContract.research.desc', target: 1, reward: { coins: 850, rp: 14 }, noteKey: 'dailyContract.research.note', current: (state) => state.dailyResearchUnlocked },
+  { id: 'income', titleKey: 'dailyContract.income.title', descKey: 'dailyContract.income.desc', target: 1200, reward: { coins: 1500, rp: 8 }, noteKey: 'dailyContract.income.note', current: (state) => state.dailyPassiveIncome },
 ];
 
 function hashDailyKey(value: string) {
@@ -522,17 +637,17 @@ function FirstSessionContractBar({ state, update }: { state: GameState; update: 
   if (!state.onboardingDone || !state.tutorialDone || state.screen !== 'studio' || firstSessionContractClaimed(state)) return null;
   const progress = firstSessionContractProgress(state);
   const steps = [
-    ['Первый релиз', progress.firstRelease],
-    ['Первое улучшение', progress.upgrade],
-    ['Второй релиз', progress.secondRelease],
+    [t('contract.firstRelease'), progress.firstRelease],
+    [t('contract.firstUpgrade'), progress.upgrade],
+    [t('contract.secondRelease'), progress.secondRelease],
   ] as const;
   const ready = firstSessionContractReady(state);
   const nextAction: { label: string; apply: (current: GameState) => GameState } | null = !progress.firstRelease
-    ? { label: 'Запустить первый релиз', apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as GameState['screen'], selectedProject: current.selectedProject ?? createProject(false) }) }
+    ? { label: t('contract.startFirstRelease'), apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as GameState['screen'], selectedProject: current.selectedProject ?? createProject(false) }) }
     : !progress.upgrade
-      ? { label: 'Открыть первое улучшение', apply: (current: GameState): GameState => ({ ...current, screen: 'research' as GameState['screen'] }) }
+      ? { label: t('contract.openFirstUpgrade'), apply: (current: GameState): GameState => ({ ...current, screen: 'research' as GameState['screen'] }) }
       : !progress.secondRelease
-        ? { label: 'Собрать второй релиз', apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as GameState['screen'], selectedProject: current.selectedProject ?? createProject(false) }) }
+        ? { label: t('contract.buildSecondRelease'), apply: (current: GameState): GameState => ({ ...current, screen: 'develop' as GameState['screen'], selectedProject: current.selectedProject ?? createProject(false) }) }
         : null;
   const claim = () => update((current) => {
     if (firstSessionContractClaimed(current) || !firstSessionContractReady(current)) return current;
@@ -544,18 +659,18 @@ function FirstSessionContractBar({ state, update }: { state: GameState; update: 
       dailyTaskClaims: { ...(current.dailyTaskClaims ?? {}), [FIRST_SESSION_CONTRACT_ID]: true },
     };
   });
-  const handleNextAction = nextAction?.label === 'Открыть первое улучшение'
+  const handleNextAction = nextAction?.label === t('contract.openFirstUpgrade')
     ? () => { void openFirstUpgradeStep(state, update); }
     : nextAction
       ? () => update(nextAction.apply)
       : undefined;
   return <section className="first-session-contract comic-card">
-    <div className="section-head compact"><div><p className="eyebrow">Контракт первой сессии</p><h3>Дойди до второго релиза</h3></div><span className="pill">+{money(FIRST_SESSION_CONTRACT_REWARD.coins)} 🪙 +{FIRST_SESSION_CONTRACT_REWARD.rp} 🧪</span></div>
-    <p className="muted">За первые 5 минут игрок должен увидеть полный цикл студии дважды: релиз, улучшение и новый релиз уже по своей стратегии.</p>
+    <div className="section-head compact"><div><p className="eyebrow">{t('contract.firstSession')}</p><h3>{t('contract.reachSecondRelease')}</h3></div><span className="pill">+{money(FIRST_SESSION_CONTRACT_REWARD.coins)} 🪙 +{FIRST_SESSION_CONTRACT_REWARD.rp} 🧪</span></div>
+    <p className="muted">{t('contract.firstSessionDesc')}</p>
     <div className="contract-steps">{steps.map(([label, done]) => <span key={label} className={done ? 'contract-step done' : 'contract-step'}>{done ? '✅' : '•'} {label}</span>)}</div>
     <div className="inline-actions contract-actions">
-      {ready ? <button className="primary" onClick={claim}>Забрать бонус первой сессии</button> : handleNextAction ? <button className="primary" onClick={handleNextAction}>{nextAction?.label}</button> : null}
-      <span className="small muted">После второго релиза игрок уже видит, как студия растёт и зачем возвращаться.</span>
+      {ready ? <button className="primary" onClick={claim}>{t('contract.claimFirstSession')}</button> : handleNextAction ? <button className="primary" onClick={handleNextAction}>{nextAction?.label}</button> : null}
+      <span className="small muted">{t('contract.afterSecondRelease')}</span>
     </div>
   </section>;
 }
@@ -582,17 +697,17 @@ function DailyContractCard({ state, update }: { state: GameState; update: (fn: (
     };
   });
   return <section className="daily-contract-card comic-card">
-    <div className="section-head compact"><div><p className="eyebrow">Контракт дня</p><h3>{contract.title}</h3></div><span className="pill">+{money(contract.reward.coins)} 🪙 +{contract.reward.rp} 🧪</span></div>
-    <p>{contract.desc}</p>
+    <div className="section-head compact"><div><p className="eyebrow">{t('contract.daily')}</p><h3>{t(contract.titleKey)}</h3></div><span className="pill">+{money(contract.reward.coins)} 🪙 +{contract.reward.rp} 🧪</span></div>
+    <p>{t(contract.descKey)}</p>
     <ProgressBar value={progress} />
-    <div className="daily-contract-footer"><span>{claimed ? 'Контракт закрыт' : ready ? 'Можно забирать награду' : String(Math.min(Math.round(currentValue), contract.target)) + '/' + String(contract.target)}</span><button className="primary" disabled={!ready || claimed} onClick={claim}>{claimed ? 'Получено' : 'Забрать награду'}</button></div>
-    <div className="daily-contract-meta"><small>{contract.note}</small><small>Завтра: {nextContract.title}</small></div>
+    <div className="daily-contract-footer"><span>{claimed ? t('contract.closed') : ready ? t('contract.ready') : String(Math.min(Math.round(currentValue), contract.target)) + '/' + String(contract.target)}</span><button className="primary" disabled={!ready || claimed} onClick={claim}>{claimed ? t('contract.received') : t('contract.claimReward')}</button></div>
+    <div className="daily-contract-meta"><small>{t(contract.noteKey)}</small><small>{t('contract.tomorrow', { title: t(nextContract.titleKey) })}</small></div>
   </section>;
 }
 export default function App() {
   const [state, setState] = useState<GameState | null>(null);
   const [gameClosed, setGameClosed] = useState(false);
-  const [maintenanceMessage, setMaintenanceMessage] = useState('Ведутся технические работы. Возвращайтесь позже');
+  const [maintenanceMessage, setMaintenanceMessage] = useState(t('maintenance.default'));
   const [momentumOpen, setMomentumOpen] = useState(false);
   const [studioOfficeOpen, setStudioOfficeOpen] = useState(false);
   const [studioNamingMode, setStudioNamingMode] = useState<'initial' | 'rename' | null>(null);
@@ -603,7 +718,7 @@ export default function App() {
   useEffect(() => {
     const onClosed = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail;
-      setMaintenanceMessage(detail?.message || 'Ведутся технические работы. Возвращайтесь позже');
+      setMaintenanceMessage(detail?.message || t('maintenance.default'));
       setGameClosed(true);
     };
     window.addEventListener('devstudio:game-closed', onClosed);
@@ -644,7 +759,7 @@ export default function App() {
 }, []);
 
   if (gameClosed) return <MaintenanceScreen message={maintenanceMessage} />;
-  if (!state) return <div className="loading"><span>Загружаем студию…</span></div>;
+  if (!state) return <div className="loading"><span>{t('common.loadingStudio')}</span></div>;
   const update = (recipe: (current: GameState) => GameState) => setState((current) => {
     if (!current) return current;
     const nextState = recipe(ensureDailyState(current));
@@ -684,7 +799,7 @@ export default function App() {
 }
 
 function MaintenanceScreen({ message }: { message: string }) {
-  return <main className="app-shell maintenance-shell"><section className="maintenance-card comic-card splash-panel"><div className="poster-art"><span className="burst burst-a">PATCH</span><span className="burst burst-b">DEV</span><i className="slash slash-a" /><i className="slash slash-b" /></div><div className="hero-copy"><p className="eyebrow">DevStudio Tycoon</p><h2>Ведутся технические работы</h2><p className="muted">{message || 'Возвращайтесь позже'}</p><p className="small muted">Мы обновляем игру, чтобы не ломать сохранения и экономику игроков.</p></div></section></main>;
+  return <main className="app-shell maintenance-shell"><section className="maintenance-card comic-card splash-panel"><div className="poster-art"><span className="burst burst-a">PATCH</span><span className="burst burst-b">DEV</span><i className="slash slash-a" /><i className="slash slash-b" /></div><div className="hero-copy"><p className="eyebrow">{t('app.name')}</p><h2>{t('maintenance.title')}</h2><p className="muted">{message || t('maintenance.backLater')}</p><p className="small muted">{t('maintenance.note')}</p></div></section></main>;
 }
 
 function TopBar({ state, onMomentumOpen }: { state: GameState; onMomentumOpen: () => void }) {
@@ -702,16 +817,18 @@ function TopBar({ state, onMomentumOpen }: { state: GameState; onMomentumOpen: (
     <header className="topbar comic-strip compact-topbar">
       <div className="brand-row compact-brand-row">
         <div className="studio-title-block">
-          <p className="eyebrow">Игровая студия</p>
-          <h1 className="studio-name" title={state.studioName || 'Новая студия'}>{state.studioName || 'Новая студия'}</h1>
+          <p className="eyebrow">{t('app.gameStudio')}</p>
+          <h1 className="studio-name" title={state.studioName || t('studio.defaultName')}>{state.studioName || t('studio.defaultName')}</h1>
         </div>
         <div className="topbar-meta">
           <span className="badge kaboom studio-level-badge">Lvl: {state.level}</span>
-                    <span className="badge kaboom date-badge compact-date-badge">
-            <span>День {displayGameDay(state.gameDay)}</span>
+          <span className="badge kaboom date-badge compact-date-badge">
+            <span>{t('date.yearShort', { year: topbarDate.year })}</span>
+            <span>{t('date.monthShort', { month: topbarDate.month })}</span>
+            <span>{t('date.dayShort', { day: topbarDate.day })}</span>
             <span className="day-dial" style={{ '--day-progress': `${dayPercent}%` } as CSSProperties}>
               <b>{secondsLeft}</b>
-              <small>сек</small>
+              <small>{t('common.secondsShort')}</small>
             </span>
           </span>
         </div>
@@ -721,8 +838,8 @@ function TopBar({ state, onMomentumOpen }: { state: GameState; onMomentumOpen: (
         <span><Icon name="rp" /> {money(state.rp)}</span>
         <span><Icon name="star" /> {state.stars}</span>
       </div>
-      <button className="level-row momentum-button" type="button" onClick={onMomentumOpen} aria-label="Открыть объяснение импульса студии">
-        <span>Импульс студии</span>
+      <button className="level-row momentum-button" type="button" onClick={onMomentumOpen} aria-label={t('studio.momentumAria')}>
+        <span>{t('studio.momentum')}</span>
         <div className="xp"><i style={{ width: `${xpPercent}%` }} /></div>
       </button>
     </header>
@@ -736,16 +853,16 @@ function MomentumInfoModal({ state, onClose }: { state: GameState; onClose: () =
   return (
     <div className="modal-backdrop momentum-backdrop" onClick={onClose}>
       <section role="dialog" aria-modal="true" aria-labelledby="momentum-title" className="dev-event-modal comic-card momentum-full-modal tone-opportunity" onClick={(event) => event.stopPropagation()}>
-        <button className="modal-x" type="button" onClick={onClose} aria-label="Закрыть">×</button>
-        <p className="eyebrow">Справка</p>
-        <h2 id="momentum-title">Импульс студии</h2>
-        <div className="momentum-copy"><p className="muted">Импульс растёт от количества и качества релизов.</p><p className="muted">Чем успешнее игры и чем стабильнее студия выпускает проекты, тем выше шкала.</p></div>
+        <button className="modal-x" type="button" onClick={onClose} aria-label={t('common.close')}>×</button>
+        <p className="eyebrow">{t('studio.help')}</p>
+        <h2 id="momentum-title">{t('studio.momentum')}</h2>
+        <div className="momentum-copy"><p className="muted">{t('studio.momentumBody1')}</p><p className="muted">{t('studio.momentumBody2')}</p></div>
         <div className="momentum-stats">
-          <span><b>Скорость</b><strong>×{momentumSpeed.toFixed(2)}</strong><em>макс. ×1.25</em></span>
-          <span><b>Оценка</b><strong>+{momentumScore.toFixed(2)}</strong><em>макс. +0.20</em></span>
-          <span><b>Доход</b><strong>×{momentumRevenue.toFixed(2)}</strong><em>макс. ×1.10</em></span>
+          <span><b>{t('metric.speed')}</b><strong>×{momentumSpeed.toFixed(2)}</strong><em>{t('studio.maxSpeed')}</em></span>
+          <span><b>{t('metric.score')}</b><strong>+{momentumScore.toFixed(2)}</strong><em>{t('studio.maxScore')}</em></span>
+          <span><b>{t('metric.income')}</b><strong>×{momentumRevenue.toFixed(2)}</strong><em>{t('studio.maxIncome')}</em></span>
         </div>
-        <div className="momentum-copy compact"><p className="small muted">Импульс постепенно теряет ценность, если студия долго не выпускает сильные игры.</p><p className="small muted">Это не отдельная валюта, а показатель текущего темпа студии.</p></div>
+        <div className="momentum-copy compact"><p className="small muted">{t('studio.momentumNote1')}</p><p className="small muted">{t('studio.momentumNote2')}</p></div>
       </section>
     </div>
   );
@@ -763,39 +880,39 @@ type TutorialGuideStep = {
 
 const tutorialGuideCopy = {
   genre: {
-    id: 'genre', eyebrow: 'Обучение · 1/5', title: 'Выбери жанр первой игры',
-    body: 'Жанр задаёт сложность и ожидания игроков. Для первого релиза подойдёт любой базовый вариант — обучение безопасное.',
-    target: true, placement: 'bottom', cta: 'Нажми на любой жанр',
+    id: 'genre', eyebrow: t('tutorial.genre.eyebrow'), title: t('tutorial.genre.title'),
+    body: t('tutorial.genre.body'),
+    target: true, placement: 'bottom', cta: t('tutorial.genre.cta'),
   },
   theme: {
-    id: 'theme', eyebrow: 'Обучение · 2/5', title: 'Добавь сеттинг',
-    body: 'Сеттинг меняет вкус проекта. Позже «Продуктовое чутьё» покажет лучшие сочетания, а сейчас просто соберём первый релиз.',
-    target: true, placement: 'bottom', cta: 'Нажми на любой сеттинг',
+    id: 'theme', eyebrow: t('tutorial.theme.eyebrow'), title: t('tutorial.theme.title'),
+    body: t('tutorial.theme.body'),
+    target: true, placement: 'bottom', cta: t('tutorial.theme.cta'),
   },
   platform: {
-    id: 'platform', eyebrow: 'Обучение · 3/5', title: 'Подтверди платформу',
-    body: 'Платформа влияет на бюджет и продажи. Микро-ПК — самый спокойный старт, поэтому он уже выбран.',
-    target: true, placement: 'top', cta: 'Нажми на платформу',
+    id: 'platform', eyebrow: t('tutorial.platform.eyebrow'), title: t('tutorial.platform.title'),
+    body: t('tutorial.platform.body'),
+    target: true, placement: 'top', cta: t('tutorial.platform.cta'),
   },
   start: {
-    id: 'start', eyebrow: 'Обучение · 4/5', title: 'Запусти разработку',
-    body: 'Фокус можно оставить сбалансированным. Главное сейчас — увидеть полный цикл: старт, сборка, релиз и первые деньги.',
-    target: true, placement: 'top', cta: 'Нажми «Начать разработку»',
+    id: 'start', eyebrow: t('tutorial.start.eyebrow'), title: t('tutorial.start.title'),
+    body: t('tutorial.start.body'),
+    target: true, placement: 'top', cta: t('tutorial.start.cta'),
   },
   wait: {
-    id: 'wait', eyebrow: 'Сборка идёт', title: 'Команда делает игру',
-    body: 'Туториальный проект короткий: обычно он доходит до релиза примерно за полминуты. Потом игра начнёт жить и приносить пассивный доход.',
-    target: false, placement: 'top', cta: 'Дождись 100%',
+    id: 'wait', eyebrow: t('tutorial.wait.eyebrow'), title: t('tutorial.wait.title'),
+    body: t('tutorial.wait.body'),
+    target: false, placement: 'top', cta: t('tutorial.wait.cta'),
   },
   release: {
-    id: 'release', eyebrow: 'Обучение · 5/5', title: 'Выпусти игру',
-    body: 'Релиз даёт монеты, науку и запускает срок жизни игры. После этого будет понятнее, зачем возвращаться: живые релизы продолжают зарабатывать.',
-    target: true, placement: 'top', cta: 'Нажми «Релизнуть игру»',
+    id: 'release', eyebrow: t('tutorial.release.eyebrow'), title: t('tutorial.release.title'),
+    body: t('tutorial.release.body'),
+    target: true, placement: 'top', cta: t('tutorial.release.cta'),
   },
   developTab: {
-    id: 'develop-tab', eyebrow: 'Вернёмся к игре', title: 'Открой разработку',
-    body: 'Первый релиз начинается на экране разработки. Остальные разделы пригодятся после первой игры.',
-    target: true, placement: 'bottom', cta: 'Нажми «Разработка»',
+    id: 'develop-tab', eyebrow: t('tutorial.developTab.eyebrow'), title: t('tutorial.developTab.title'),
+    body: t('tutorial.developTab.body'),
+    target: true, placement: 'bottom', cta: t('tutorial.developTab.cta'),
   },
 } satisfies Record<string, TutorialGuideStep>;
 
@@ -877,7 +994,7 @@ function GuidedTutorialOverlay({ state, onSkip }: { state: GameState; onSkip: ()
         <p>{step.body}</p>
         <div className="guided-tutorial-footer">
           <span>{step.cta}</span>
-          <button className="ghost" type="button" onClick={onSkip}>Пропустить</button>
+          <button className="ghost" type="button" onClick={onSkip}>{t('tutorial.skip')}</button>
         </div>
       </section>
     </div>
@@ -901,11 +1018,11 @@ function StudioScreen({ state, onNewProject, update, taskOverrides, onOfficeOpen
     <div className="stack">
       <section className="studio-summary comic-card">
         <div>
-          <p className="eyebrow">Студия</p>
-          <h2>{state.studioName || 'Новая студия'}</h2>
-          <p className="muted">Скорость ×{speed.toFixed(2)} · Доход ×{income.toFixed(2)} · Релизов: {state.gamesReleased}</p>
+          <p className="eyebrow">{t('nav.studio')}</p>
+          <h2>{state.studioName || t('studio.defaultName')}</h2>
+          <p className="muted">{t('studio.summary', { speed: speed.toFixed(2), income: income.toFixed(2), count: state.gamesReleased })}</p>
         </div>
-        <div className="mini-ledger"><span>Слоты</span><b>{state.employees.length}/{employeeSlotsForLevel(state.level)}</b><span>Активные игры</span><b>{state.activeGames.length}</b></div>
+        <div className="mini-ledger"><span>{t('studio.slots')}</span><b>{state.employees.length}/{employeeSlotsForLevel(state.level)}</b><span>{t('studio.activeGames')}</span><b>{state.activeGames.length}</b></div>
       </section>
 
       <StudioOfficeCard onOpen={onOfficeOpen} />
@@ -917,12 +1034,12 @@ function StudioScreen({ state, onNewProject, update, taskOverrides, onOfficeOpen
       <AudiencePanel state={state} update={update} />
 
       <div className="stats-grid">
-        <Stat label="Лучший рейтинг" value={state.bestScore ? `${state.bestScore}/10` : '—'} icon="trophy" />
-        <Stat label="Активные игры" value={`${state.activeGames.length}`} icon="chart" />
-        <Stat label="Контент" value={`${state.unlockedGenreIds.length}/${genres.length}`} icon="gamepad" />
+        <Stat label={t('studio.bestRating')} value={state.bestScore ? `${state.bestScore}/10` : '—'} icon="trophy" />
+        <Stat label={t('studio.activeGames')} value={`${state.activeGames.length}`} icon="chart" />
+        <Stat label={t('studio.content')} value={`${state.unlockedGenreIds.length}/${genres.length}`} icon="gamepad" />
       </div>
 
-      {dailyReady && <button className="daily-card comic-card" onClick={() => void claimBackendDailyReward()}><span>ЕЖЕДНЕВНЫЙ ВХОД</span> Забрать +1 ⭐ и +500 🪙</button>}
+      {dailyReady && <button className="daily-card comic-card" onClick={() => void claimBackendDailyReward()}><span>{t('studio.dailyLogin')}</span> {t('studio.dailyLoginReward')}</button>}
       <DailyTasks state={state} update={update} taskOverrides={taskOverrides} />
       <StudioGoals state={state} update={update} taskOverrides={taskOverrides} />
       <DailyContractCard state={state} update={update} />
@@ -939,11 +1056,11 @@ function StudioOfficeCard({ onOpen }: { onOpen: () => void }) {
     <section className="studio-office-card comic-card">
       <div className="studio-office-copy">
         <div>
-          <p className="eyebrow">Офис студии</p>
-          <h2>Офис студии</h2>
-          <p className="muted">Твой рабочий штаб, где рождаются проекты</p>
+          <p className="eyebrow">{t('studio.office')}</p>
+          <h2>{t('studio.office')}</h2>
+          <p className="muted">{t('studio.officeDesc')}</p>
         </div>
-        <button className="primary" type="button" onClick={onOpen}>Посмотреть офис</button>
+        <button className="primary" type="button" onClick={onOpen}>{t('studio.officeOpen')}</button>
       </div>
       <div
   className="studio-office-preview"
@@ -978,10 +1095,10 @@ function StudioOfficeModal({ onClose }: { onClose: () => void }) {
       <section className="release-modal comic-card studio-office-modal" onClick={(event) => event.stopPropagation()}>
         <div className="studio-office-modal-head">
           <div>
-            <p className="eyebrow">рабочий штаб</p>
-            <h2 id="studio-office-modal-title">Офис студии</h2>
+            <p className="eyebrow">{t('studio.officeEyebrow')}</p>
+            <h2 id="studio-office-modal-title">{t('studio.office')}</h2>
           </div>
-          <button className="ghost studio-office-close" type="button" onClick={onClose} aria-label="Закрыть офис студии">×</button>
+          <button className="ghost studio-office-close" type="button" onClick={onClose} aria-label={t('studio.officeCloseAria')}>×</button>
         </div>
         <div
   className="studio-office-modal-scene"
@@ -1008,11 +1125,11 @@ function HireEntryCard({ state, update }: { state: GameState; update: (fn: (stat
   return (
     <section className="hire-entry-card comic-card">
       <div>
-        <p className="eyebrow">Команда</p>
-        <h3>Найм сотрудников</h3>
-        <p className="muted">Открыто мест: {state.employees.length}/{slots}. Усиль скорость разработки и доход релизов.</p>
+        <p className="eyebrow">{t('studio.team')}</p>
+        <h3>{t('studio.hiring')}</h3>
+        <p className="muted">{t('studio.hireDesc', { used: state.employees.length, slots })}</p>
       </div>
-      <button className="primary" onClick={() => update((current) => ({ ...current, screen: 'hire' }))}>Открыть найм</button>
+      <button className="primary" onClick={() => update((current) => ({ ...current, screen: 'hire' }))}>{t('studio.openHiring')}</button>
     </section>
   );
 }
@@ -1021,8 +1138,8 @@ function GameClock({ state, expenses, nextRentDay }: { state: GameState; expense
   const gameDate = gameDateParts(state.gameDay);
   return (
     <section className="time-card comic-card">
-      <div><p className="eyebrow">Игровое время</p><h3>День {displayGameDay(state.gameDay)}</h3></div>
-      <div className="mini-ledger"><span>След. списание</span><b>{nextRentDay === 0 ? 'сегодня' : `${nextRentDay} дн.`}</b><span>Расход/нед.</span><b>🪙 {money(expenses)}</b></div>
+      <div><p className="eyebrow">{t('studio.gameTime')}</p><h3>{t('common.day', { day: displayGameDay(state.gameDay) })}</h3></div>
+      <div className="mini-ledger"><span>{t('studio.nextWriteOff')}</span><b>{nextRentDay === 0 ? t('common.today') : t('common.daysShort', { days: nextRentDay })}</b><span>{t('studio.weeklyCost')}</span><b>🪙 {money(expenses)}</b></div>
     </section>
   );
 }
@@ -1031,11 +1148,11 @@ function GameClock({ state, expenses, nextRentDay }: { state: GameState; expense
 function BankruptcyNotice({ state }: { state: GameState }) {
   if (state.coins >= 0 && state.unpaidSinceMonth === null && state.closureWarningMonth === null) return null;
   const stage = state.closureWarningMonth !== null
-    ? 'Команда уже ушла. Если долг сохранится ещё месяц, рейтинг будет обнулён.'
+    ? t('studio.debtStageClosed')
     : state.unpaidSinceMonth !== null
-      ? 'Зарплата не выплачивается уже несколько игровых дней. Верни баланс в плюс, чтобы не потерять команду.'
-      : 'Баланс отрицательный. Можно уйти до -50 000, но зарплаты под угрозой.';
-  return <section className="bankruptcy-card comic-card"><p className="eyebrow">Финансовая тревога</p><h3>Студия в минусе: {money(state.coins)} 🪙</h3><p>{stage}</p></section>;
+      ? t('studio.debtStageUnpaid')
+      : t('studio.debtStageNegative');
+  return <section className="bankruptcy-card comic-card"><p className="eyebrow">{t('studio.financeAlarm')}</p><h3>{t('studio.debtTitle', { coins: money(state.coins) })}</h3><p>{stage}</p></section>;
 }
 
 function StudioUpgradePanel({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -1046,11 +1163,11 @@ function StudioUpgradePanel({ state, update }: { state: GameState; update: (fn: 
   return (
     <section className="studio-upgrade comic-card">
       <div className="section-head compact">
-        <div><p className="eyebrow">Уровень студии</p><h3>Ур. {state.level}/4 · слоты команды {slots}</h3></div>
-        <span className="pill">долгий рост</span>
+        <div><p className="eyebrow">{t('studio.levelTitle')}</p><h3>{t('studio.levelLine', { level: state.level, slots })}</h3></div>
+        <span className="pill">{t('studio.longGrowth')}</span>
       </div>
-      <p className="muted">Прокачка покупается за монеты. Улучшение студии открывает новые слоты команды. Больше сотрудников повышают эффективность разработки и релизов, но расходы на студию тоже вырастут.</p>
-      {nextCost ? <button className="primary wide" disabled={!canUpgrade} onClick={() => update(upgradeStudio)}>Улучшить до ур. {state.level + 1}: +{nextSlots - slots} слотов · {money(nextCost)} 🪙</button> : <button className="ghost wide" disabled>Максимальный уровень студии</button>}
+      <p className="muted">{t('studio.upgradeDesc')}</p>
+      {nextCost ? <button className="primary wide" disabled={!canUpgrade} onClick={() => update(upgradeStudio)}>{t('studio.upgradeButton', { level: state.level + 1, slots: nextSlots - slots, cost: money(nextCost) })}</button> : <button className="ghost wide" disabled>{t('studio.maxLevel')}</button>}
     </section>
   );
 }
@@ -1058,12 +1175,12 @@ function StudioUpgradePanel({ state, update }: { state: GameState; update: (fn: 
 function NewsPanel({ state }: { state: GameState }) {
   return (
     <section className="news-panel comic-card">
-      <div className="section-head compact"><div><p className="eyebrow">Глобальный рынок</p><h3>Активные события</h3></div><span className="pill">влияют сейчас</span></div>
+      <div className="section-head compact"><div><p className="eyebrow">{t('studio.market')}</p><h3>{t('studio.activeEvents')}</h3></div><span className="pill">{t('studio.affectsNow')}</span></div>
       {state.activeMarketEvents.length ? (
         <div className="market-events">
-          {state.activeMarketEvents.map((event) => <article key={event.id} className={`market-event ${event.tone}`}><strong>{event.title}</strong><p>{event.description}</p><small>{event.daysRemaining} дн. · продажи ×{event.salesMultiplier.toFixed(2)} · оценки {event.scoreModifier > 0 ? '+' : ''}{event.scoreModifier.toFixed(2)}</small></article>)}
+          {state.activeMarketEvents.map((event) => <article key={event.id} className={`market-event ${event.tone}`}><strong>{localizedMarketEventTitle(event)}</strong><p>{localizedMarketEventDescription(event)}</p><small>{t('studio.marketEventMeta', { days: event.daysRemaining, sales: event.salesMultiplier.toFixed(2), score: `${event.scoreModifier > 0 ? '+' : ''}${event.scoreModifier.toFixed(2)}` })}</small></article>)}
         </div>
-      ) : <p className="muted">Активных глобальных событий нет. Это нормально: рынок спокоен, релизы зависят в основном от качества и интереса аудитории.</p>}
+      ) : <p className="muted">{t('studio.noMarketEvents')}</p>}
     </section>
   );
 }
@@ -1077,16 +1194,16 @@ function AudiencePanel({ state, update }: { state: GameState; update: (fn: (stat
   return (
     <section className="audience-card comic-card">
       <div className="section-head compact">
-        <div><p className="eyebrow">Интересы аудитории</p><h3>Интересы аудитории</h3></div>
-        <span className="pill">платный скан</span>
+        <div><p className="eyebrow">{t('studio.audienceInterests')}</p><h3>{t('studio.audienceInterests')}</h3></div>
+        <span className="pill">{t('studio.paidScan')}</span>
       </div>
       {revealed ? (
         <div className="audience-reveal">
-          <p className="muted">Скан показывает текущие интересы рынка: жанр, сеттинг и платформу.</p>
-          <div className="insight-tags"><span>{genre?.emoji} Жанр: {genre?.name}</span><span>{theme?.emoji} Сеттинг: {theme?.name}</span><span>{platform?.emoji} Платформа: {platform?.name}</span></div>
+          <p className="muted">{t('studio.scanDesc')}</p>
+          <div className="insight-tags"><span>{genre?.emoji} {t('studio.genreLabel')}: {localizedName(genre)}</span><span>{theme?.emoji} {t('studio.themeLabel')}: {localizedName(theme)}</span><span>{platform?.emoji} {t('studio.platformLabel')}: {localizedName(platform)}</span></div>
         </div>
       ) : (
-        <div className="hidden-audience"><p className="muted">Интересы аудитории скрыты. Скан откроет жанр, сеттинг и платформу, которые сейчас сильнее интересуют игроков.</p><button disabled={state.coins < scanCost} onClick={() => update(revealAudience)}>Открыть за 🪙 {scanCost}</button></div>
+        <div className="hidden-audience"><p className="muted">{t('studio.hiddenAudience')}</p><button disabled={state.coins < scanCost} onClick={() => update(revealAudience)}>{t('studio.openForCoins', { cost: scanCost })}</button></div>
       )}
     </section>
   );
@@ -1094,8 +1211,8 @@ function AudiencePanel({ state, update }: { state: GameState; update: (fn: (stat
 
 
 function ReleaseArchive({ state }: { state: GameState }) {
-  if (!state.releaseHistory.length) return <section className="panel comic-card empty-panel"><h3>Архив релизов</h3><p className="muted">После первых релизов здесь появится история всех выпущенных игр и их оценок.</p></section>;
-  return <section className="panel comic-card"><div className="section-head compact"><h3>Архив релизов</h3><span className="pill">все оценки студии</span></div><div className="release-archive-list">{[...state.releaseHistory].reverse().map((entry, index) => <article className="release-archive-row" key={`${entry.title}-${entry.day}-${index}`}><div><strong>{entry.title}</strong><p>{genres.find((genre) => genre.id === entry.genre)?.name} · {themes.find((theme) => theme.id === entry.theme)?.name}</p></div><div className="archive-score-box"><b>{entry.score.toFixed(1)}</b><span>день {entry.day}</span></div></article>)}</div></section>;
+  if (!state.releaseHistory.length) return <section className="panel comic-card empty-panel"><h3>{t('studio.releaseArchive')}</h3><p className="muted">{t('studio.releaseArchiveEmpty')}</p></section>;
+  return <section className="panel comic-card"><div className="section-head compact"><h3>{t('studio.releaseArchive')}</h3><span className="pill">{t('studio.allStudioScores')}</span></div><div className="release-archive-list">{[...state.releaseHistory].reverse().map((entry, index) => <article className="release-archive-row" key={`${entry.title}-${entry.day}-${index}`}><div><strong>{entry.title}</strong><p>{localizedName(genres.find((genre) => genre.id === entry.genre))} · {localizedName(themes.find((theme) => theme.id === entry.theme))}</p></div><div className="archive-score-box"><b>{entry.score.toFixed(1)}</b><span>{t('studio.dayLower', { day: entry.day })}</span></div></article>)}</div></section>;
 }
 
 function DailyTasks({ state, update, taskOverrides }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {
@@ -1108,7 +1225,7 @@ function DailyTasks({ state, update, taskOverrides }: { state: GameState; update
   });
   return (
     <section className="panel daily-tasks comic-card">
-      <div className="section-head"><div><p className="eyebrow">Ежедневные задачи</p><h3>Забери награды за активность</h3></div><span className="pill">сброс раз в 24 ч</span></div>
+      <div className="section-head"><div><p className="eyebrow">{t('studio.dailyTasks')}</p><h3>{t('studio.dailyTasksTitle')}</h3></div><span className="pill">{t('studio.dailyReset')}</span></div>
       {tasks.map((task) => {
         const key = getTaskKey(task.id);
         const claimed = Boolean(state.dailyTaskClaims[key]);
@@ -1133,28 +1250,28 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
   if (!goals.length) return null;
   return (
     <section className="panel daily-tasks comic-card">
-      <div className="section-head"><div><p className="eyebrow">Цели студии</p><h3>Долгий путь инди-команды</h3></div><button className="ghost" type="button" onClick={() => setOpen((value) => !value)}>{open ? 'Свернуть' : 'Показать все'}</button></div>
+      <div className="section-head"><div><p className="eyebrow">{t('studio.studioGoals')}</p><h3>{t('studio.studioGoalsTitle')}</h3></div><button className="ghost" type="button" onClick={() => setOpen((value) => !value)}>{open ? t('studio.collapse') : t('studio.showAll')}</button></div>
       {visibleGoals.map((goal) => {
         const claimed = Boolean(state.studioGoalClaims[goal.id]);
         const ready = goal.current >= goal.target && !claimed;
         const progress = taskProgressPercent(goal.current, goal.target);
         return <article className="task-card" key={goal.id}><div><strong>{goal.title}</strong><p>{goal.desc}</p><ProgressBar value={progress} /></div><button disabled={!ready} onClick={() => claim(goal)}>{claimed ? '✅' : ready ? rewardLabel(goal.reward) : Math.min(Math.round(goal.current), goal.target) + '/' + goal.target}</button></article>;
       })}
-      <p className="small muted">Готово: {completed}/{goals.length}</p>
+      <p className="small muted">{t('studio.completed', { done: completed, total: goals.length })}</p>
     </section>
   );
 }
 
 function ActiveGames({ state }: { state: GameState }) {
-  if (!state.activeGames.length) return <section className="panel comic-card empty-panel"><h3>Срок жизни игр</h3><p className="muted">После релиза игры будут жить 5–30 игровых дней, приносить пассивный доход и ловить события популярности.</p></section>;
+  if (!state.activeGames.length) return <section className="panel comic-card empty-panel"><h3>{t('studio.gameLifetime')}</h3><p className="muted">{t('studio.gameLifetimeEmpty')}</p></section>;
   return (
     <section className="panel comic-card">
-      <div className="section-head compact"><h3>Живые релизы</h3><span className="pill">пассивный доход</span></div>
+      <div className="section-head compact"><h3>{t('studio.liveReleases')}</h3><span className="pill">{t('studio.passiveIncome')}</span></div>
       <div className="live-games">
         {state.activeGames.slice(0, 5).map((game) => (
           <article className="live-game" key={game.id}>
-            <div><strong>{game.title}</strong><p>{game.lifeDaysRemaining}/{game.maxLifeDays} дн. · популярность ×{game.popularity.toFixed(2)}</p><small>{game.lastEvent}</small></div>
-            <b>~{money(game.baseDailyIncome * game.popularity)} 🪙/день</b>
+            <div><strong>{game.title}</strong><p>{t('studio.lifeAndPopularity', { left: game.lifeDaysRemaining, max: game.maxLifeDays, popularity: game.popularity.toFixed(2) })}</p><small>{localizedSavedText(game.lastEvent)}</small></div>
+            <b>{t('studio.perDay', { coins: money(game.baseDailyIncome * game.popularity) })}</b>
           </article>
         ))}
       </div>
@@ -1166,8 +1283,8 @@ function Ledger({ state }: { state: GameState }) {
   if (!state.lastLedger.length) return null;
   return (
     <section className="panel comic-card">
-      <div className="section-head compact"><h3>Финансовая лента</h3><span className="pill">последние события</span></div>
-      {state.lastLedger.slice(-4).reverse().map((entry) => <div className={entry.kind === 'expense' ? 'ledger-row expense' : 'ledger-row'} key={entry.id}><span>День {entry.day}: {entry.title}</span><b>{entry.amount > 0 ? '+' : ''}{money(entry.amount)} 🪙</b></div>)}
+      <div className="section-head compact"><h3>{t('studio.ledger')}</h3><span className="pill">{t('studio.latestEvents')}</span></div>
+      {state.lastLedger.slice(-4).reverse().map((entry) => <div className={entry.kind === 'expense' ? 'ledger-row expense' : 'ledger-row'} key={entry.id}><span>{t('studio.ledgerRow', { day: entry.day, title: localizedSavedText(entry.title) })}</span><b>{entry.amount > 0 ? '+' : ''}{money(entry.amount)} 🪙</b></div>)}
     </section>
   );
 }
@@ -1198,47 +1315,64 @@ function DevelopScreen({ state, update }: { state: GameState; update: (fn: (stat
 
   return (
     <div className="stack develop-screen">
-      <div className="section-head hero-title"><div><p className="eyebrow">Новая игра</p><input className="project-name" value={project.name} maxLength={28} onChange={(event) => update((current) => ({ ...current, selectedProject: { ...(current.selectedProject ?? project), name: sanitizeProjectName(event.target.value) } }))} /></div></div>
+      <div className="section-head hero-title"><div><p className="eyebrow">{t('develop.newGame')}</p><input className="project-name" value={project.name} maxLength={28} onChange={(event) => update((current) => ({ ...current, selectedProject: { ...(current.selectedProject ?? project), name: sanitizeProjectName(event.target.value) } }))} /></div></div>
 
-      <ChoiceBlock title="1. Жанр" items={availableGenres} selected={project.genre} onSelect={(id) => update((current) => setProjectChoice(current, 'genre', id as GenreId))} tutorialTarget={!state.tutorialDone && state.tutorialStep <= 0} />
-      <ChoiceBlock title="2. Сеттинг" items={availableThemes} selected={project.theme} onSelect={(id) => update((current) => setProjectChoice(current, 'theme', id as ThemeId))} itemHint={hasProductInstinct && project.genre ? (id) => comboFor(project.genre!, id as ThemeId) : undefined} hint={!hasProductInstinct ? 'Исследуй «Продуктовое чутьё», чтобы видеть комбо и фокус.' : undefined} tutorialTarget={!state.tutorialDone && state.tutorialStep === 1} />
-      <ChoiceBlock title="3. Платформа" items={platforms.filter((item) => item.unlockLevel <= state.level || item.id === 'micro_pc')} selected={project.platform} onSelect={(id) => update((current) => setProjectChoice(current, 'platform', id as PlatformId))} tutorialTarget={!state.tutorialDone && state.tutorialStep === 2} />
+      <ChoiceBlock kind="genre" title={t('develop.genreStep')} items={availableGenres} selected={project.genre} onSelect={(id) => update((current) => setProjectChoice(current, 'genre', id as GenreId))} tutorialTarget={!state.tutorialDone && state.tutorialStep <= 0} />
+      <ChoiceBlock kind="theme" title={t('develop.themeStep')} items={availableThemes} selected={project.theme} onSelect={(id) => update((current) => setProjectChoice(current, 'theme', id as ThemeId))} itemHint={hasProductInstinct && project.genre ? (id) => comboFor(project.genre!, id as ThemeId) : undefined} hint={!hasProductInstinct ? t('develop.lockedInsightHint') : undefined} tutorialTarget={!state.tutorialDone && state.tutorialStep === 1} />
+      <ChoiceBlock kind="platform" title={t('develop.platformStep')} items={platforms.filter((item) => item.unlockLevel <= state.level || item.id === 'micro_pc')} selected={project.platform} onSelect={(id) => update((current) => setProjectChoice(current, 'platform', id as PlatformId))} tutorialTarget={!state.tutorialDone && state.tutorialStep === 2} />
 
       {hasChoices && <EconomyPreview state={state} project={project} devCost={devCost} duration={duration} />}
       {hasProductInstinct && insight ? <ProductInstinctPanel insight={insight} /> : <LockedInsight />}
       <AudiencePanel state={state} update={update} />
       <FocusEditor project={project} update={update} />
 
-      <button className={!state.tutorialDone && state.tutorialStep >= 3 ? "release-button tutorial-target" : "release-button"} disabled={!hasChoices || state.coins - devCost < -50000} onClick={() => update(startProject)}>{state.coins - devCost < -50000 ? `Лимит долга: -50 000 🪙` : `Начать разработку · ${money(devCost)} 🪙`}</button>
+      <button className={!state.tutorialDone && state.tutorialStep >= 3 ? "release-button tutorial-target" : "release-button"} disabled={!hasChoices || state.coins - devCost < -50000} onClick={() => update(startProject)}>{state.coins - devCost < -50000 ? t('develop.debtLimit') : t('develop.startDevelopmentCost', { cost: money(devCost) })}</button>
     </div>
   );
 }
 
 
 function ActiveDevelopmentPanel({ project, state, update }: { project: Project; state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
-  const canSkip = project.progress < 100 && !project.pendingDevEvent && state.stars >= 25;
-  const canUseFreeFirstPromotion = project.progress >= 100 && state.gamesReleased === 0 && !Boolean(project.promotionUsed) && !Boolean(state.studioGoalClaims?.['ftue-free-promotion-v1']);
-  const canPromote = !project.promotionUsed && (canUseFreeFirstPromotion || state.stars >= 35);
-  const promotionLabel = project.promotionUsed
-    ? `Продвижение +${(project.promotionBoost ?? 0).toFixed(1)}`
-    : canUseFreeFirstPromotion
-      ? 'Продвижение бесплатно'
-      : 'Продвижение ⭐35';
+  const [busyAction, setBusyAction] = useState<'skip' | 'promote' | null>(null);
+  const backendReady = hasBackendSession();
+  const canTrySkip = project.progress < 100 && !project.pendingDevEvent;
+  const canTryPromote = project.progress >= 100 && !project.promotionUsed;
+
+  const runBackendOrLocal = async (action: 'skip' | 'promote') => {
+    if (busyAction) return;
+    setBusyAction(action);
+    try {
+      if (backendReady) {
+        const nextState = await runDevelopmentAction(action, {}, action === 'skip' ? 'time_skip' : 'promotion');
+        if (nextState) {
+          update(() => nextState);
+          haptic('success');
+          return;
+        }
+        haptic('warning');
+      }
+
+      if (action === 'skip') update(timeSkipProject);
+      if (action === 'promote') update(promoteProject);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   return (
     <div className="panel active-dev comic-card solo-dev-card">
-      <div className="section-head compact"><div><p className="eyebrow">Активная разработка</p><h3>{project.name}</h3></div></div>
-      <div className="progress-fx active-progress-fx"><ProgressBar value={project.progress} label={`${Math.floor(project.progress)}%`} />{project.progress < 100 && <DevelopmentAmbientFx />}{project.progress < 100 && <DevelopmentTicker project={project} />}<DevPop project={project} />{project.devEventText?.startsWith('ПРОМО') && <PromotionBurst trigger={project.devEventId ?? 'promo'} />}</div>
+      <div className="section-head compact"><div><p className="eyebrow">{t('develop.activeDevelopment')}</p><h3>{project.name}</h3></div></div>
+      <div className="progress-fx active-progress-fx"><ProgressBar value={project.progress} label={`${Math.floor(project.progress)}%`} />{project.progress < 100 && <DevelopmentAmbientFx />}{project.progress < 100 && <DevelopmentTicker project={project} />}<DevPop project={project} />{project.devEventText?.startsWith('\u041f\u0420\u041e\u041c\u041e') && <PromotionBurst trigger={project.devEventId ?? 'promo'} />}</div>
       <div className="dev-tools-row">
         {project.progress >= 100 ? (
-          <button className="primary" onClick={() => update(promoteProject)} disabled={!canPromote}>{promotionLabel}</button>
+          <button className="primary" onClick={() => runBackendOrLocal('promote')} disabled={!canTryPromote || busyAction === 'promote' || (!backendReady && state.stars < 35)}>{project.promotionUsed ? t('develop.promotionBoost', { boost: (project.promotionBoost ?? 0).toFixed(1) }) : busyAction === 'promote' ? t('common.opening') : t('develop.promotionStars')}</button>
         ) : (
-          <span className="dev-status-pill">Идёт разработка</span>
+          <span className="dev-status-pill">{t('develop.inProgress')}</span>
         )}
-        {project.progress < 100 && <button className="time-skip-button" disabled={!canSkip} onClick={() => update(timeSkipProject)}>Ускорить на 1ч ⭐25</button>}
+        {project.progress < 100 && <button className="time-skip-button" disabled={!canTrySkip || busyAction === 'skip' || (!backendReady && state.stars < 15)} onClick={() => runBackendOrLocal('skip')}>{busyAction === 'skip' ? t('common.opening') : backendReady && state.stars < 15 ? t('develop.speedUpTelegram') : t('develop.speedUpQuarter')}</button>}
       </div>
-      <p className="small muted">События ставят разработку на паузу. Если появилась карточка события — выбери решение, чтобы продолжить.</p>
       {project.devDecisionLog?.length ? <div className="decision-log">{project.devDecisionLog.map((item) => <span key={item}>{item}</span>)}</div> : null}
-      {project.progress >= 100 && <button className="release-button" onClick={() => update(releaseProject)}>Релизнуть игру</button>}
+      {project.progress >= 100 && <button className={!state.tutorialDone && project.isTutorial ? 'release-button tutorial-target' : 'release-button'} onClick={() => update(releaseProject)}>{t('develop.releaseGameShort')}</button>}
     </div>
   );
 }
@@ -1248,8 +1382,8 @@ function EconomyPreview({ state, project, devCost, duration }: { state: GameStat
   const genre = genres.find((item) => item.id === project.genre);
   return (
     <section className="economy-preview comic-card">
-      <div><p className="eyebrow">Бюджет проекта</p><h3>{money(devCost)} 🪙 · {Math.ceil(duration / 60)} мин.</h3><p className="muted">Сложность зависит от жанра, платформы, длительности и технологий.</p></div>
-      <div className="mini-ledger"><span>Жанр</span><b>×{(genre?.difficulty ?? 1).toFixed(2)}</b><span>Тех</span><b>×{(platform?.techComplexity ?? 1).toFixed(2)}</b></div>
+      <div><p className="eyebrow">{t('develop.projectBudget')}</p><h3>{t('develop.budgetMeta', { cost: money(devCost), minutes: Math.ceil(duration / 60) })}</h3><p className="muted">{t('develop.budgetDesc')}</p></div>
+      <div className="mini-ledger"><span>{t('studio.genreLabel')}</span><b>×{(genre?.difficulty ?? 1).toFixed(2)}</b><span>{t('develop.tech')}</span><b>×{(platform?.techComplexity ?? 1).toFixed(2)}</b></div>
     </section>
   );
 }
@@ -1257,31 +1391,31 @@ function EconomyPreview({ state, project, devCost, duration }: { state: GameStat
 function ProductInstinctPanel({ insight }: { insight: NonNullable<ReturnType<typeof projectInsight>> }) {
   return (
     <section className={`product-instinct comic-card combo-${insight.combo.toLowerCase()}`}>
-      <div className="section-head compact"><div><p className="eyebrow">Продуктовое чутьё</p><h3>Комбо: {comboLabel(insight.combo)}</h3></div><span className="pill">открыто</span></div>
-      <p className="muted">{insight.note}</p>
-      {(['pre', 'production', 'post'] as const).map((phase) => <div className="focus-hint" key={phase}><strong>{phase === 'pre' ? 'Идея и прототип' : phase === 'production' ? 'Сборка игры' : 'Полировка'}</strong><span>{prioritySentence(insight.recommendedFocus, phase)}</span></div>)}
+      <div className="section-head compact"><div><p className="eyebrow">{t('develop.productInstinct')}</p><h3>{t('develop.combo', { combo: comboLabel(insight.combo) })}</h3></div><span className="pill">{t('develop.unlocked')}</span></div>
+      <p className="muted">{localizedProjectInsightNote() ?? insight.note}</p>
+      {(['pre', 'production', 'post'] as const).map((phase) => <div className="focus-hint" key={phase}><strong>{phaseTitle(phase)}</strong><span>{prioritySentence(insight.recommendedFocus, phase)}</span></div>)}
     </section>
   );
 }
 
 function LockedInsight() {
-  return <section className="locked-insight comic-card"><strong>🔒 Комбо и фокус скрыты</strong><p className="muted">Открой исследование «Продуктовое чутьё», чтобы видеть сочетания жанра/сеттинга и короткие приоритеты без точных процентов.</p></section>;
+  return <section className="locked-insight comic-card"><strong>{t('develop.comboLockedTitle')}</strong><p className="muted">{t('develop.comboLockedDesc')}</p></section>;
 }
 
 function FocusEditor({ project, update }: { project: Project; update: (fn: (state: GameState) => GameState) => void }) {
   return (
     <div className="panel comic-card">
-      <div className="section-head compact"><h3>4. Фокус разработки</h3><span className="muted">100% на фазу</span></div>
-      {(['pre', 'production', 'post'] as const).map((phase) => <div className="focus-card" key={phase}><strong>{phase === 'pre' ? 'Идея и прототип' : phase === 'production' ? 'Сборка игры' : 'Полировка'}</strong>{phaseLabels[phase].map((label, index) => <label key={label}><span>{label}</span><input type="range" min="0" max="100" value={project.focus[phase][index]} onChange={(event) => { const value = Number(event.target.value); update((current) => { const currentProject = current.selectedProject ?? project; return { ...current, tutorialStep: current.tutorialDone ? current.tutorialStep : Math.max(current.tutorialStep, 3), selectedProject: { ...currentProject, focus: { ...currentProject.focus, [phase]: normalizeFocus(currentProject.focus[phase], index, value) } } }; }); }} /><b>{project.focus[phase][index]}%</b></label>)}</div>)}
+      <div className="section-head compact"><h3>{t('develop.focusStep')}</h3><span className="muted">{t('develop.focusPercent')}</span></div>
+      {(['pre', 'production', 'post'] as const).map((phase) => <div className="focus-card" key={phase}><strong>{phaseTitle(phase)}</strong>{phaseLabelsForUi(phase).map((label, index) => <label key={label}><span>{label}</span><input type="range" min="0" max="100" value={project.focus[phase][index]} onChange={(event) => { const value = Number(event.target.value); update((current) => { const currentProject = current.selectedProject ?? project; return { ...current, tutorialStep: current.tutorialDone ? current.tutorialStep : Math.max(current.tutorialStep, 3), selectedProject: { ...currentProject, focus: { ...currentProject.focus, [phase]: normalizeFocus(currentProject.focus[phase], index, value) } } }; }); }} /><b>{project.focus[phase][index]}%</b></label>)}</div>)}
     </div>
   );
 }
 
-function ChoiceBlock({ title, items, selected, onSelect, hint, itemHint, tutorialTarget = false }: { title: string; items: Array<{ id: string; name: string; emoji: string }>; selected: string | null; onSelect: (id: string) => void; hint?: string; itemHint?: (id: string) => string; tutorialTarget?: boolean }) {
+function ChoiceBlock({ kind, title, items, selected, onSelect, hint, itemHint, tutorialTarget = false }: { kind: 'genre' | 'theme' | 'platform'; title: string; items: Array<{ id: string; name: string; nameEn?: string; emoji: string }>; selected: string | null; onSelect: (id: string) => void; hint?: string; itemHint?: (id: string) => string; tutorialTarget?: boolean }) {
   return (
     <div className="panel comic-card">
       <div className="section-head compact"><h3>{title}</h3>{hint && <span className="muted small">{hint}</span>}</div>
-      <div className="chips">{items.map((item) => { const hintValue = itemHint?.(item.id); const iconName: IconName = title.includes('Жанр') ? 'genre' : title.includes('Сеттинг') ? 'theme' : 'platform'; return <button key={item.id} className={`${selected === item.id ? 'chip selected' : 'chip'} ${hintValue ? `combo-${hintValue.toLowerCase()}` : ''}`} onClick={() => onSelect(item.id)}><ItemIcon id={item.id} fallback={iconName} /> <span>{item.name}</span>{hintValue && <em>{hintValue}</em>}</button>; })}</div>
+      <div className="chips">{items.map((item) => { const hintValue = itemHint?.(item.id); const iconName: IconName = kind; return <button key={item.id} className={`${selected === item.id ? 'chip selected' : 'chip'} ${hintValue ? `combo-${hintValue.toLowerCase()}` : ''}`} onClick={() => onSelect(item.id)}><ItemIcon id={item.id} fallback={iconName} /> <span>{localizedName(item)}</span>{hintValue && <em>{comboLabel(hintValue as 'Great' | 'Good' | 'Neutral' | 'Bad')}</em>}</button>; })}</div>
     </div>
   );
 }
@@ -1313,11 +1447,11 @@ function HireScreen({ state, update }: { state: GameState; update: (fn: (state: 
   };
   return (
     <div className="stack">
-      <div className="section-head hero-title"><div><p className="eyebrow">Биржа талантов</p><h2>Команда студии</h2></div><span className="pill">{state.employees.length}/{slots} слотов</span></div>
-      {slots === 0 && <section className="locked-insight comic-card"><strong>🔒 Найм закрыт на ур. 1</strong><p className="muted">Прокачай студию до ур. 2 за монеты, чтобы открыть первые 3 места в команде.</p></section>}
-      {state.employees.length > 0 && <section className="panel comic-card"><div className="section-head compact"><h3>Нанятые сотрудники</h3><span className="pill">можно увольнять</span></div><div className="cards-list compact-list">{state.employees.map((employee) => <article className="employee-card hired comic-card" key={employee.id}><div className="avatar"><Icon name={roleIcon(employee.role)} /></div><div><h3>{employee.name}</h3><p className="muted">{employee.role} · ур. {employee.level} · {employee.specialization}</p><p className="small employee-metrics">{employeeMetrics(employee)}</p></div><button className="danger" onClick={() => update((current) => fireEmployee(current, employee.id))}>Уволить</button></article>)}</div></section>}
-      <div className="cards-list">{available.map((employee) => { const cost = Math.round(employee.cost * hireDiscount); return <article className="employee-card comic-card" key={employee.id}><div className="avatar"><Icon name={roleIcon(employee.role)} /></div><div><h3>{employee.name}</h3><p className="muted">{employee.role} · ур. {employee.level} · {employee.specialization}</p><p className="small employee-metrics">{employeeMetrics(employee)}</p></div><button disabled={state.coins < cost || state.employees.length >= slots} onClick={() => hire(employee)}>🪙 {money(cost)}</button></article>; })}</div>
-      <button className="ghost wide" disabled={!canRefresh} onClick={refreshPool}>Обновить кандидатов ⭐10{canRefresh ? '' : ' · недостаточно ⭐'}</button>
+      <div className="section-head hero-title"><div><p className="eyebrow">{t('hire.market')}</p><h2>{t('hire.team')}</h2></div><span className="pill">{t('hire.slots', { used: state.employees.length, slots })}</span></div>
+      {slots === 0 && <section className="locked-insight comic-card"><strong>{t('hire.lockedTitle')}</strong><p className="muted">{t('hire.lockedDesc')}</p></section>}
+      {state.employees.length > 0 && <section className="panel comic-card"><div className="section-head compact"><h3>{t('hire.hired')}</h3><span className="pill">{t('hire.canFire')}</span></div><div className="cards-list compact-list">{state.employees.map((employee) => <article className="employee-card hired comic-card" key={employee.id}><div className="avatar"><Icon name={roleIcon(employee.role)} /></div><div><h3>{employee.name}</h3><p className="muted">{roleLabel(employee.role)} · {t('hire.levelShort', { level: employee.level })} · {specializationLabel(employee)}</p><p className="small employee-metrics">{employeeMetrics(employee)}</p></div><button className="danger" onClick={() => update((current) => fireEmployee(current, employee.id))}>{t('hire.fire')}</button></article>)}</div></section>}
+      <div className="cards-list">{available.map((employee) => { const cost = Math.round(employee.cost * hireDiscount); return <article className="employee-card comic-card" key={employee.id}><div className="avatar"><Icon name={roleIcon(employee.role)} /></div><div><h3>{employee.name}</h3><p className="muted">{roleLabel(employee.role)} · {t('hire.levelShort', { level: employee.level })} · {specializationLabel(employee)}</p><p className="small employee-metrics">{employeeMetrics(employee)}</p></div><button disabled={state.coins < cost || state.employees.length >= slots} onClick={() => hire(employee)}>🪙 {money(cost)}</button></article>; })}</div>
+      <button className="ghost wide" disabled={!canRefresh} onClick={refreshPool}>{canRefresh ? t('hire.refresh') : t('hire.refreshDisabled')}</button>
     </div>
   );
 }
@@ -1326,9 +1460,9 @@ function formatProductInstinctTime(ms: number) {
   const safe = Math.max(0, Math.floor(ms));
   const days = Math.floor(safe / 86_400_000);
   const hours = Math.floor((safe % 86_400_000) / 3_600_000);
-  if (days > 0) return days + ' д. ' + hours + ' ч.';
+  if (days > 0) return t('common.daysHoursShort', { days, hours });
   const minutes = Math.max(1, Math.floor((safe % 3_600_000) / 60_000));
-  return hours > 0 ? hours + ' ч. ' + minutes + ' мин.' : minutes + ' мин.';
+  return hours > 0 ? t('common.hoursMinutesShort', { hours, minutes }) : t('common.minutesShort', { minutes });
 }
 
 function ResearchScreen({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -1356,7 +1490,7 @@ function ResearchScreen({ state, update }: { state: GameState; update: (fn: (sta
       const next = await purchaseShopItem('product_instinct');
       if (!next) {
         haptic('warning');
-        window.Telegram?.WebApp?.showPopup?.({ message: 'Не удалось активировать Продуктовое чутьё. Попробуй ещё раз.', buttons: [{ type: 'ok' }] });
+        window.Telegram?.WebApp?.showPopup?.({ message: t('research.activateFailed'), buttons: [{ type: 'ok' }] });
         return;
       }
       haptic('success');
@@ -1369,24 +1503,24 @@ function ResearchScreen({ state, update }: { state: GameState; update: (fn: (sta
   const unlockRandomTheme = () => update((current) => { const locked = themes.filter((item) => !current.unlockedThemeIds.includes(item.id)); if (current.rp < 22 || locked.length === 0) return current; const theme = locked[randomIndex(locked.length)]; haptic('success'); return { ...current, rp: current.rp - 22, unlockedThemeIds: [...current.unlockedThemeIds, theme.id], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 }; });
   return (
     <div className="stack">
-      <div className="section-head hero-title"><div><p className="eyebrow">Лаборатория идей</p><h2>Исследования</h2></div><span className="pill">{state.unlockedResearchIds.length}/{researchNodes.length}</span></div>
+      <div className="section-head hero-title"><div><p className="eyebrow">{t('research.lab')}</p><h2>{t('research.title')}</h2></div><span className="pill">{state.unlockedResearchIds.length}/{researchNodes.length}</span></div>
       <article className={productActive ? 'research-node unlocked comic-card premium-research-card timed-product-instinct' : 'research-node comic-card premium-research-card timed-product-instinct'}>
         <div>
-          <p className="eyebrow">Премиальный навык · 7 дней</p>
-          <strong>{productActive ? '✅ ' : ''}{productInstinct.title}</strong>
-          <span>{productInstinct.description}</span>
-          <em>{productActive ? 'Активно ещё ' + formatProductInstinctTime(productRemaining) : '⭐ ' + productStarCost + ' или ' + referralTarget + ' друзей с релизом 6.5+ · сейчас ' + qualifiedReferrals + '/' + referralTarget}</em>
+          <p className="eyebrow">{t('research.premiumSkill')}</p>
+          <strong>{productActive ? '✅ ' : ''}{localizedTitle(productInstinct)}</strong>
+          <span>{localizedDescription(productInstinct)}</span>
+          <em>{productActive ? t('research.activeFor', { time: formatProductInstinctTime(productRemaining) }) : t('research.productCost', { stars: productStarCost, target: referralTarget, current: qualifiedReferrals })}</em>
         </div>
         {productActive ? (
-          <button className="primary" disabled>Активно</button>
+          <button className="primary" disabled>{t('button.active')}</button>
         ) : canUnlockByReferrals ? (
-          <button className="primary" disabled={productPending} onClick={activateProductByReferrals}>Активировать за друзей</button>
+          <button className="primary" disabled={productPending} onClick={activateProductByReferrals}>{t('research.activateFriends')}</button>
         ) : (
-          <button className="primary" disabled={productPending} onClick={activateProductByPayment}>{productPending ? 'Активируем…' : 'Активировать за ⭐' + productStarCost}</button>
+          <button className="primary" disabled={productPending} onClick={activateProductByPayment}>{productPending ? t('research.activating') : t('research.activateStars', { stars: productStarCost })}</button>
         )}
       </article>
-      <div className="unlock-grid"><button className="unlock-card comic-card" disabled={state.rp < 24 || lockedGenres.length === 0} onClick={unlockRandomGenre}><strong><Icon name="genre" /> Новый случайный жанр</strong><span>{lockedGenres.length ? 'Осталось: ' + lockedGenres.length : 'Все жанры открыты'}</span><em>🧪 24</em></button><button className="unlock-card comic-card" disabled={state.rp < 22 || lockedThemes.length === 0} onClick={unlockRandomTheme}><strong><Icon name="theme" /> Новый случайный сеттинг</strong><span>{lockedThemes.length ? 'Осталось: ' + lockedThemes.length : 'Все сеттинги открыты'}</span><em>🧪 22</em></button></div>
-      <div className="research-grid">{otherResearch.map((node) => { const unlocked = state.unlockedResearchIds.includes(node.id); const lockedByRequirement = node.requires ? !state.unlockedResearchIds.includes(node.requires) : false; return <button key={node.id} className={unlocked ? 'research-node unlocked comic-card' : 'research-node comic-card'} disabled={unlocked || lockedByRequirement || state.rp < node.cost} onClick={() => update((current) => { if (current.rp < node.cost || current.unlockedResearchIds.includes(node.id)) return current; haptic('success'); return { ...current, rp: current.rp - node.cost, unlockedResearchIds: [...current.unlockedResearchIds, node.id], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 }; })}><strong>{unlocked ? '✅ ' : ''}{node.title}</strong><span>{lockedByRequirement ? 'Сначала нужно предыдущее исследование.' : node.description}</span><em>{unlocked ? node.effect : '🧪 ' + node.cost}</em></button>; })}</div>
+      <div className="unlock-grid"><button className="unlock-card comic-card" disabled={state.rp < 24 || lockedGenres.length === 0} onClick={unlockRandomGenre}><strong><Icon name="genre" /> {t('research.randomGenre')}</strong><span>{lockedGenres.length ? t('research.left', { count: lockedGenres.length }) : t('research.allGenresOpen')}</span><em>🧪 24</em></button><button className="unlock-card comic-card" disabled={state.rp < 22 || lockedThemes.length === 0} onClick={unlockRandomTheme}><strong><Icon name="theme" /> {t('research.randomTheme')}</strong><span>{lockedThemes.length ? t('research.left', { count: lockedThemes.length }) : t('research.allThemesOpen')}</span><em>🧪 22</em></button></div>
+      <div className="research-grid">{otherResearch.map((node) => { const unlocked = state.unlockedResearchIds.includes(node.id); const lockedByRequirement = node.requires ? !state.unlockedResearchIds.includes(node.requires) : false; return <button key={node.id} className={unlocked ? 'research-node unlocked comic-card' : 'research-node comic-card'} disabled={unlocked || lockedByRequirement || state.rp < node.cost} onClick={() => update((current) => { if (current.rp < node.cost || current.unlockedResearchIds.includes(node.id)) return current; haptic('success'); return { ...current, rp: current.rp - node.cost, unlockedResearchIds: [...current.unlockedResearchIds, node.id], dailyResearchUnlocked: current.dailyResearchUnlocked + 1 }; })}><strong>{unlocked ? '✅ ' : ''}{localizedTitle(node)}</strong><span>{lockedByRequirement ? t('research.requiresPrevious') : localizedDescription(node)}</span><em>{unlocked ? localizedEffect(node) : '🧪 ' + node.cost}</em></button>; })}</div>
     </div>
   );
 }
@@ -1397,25 +1531,25 @@ function ShopScreen({ state, update, onRenameStudio }: { state: GameState; updat
   const [purchaseResult, setPurchaseResult] = useState<{ title: string; reward: string } | null>(null);
   const renameCost = 15;
   const sku = [
-    { id: 'starter_pack', title: 'Стартовый набор', desc: '5 000 монет и 50 очков науки для быстрого рывка', price: 79, reward: '+5 000 🪙 и +50 🧪' },
-    { id: 'coins_5k', title: 'Набор монет', desc: '+5 000 монет', price: 39, reward: '+5 000 🪙' },
-    { id: 'coins_25k', title: 'Большой набор монет', desc: '+25 000 монет', price: 149, reward: '+25 000 🪙' },
-    { id: 'coins_100k', title: 'Мега-набор монет', desc: '+100 000 монет', price: 399, reward: '+100 000 🪙' },
-    { id: 'research_boost', title: 'Ускорение науки', desc: '+50 очков исследований', price: 69, reward: '+50 🧪' },
+    { id: 'starter_pack', title: t('shop.starterPack'), desc: t('shop.starterPackDesc'), price: 79, reward: `+${money(5000)} 🪙 +50 🧪` },
+    { id: 'coins_5k', title: t('shop.coinsPack'), desc: t('shop.coinsPackDesc'), price: 39, reward: `+${money(5000)} 🪙` },
+    { id: 'coins_25k', title: t('shop.bigCoinsPack'), desc: t('shop.bigCoinsPackDesc'), price: 149, reward: `+${money(25000)} 🪙` },
+    { id: 'coins_100k', title: t('shop.megaCoinsPack'), desc: t('shop.megaCoinsPackDesc'), price: 399, reward: `+${money(100000)} 🪙` },
+    { id: 'research_boost', title: t('shop.researchBoost'), desc: t('shop.researchBoostDesc'), price: 69, reward: '+50 🧪' },
   ] as const;
 
   const statusText = (status: string) => status === 'checking_balance'
-    ? 'Проверяем игровой баланс ⭐…'
+    ? t('shop.checkingBalance')
     : status === 'opening_invoice'
-      ? 'Открываем оплату Telegram Stars…'
+      ? t('shop.openingInvoice')
       : status === 'checking_payment'
-        ? 'Проверяем оплату…'
+        ? t('shop.checkingPayment')
         : status === 'credited'
-          ? 'Начислено!'
+          ? t('shop.credited')
           : status === 'cancelled'
-            ? 'Оплата закрыта.'
+            ? t('shop.cancelled')
             : status === 'failed'
-              ? 'Покупку не удалось завершить.'
+              ? t('shop.failed')
               : '';
 
   const buy = async (item: { id: string; title: string; reward: string }, after?: () => void) => {
@@ -1437,9 +1571,9 @@ function ShopScreen({ state, update, onRenameStudio }: { state: GameState; updat
     }
   };
 
-  const renameItem = { id: 'rename_studio', title: 'Смена названия', reward: 'Можно выбрать новое имя студии' };
+  const renameItem = { id: 'rename_studio', title: t('shop.renameTitle'), reward: t('shop.renameReward') };
 
-  return <div className="stack"><div className="section-head hero-title"><div><p className="eyebrow">Звёзды</p><h2>Магазин студии</h2></div><span className="pill">полезные улучшения</span></div><section className="shop-card comic-card shop-balance-card"><div><p className="eyebrow">Баланс звёзд</p><h3>{state.stars} ⭐</h3><p>Если звёзд хватает, покупка пройдёт сразу. Если нет — Telegram предложит оплатить покупку.</p></div><b>покупки через ⭐</b></section>{pendingItem && <section className="shop-card comic-card shop-status-panel"><div><h3>{statusText(purchaseStatus) || 'Обрабатываем покупку…'}</h3><p>Завершаем покупку. Пожалуйста, не закрывай окно оплаты.</p></div><b>⏳</b></section>}<article className="shop-card comic-card"><div><h3>Переименовать студию</h3><p>Сейчас: {state.studioName || 'Без названия'}. Позволяет выбрать новое имя для студии.</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(renameItem, onRenameStudio)}>{pendingItem === 'rename_studio' ? statusText(purchaseStatus) || '…' : `⭐${renameCost}`}</button></article><div className="shop-list">{sku.map((item) => <article className="shop-card comic-card" key={item.id}><div><h3>{item.title}</h3><p>{item.desc}</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(item)}>{pendingItem === item.id ? statusText(purchaseStatus) || '…' : `⭐${item.price}`}</button></article>)}</div>{purchaseResult && <div className="modal-backdrop"><section className="release-modal offer comic-card purchase-success-modal"><span className="badge">начислено</span><h2>{purchaseResult.title}</h2><p className="muted">На баланс добавлено: {purchaseResult.reward}</p><button className="primary wide" onClick={() => setPurchaseResult(null)}>Отлично</button></section></div>}</div>;
+  return <div className="stack"><div className="section-head hero-title"><div><p className="eyebrow">{t('shop.stars')}</p><h2>{t('shop.title')}</h2></div><span className="pill">{t('shop.usefulUpgrades')}</span></div><section className="shop-card comic-card shop-balance-card"><div><p className="eyebrow">{t('shop.starBalance')}</p><h3>{state.stars} ⭐</h3><p>{t('shop.balanceDesc')}</p></div><b>{t('shop.starPurchases')}</b></section>{pendingItem && <section className="shop-card comic-card shop-status-panel"><div><h3>{statusText(purchaseStatus) || t('shop.processingPurchase')}</h3><p>{t('shop.processingDesc')}</p></div><b>⏳</b></section>}<article className="shop-card comic-card"><div><h3>{t('shop.renameStudio')}</h3><p>{t('shop.currentName', { name: state.studioName || t('shop.noName') })}</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(renameItem, onRenameStudio)}>{pendingItem === 'rename_studio' ? statusText(purchaseStatus) || '…' : `⭐${renameCost}`}</button></article><div className="shop-list">{sku.map((item) => <article className="shop-card comic-card" key={item.id}><div><h3>{item.title}</h3><p>{item.desc}</p></div><button disabled={Boolean(pendingItem)} onClick={() => buy(item)}>{pendingItem === item.id ? statusText(purchaseStatus) || '…' : `⭐${item.price}`}</button></article>)}</div>{purchaseResult && <div className="modal-backdrop"><section className="release-modal offer comic-card purchase-success-modal"><span className="badge">{t('shop.credited')}</span><h2>{purchaseResult.title}</h2><p className="muted">{t('shop.purchaseAdded', { reward: purchaseResult.reward })}</p><button className="primary wide" onClick={() => setPurchaseResult(null)}>{t('shop.excellent')}</button></section></div>}</div>;
 }
 
 function maskTonWallet(address: string) {
@@ -1454,10 +1588,10 @@ function isLikelyTonWallet(address: string) {
 }
 
 function tonWalletMessage(error?: 'invalid' | 'auth' | 'backend' | 'unknown') {
-  if (error === 'invalid') return 'Проверь формат TON-адреса и попробуй ещё раз.';
-  if (error === 'auth') return 'Не удалось подтвердить Telegram-сессию. Перезапусти игру из Telegram.';
-  if (error === 'backend') return 'Не удалось сохранить кошелёк. Попробуй после обновления сервера.';
-  return 'Не удалось сохранить кошелёк. Попробуй ещё раз.';
+  if (error === 'invalid') return t('wallet.invalid');
+  if (error === 'auth') return t('wallet.auth');
+  if (error === 'backend') return t('wallet.backend');
+  return t('wallet.saveFailed');
 }
 
 function TonWalletPanel() {
@@ -1497,7 +1631,7 @@ function TonWalletPanel() {
     setWallet(result.address);
     setInput('');
     setStatus('saved');
-    setMessage('Кошелёк привязан. Он будет использоваться для еженедельных наград.');
+    setMessage(t('wallet.boundMessage'));
   };
 
   const unlink = async () => {
@@ -1508,17 +1642,17 @@ function TonWalletPanel() {
     if (!ok) {
       haptic('warning');
       setStatus('error');
-      setMessage('Не удалось отвязать кошелёк. Попробуй ещё раз.');
+      setMessage(t('wallet.unlinkFailed'));
       return;
     }
     haptic('success');
     setWallet('');
     setInput('');
     setStatus('idle');
-    setMessage('Кошелёк отвязан.');
+    setMessage(t('wallet.unboundMessage'));
   };
 
-  return <section className="panel comic-card ton-wallet-card"><div className="section-head compact"><div><p className="eyebrow">TON-кошелёк</p><h3>Кошелёк для наград</h3></div><span className="pill">еженедельный топ-10</span></div><p className="muted">Привяжи TON-кошелёк, чтобы получать вознаграждения за место в еженедельном топ-10.</p>{wallet ? <div className="ton-wallet-bound"><div><span>Привязан</span><strong>{maskTonWallet(wallet)}</strong></div><button className="ghost" disabled={status === 'saving'} onClick={unlink}>{status === 'saving' ? 'Отвязываем…' : 'Отвязать'}</button></div> : <div className="ton-wallet-form"><input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Вставь адрес TON-кошелька" inputMode="text" autoComplete="off" /><button className="primary" disabled={!canBind} onClick={bind}>{status === 'saving' ? 'Сохраняем…' : 'Привязать'}</button></div>}{message && <p className={status === 'error' ? 'small danger-text' : 'small muted'}>{message}</p>}{!wallet && cleanInput && !isLikelyTonWallet(cleanInput) && <p className="small muted">Адрес должен быть в формате TON, например начинаться с EQ или UQ.</p>}</section>;
+  return <section className="panel comic-card ton-wallet-card"><div className="section-head compact"><div><p className="eyebrow">{t('wallet.eyebrow')}</p><h3>{t('wallet.title')}</h3></div><span className="pill">{t('wallet.weeklyTop')}</span></div><p className="muted">{t('wallet.desc')}</p>{wallet ? <div className="ton-wallet-bound"><div><span>{t('wallet.bound')}</span><strong>{maskTonWallet(wallet)}</strong></div><button className="ghost" disabled={status === 'saving'} onClick={unlink}>{status === 'saving' ? t('wallet.unbinding') : t('button.unbind')}</button></div> : <div className="ton-wallet-form"><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={t('wallet.placeholder')} inputMode="text" autoComplete="off" /><button className="primary" disabled={!canBind} onClick={bind}>{status === 'saving' ? t('wallet.saving') : t('button.bind')}</button></div>}{message && <p className={status === 'error' ? 'small danger-text' : 'small muted'}>{message}</p>}{!wallet && cleanInput && !isLikelyTonWallet(cleanInput) && <p className="small muted">{t('wallet.formatHint')}</p>}</section>;
 }
 
 function RatingScreen({ state }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -1549,13 +1683,14 @@ function RatingScreen({ state }: { state: GameState; update: (fn: (state: GameSt
     });
   };
   return <div className="stack">
-    <section className="rating-hero comic-panel"><p className="eyebrow">Недельный топ-10</p><h2>Рейтинг лучших игр за неделю</h2><p className="muted">В топ попадают только проверенные релизы недели. Один игрок может занимать только одну позицию.</p></section>
-    <div className="panel comic-card current-prize-card"><div><p className="eyebrow">Текущая награда</p><h3>{yourPlace ? `Ты на #${yourPlace}` : 'Пока вне топ-10'}</h3><p className="muted">{currentPrize ? `Если неделя закончится сейчас, твоя награда — ${currentPrize}.` : 'Выпусти сильный релиз, чтобы попасть в призовую десятку.'}</p></div><strong>{currentPrize ?? '0 ⭐'}</strong></div>
-    <section className="panel comic-card rating-formula"><div className="section-head compact"><h3>Как считается рейтинг</h3><span className="pill">{money(rating.total)}</span></div><p className="muted">Формула ниже показывает ориентир по твоей студии. Призовой топ считается только по проверенным релизам.</p><div className="score-breakdown-list">{rating.items.map(([label, value]) => <div className={value >= 0 ? 'score-line bonus' : 'score-line penalty'} key={label}><span>{label}</span><b>{value >= 0 ? '+' : ''}{money(value)}</b></div>)}</div></section>
-    <div className="panel comic-card"><div className="section-head compact"><h3>Призовой фонд 3000 ⭐</h3><span className="pill">топ-10</span></div><div className="prize-grid">{prizeDistribution.map(([amount, percent], index) => <div className={yourIndex === index ? 'prize-cell current' : 'prize-cell'} key={`${amount}-${index}`}><span>#{index + 1}</span><strong>{amount}</strong><em>{percent}</em></div>)}</div></div>
-    <div className="panel comic-card"><h3>Лучшие игры недели</h3>{leaderboardLoaded && leaderboard.length === 0 ? <p className="muted">Реальных релизов в рейтинге пока нет. Первые строки появятся после проверенных релизов.</p> : null}{!leaderboardLoaded ? <p className="muted">Загружаем рейтинг…</p> : null}{leaderboard.map((row, index) => { const isYou = myTelegramId && String(row.telegramId) === myTelegramId; return <div className={isYou ? 'leader-row you' : 'leader-row'} key={row.telegramId || row.displayName || index}><span>#{index + 1}</span><div><strong>{row.bestTitle || 'Релиз'}</strong><p>{isYou ? 'Ты' : row.displayName || 'Игрок'}</p></div><b>{money(Number(row.score || 0))}</b></div>; })}</div>
-    <section className="panel comic-card referral-panel"><div className="section-head compact"><div><p className="eyebrow">Партнёрская программа</p><h3>2 уровня приглашений</h3></div><span className="pill">доход от друзей</span></div><p className="muted">Приглашай друзей и получай долю от их покупок. В зачёт идут только активные студии: друг должен пройти старт, выпустить игру и получить оценку 6.5 или выше.</p><div className="referral-grid"><article><b>1 уровень</b><strong>{directRefs}</strong><span>10% от покупок приглашённых друзей</span></article><article><b>2 уровень</b><strong>{secondRefs}</strong><span>3% от покупок друзей твоих друзей</span></article></div><div className="referral-note"><strong>Как засчитывается друг</strong><span>Нужен завершённый релиз с оценкой 6.5+ — такие друзья помогают открывать «Продуктовое чутьё» и продвигают тебя к разовым наградам.</span></div><div className="milestone-list">{REFERRAL_MILESTONES.map((item) => { const claimed = Boolean(state.referralMilestoneClaims?.[item.id]); const ready = directRefs >= item.target; return <button key={item.id} className={claimed ? 'milestone claimed' : 'milestone'} disabled={!ready || claimed} onClick={() => claimMilestone(item.id)}><span>{item.label}</span><b>{claimed ? 'Получено' : `+${money(item.reward.coins)} 🪙 +${item.reward.rp} 🧪`}</b></button>; })}</div></section>
-    <button className="primary wide" onClick={() => shareRelease(`Заходи в DevStudio Tycoon и запускай свои хиты вместе со мной!`, { url: 'https://t.me/devstudio_bot?start=ref_demo', imageUrl: undefined, storyText: 'DevStudio Tycoon — приглашаю в студию!' })}>Поделиться реферальной ссылкой</button>
+    <section className="rating-hero comic-panel"><p className="eyebrow">{t('rating.weeklyTop')}</p><h2>{t('rating.title')}</h2><p className="muted">{t('rating.desc')}</p></section>
+    <TonWalletPanel />
+    <div className="panel comic-card current-prize-card"><div><p className="eyebrow">{t('rating.currentPrize')}</p><h3>{yourPlace ? t('rating.youAt', { place: yourPlace }) : t('rating.outsideTop')}</h3><p className="muted">{currentPrize ? t('rating.prizeIfNow', { prize: currentPrize }) : t('rating.makeStrongRelease')}</p></div><strong>{currentPrize ?? '0 ⭐'}</strong></div>
+    <section className="panel comic-card rating-formula"><div className="section-head compact"><h3>{t('rating.formulaTitle')}</h3><span className="pill">{money(rating.total)}</span></div><p className="muted">{t('rating.formulaDesc')}</p><div className="score-breakdown-list">{rating.items.map(([label, value]) => <div className={value >= 0 ? 'score-line bonus' : 'score-line penalty'} key={label}><span>{label}</span><b>{value >= 0 ? '+' : ''}{money(value)}</b></div>)}</div></section>
+    <div className="panel comic-card"><div className="section-head compact"><h3>{t('rating.prizePool')}</h3><span className="pill">{t('rating.top10')}</span></div><div className="prize-grid">{prizeDistribution.map(([amount, percent], index) => <div className={yourIndex === index ? 'prize-cell current' : 'prize-cell'} key={`${amount}-${index}`}><span>#{index + 1}</span><strong>{amount}</strong><em>{percent}</em></div>)}</div></div>
+    <div className="panel comic-card"><h3>{t('rating.bestGames')}</h3>{leaderboardLoaded && leaderboard.length === 0 ? <p className="muted">{t('rating.empty')}</p> : null}{!leaderboardLoaded ? <p className="muted">{t('rating.loading')}</p> : null}{leaderboard.map((row, index) => { const isYou = myTelegramId && String(row.telegramId) === myTelegramId; return <div className={isYou ? 'leader-row you' : 'leader-row'} key={row.telegramId || row.displayName || index}><span>#{index + 1}</span><div><strong>{row.bestTitle || t('rating.releaseFallback')}</strong><p>{isYou ? t('rating.you') : row.displayName || t('rating.player')}</p></div><b>{money(Number(row.score || 0))}</b></div>; })}</div>
+    <section className="panel comic-card referral-panel"><div className="section-head compact"><div><p className="eyebrow">{t('rating.referralProgram')}</p><h3>{t('rating.inviteLevels')}</h3></div><span className="pill">{t('rating.friendIncome')}</span></div><p className="muted">{t('rating.referralDesc')}</p><div className="referral-grid"><article><b>{t('rating.level1')}</b><strong>{directRefs}</strong><span>{t('rating.level1Desc')}</span></article><article><b>{t('rating.level2')}</b><strong>{secondRefs}</strong><span>{t('rating.level2Desc')}</span></article></div><div className="referral-note"><strong>{t('rating.friendCreditTitle')}</strong><span>{t('rating.friendCreditDesc')}</span></div><div className="milestone-list">{REFERRAL_MILESTONES.map((item) => { const claimed = Boolean(state.referralMilestoneClaims?.[item.id]); const ready = directRefs >= item.target; return <button key={item.id} className={claimed ? 'milestone claimed' : 'milestone'} disabled={!ready || claimed} onClick={() => claimMilestone(item.id)}><span>{t(item.labelKey)}</span><b>{claimed ? t('contract.received') : `+${money(item.reward.coins)} 🪙 +${item.reward.rp} 🧪`}</b></button>; })}</div></section>
+    <button className="primary wide" onClick={() => shareRelease(t('rating.referralShareText'), { url: 'https://t.me/DevTycoon_bot?startapp=ref_demo', imageUrl: undefined, storyText: t('rating.referralStoryText') })}>{t('rating.shareReferral')}</button>
   </div>;
 }
 
@@ -1563,21 +1698,39 @@ function RatingScreen({ state }: { state: GameState; update: (fn: (state: GameSt
 function formatDevChoiceEffect(choice: DevEventChoice) {
   const effect = choice.effect;
   const parts: string[] = [];
-  if (effect.coins) parts.push(effect.coins < 0 ? `стоит ${money(Math.abs(effect.coins))} монет` : `+${money(effect.coins)} монет`);
-  if (effect.stars) parts.push(effect.stars < 0 ? `стоит ${Math.abs(effect.stars)} ⭐` : `+${effect.stars} ⭐`);
-  if (effect.rp) parts.push(effect.rp < 0 ? `-${Math.abs(effect.rp)} очков науки` : `+${effect.rp} очков науки`);
-  if (effect.progress) parts.push(effect.progress < 0 ? `${effect.progress}% прогресса` : `+${effect.progress}% прогресса`);
-  if (effect.score) parts.push(effect.score < 0 ? `${effect.score.toFixed(2)} к оценке` : `+${effect.score.toFixed(2)} к оценке`);
-  if (effect.salesMultiplier && effect.salesMultiplier !== 1) parts.push(effect.salesMultiplier > 1 ? `доход ×${effect.salesMultiplier.toFixed(2)}` : `доход ×${effect.salesMultiplier.toFixed(2)}`);
-  return parts.length ? parts.join(' · ') : 'без числового эффекта';
+  if (effect.coins) parts.push(effect.coins < 0 ? t('devEvent.effectCoinsCost', { value: money(Math.abs(effect.coins)) }) : t('devEvent.effectCoinsGain', { value: money(effect.coins) }));
+  if (effect.stars) parts.push(effect.stars < 0 ? t('devEvent.effectStarsCost', { value: Math.abs(effect.stars) }) : t('devEvent.effectStarsGain', { value: effect.stars }));
+  if (effect.rp) parts.push(effect.rp < 0 ? t('devEvent.effectScienceCost', { value: Math.abs(effect.rp) }) : t('devEvent.effectScienceGain', { value: effect.rp }));
+  if (effect.progress) parts.push(effect.progress < 0 ? t('devEvent.effectProgressLoss', { value: effect.progress }) : t('devEvent.effectProgressGain', { value: effect.progress }));
+  if (effect.score) parts.push(effect.score < 0 ? t('devEvent.effectScoreLoss', { value: effect.score.toFixed(2) }) : t('devEvent.effectScoreGain', { value: effect.score.toFixed(2) }));
+  if (effect.salesMultiplier && effect.salesMultiplier !== 1) parts.push(t('devEvent.effectIncome', { value: effect.salesMultiplier.toFixed(2) }));
+  return parts.length ? parts.join(' · ') : t('devEvent.noNumericEffect');
 }
 
 function lockedDevChoiceReason(state: GameState, choice: DevEventChoice) {
   const effect = choice.effect;
-  if ((effect.stars ?? 0) < 0 && state.stars < Math.abs(effect.stars ?? 0)) return `не хватает ${Math.abs(effect.stars ?? 0)} ⭐`;
-  if ((effect.rp ?? 0) < 0 && state.rp < Math.abs(effect.rp ?? 0)) return `не хватает ${Math.abs(effect.rp ?? 0)} очков науки`;
-  if ((effect.coins ?? 0) < 0 && state.coins + (effect.coins ?? 0) < -50000) return 'превысит лимит долга −50 000 монет';
+  if ((effect.stars ?? 0) < 0 && state.stars < Math.abs(effect.stars ?? 0)) return t('devEvent.notEnoughStars', { value: Math.abs(effect.stars ?? 0) });
+  if ((effect.rp ?? 0) < 0 && state.rp < Math.abs(effect.rp ?? 0)) return t('devEvent.notEnoughScience', { value: Math.abs(effect.rp ?? 0) });
+  if ((effect.coins ?? 0) < 0 && state.coins + (effect.coins ?? 0) < -50000) return t('devEvent.debtLimit');
   return null;
+}
+
+function localizedDevScenarioTitle(scenario: { title: string; titleEn?: string }) {
+  return getLanguage() === 'en' ? scenario.titleEn ?? t('devEvent.genericTitle') : scenario.title;
+}
+
+function localizedDevScenarioBody(scenario: { body: string; bodyEn?: string }) {
+  return getLanguage() === 'en' ? scenario.bodyEn ?? t('devEvent.genericBody') : scenario.body;
+}
+
+function localizedDevChoiceLabel(choice: DevEventChoice) {
+  if (getLanguage() === 'ru') return choice.label;
+  return choice.labelEn ?? (choice.id === 'a' ? t('devEvent.choiceA') : t('devEvent.choiceB'));
+}
+
+function localizedDevChoiceResult(choice: DevEventChoice) {
+  if (getLanguage() === 'ru') return choice.result;
+  return choice.resultEn ?? (choice.id === 'a' ? t('devEvent.resultA') : t('devEvent.resultB'));
 }
 
 function DevelopmentEventModal({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -1587,23 +1740,23 @@ function DevelopmentEventModal({ state, update }: { state: GameState; update: (f
   return (
     <div className="modal-backdrop dev-event-backdrop">
       <section role="dialog" aria-modal="true" aria-labelledby="dev-event-title" className={`dev-event-modal comic-card tone-${scenario.tone}`}>
-        <p className="eyebrow">Событие разработки · пауза на {Math.floor(pending.triggeredAtProgress)}%</p>
-        <h2 id="dev-event-title">{scenario.title}</h2>
-        <p className="muted">{scenario.body}</p>
+        <p className="eyebrow">{t('devEvent.eyebrow', { progress: Math.floor(pending.triggeredAtProgress) })}</p>
+        <h2 id="dev-event-title">{localizedDevScenarioTitle(scenario)}</h2>
+        <p className="muted">{localizedDevScenarioBody(scenario)}</p>
         <div className="dev-event-choices">
           {scenario.choices.map((choice, index) => {
             const rawLocks = scenario.choices.map((item) => lockedDevChoiceReason(state, item));
             const lockedReason = rawLocks.every(Boolean) && index === 0 ? null : rawLocks[index];
             return (
               <button key={choice.id} disabled={Boolean(lockedReason)} className={lockedReason ? 'choice-locked' : ''} onClick={() => update((current) => resolveDevelopmentEvent(current, choice.id))}>
-                <strong>{choice.label}</strong>
-                <span>{choice.result}</span>
-                <em>{lockedReason ? `Заблокировано: ${lockedReason}` : formatDevChoiceEffect(choice)}</em>
+                <strong>{localizedDevChoiceLabel(choice)}</strong>
+                <span>{localizedDevChoiceResult(choice)}</span>
+                <em>{lockedReason ? t('devEvent.locked', { reason: lockedReason }) : formatDevChoiceEffect(choice)}</em>
               </button>
             );
           })}
         </div>
-        <p className="small muted">Разработка продолжится только после выбора. Перед выбором видно, что именно изменится у проекта и ресурсов.</p>
+        <p className="small muted">{t('devEvent.continueHint')}</p>
       </section>
     </div>
   );
@@ -1615,6 +1768,36 @@ function criticToneClass(score: number) {
   if (score >= 5) return 'critic-score-mid';
   if (score >= 3.1) return 'critic-score-low';
   return 'critic-score-bad';
+}
+
+function localizedQualityLabel(label: string, score: number) {
+  if (getLanguage() === 'ru') return label;
+  if (score >= 9) return 'Hit!';
+  if (score >= 7.5) return 'Strong release';
+  if (score >= 6) return 'Good start';
+  return 'Needs polish';
+}
+
+function localizedCriticName(name: string, index: number) {
+  if (getLanguage() === 'ru') return name;
+  return ['Pixel Today', 'Indie Radar', 'Game Week', 'Build Report'][index % 4] ?? 'Game Press';
+}
+
+function localizedCriticQuote(score: number, quote: string) {
+  if (getLanguage() === 'ru') return quote;
+  if (score >= 9) return 'A confident, memorable release with real spark.';
+  if (score >= 7.5) return 'A strong game that knows what players came for.';
+  if (score >= 6) return 'A solid release with a few rough edges.';
+  if (score >= 4) return 'Good ideas are here, but the build needs more polish.';
+  return 'The project needed more time before release.';
+}
+
+function localizedScoreBreakdownLabel(item: ScoreBreakdownItem, combo: string) {
+  if (item.label.startsWith('\u041a\u043e\u043c\u0431\u043e')) return t('release.comboLabel', { combo: comboLabel(combo as 'Great' | 'Good' | 'Neutral' | 'Bad') });
+  if (getLanguage() === 'ru') return item.label;
+  if (item.kind === 'base') return t('develop.focusStep').replace(/^4\.\s*/, '');
+  if (item.kind === 'random') return t('scoreHelp.randomTitle');
+  return item.value >= 0 ? 'Release bonus' : 'Release penalty';
 }
 
 function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
@@ -1653,26 +1836,26 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
   return (
     <div className="modal-backdrop release-backdrop">
       <section className="release-modal comic-card animated-release" role="dialog" aria-modal="true" aria-labelledby="release-title">
-        <p className="eyebrow">Релиз состоялся</p>
+        <p className="eyebrow">{t('release.eyebrow')}</p>
         <h2 id="release-title">{result.projectName}</h2>
         <div className={`release-score-top ${showFinal ? criticToneClass(result.score) : ''}`}>
           {showFinal ? (
             <div className="score-stage">
               <ConfettiBurst />
               <strong className="big-score">{result.score}/10</strong>
-              <span className="quality">{result.qualityLabel} · Комбо: {comboLabel(result.combo)}</span>
-              <span className="critic-average-note">Средняя оценка изданий: {result.criticAverage}/10. Итоговая оценка игры считается отдельно и учитывает модификаторы ниже.</span>
+              <span className="quality">{t('release.qualityLine', { quality: localizedQualityLabel(result.qualityLabel, result.score), combo: comboLabel(result.combo) })}</span>
+              <span className="critic-average-note">{t('release.criticAverage', { average: result.criticAverage })}</span>
             </div>
           ) : (
-            <div className="score-suspense">Издания готовят оценки…</div>
+            <div className="score-suspense">{t('release.suspense')}</div>
           )}
         </div>
         <div className="critic-grid animated-critics release-critic-grid-2x2">
           {result.critics.map((critic, index) => (
             <div className={`${step > index ? 'critic-card shown' : 'critic-card'} ${step > index ? criticToneClass(critic.score) : ''}`} key={critic.name}>
-              <span>{critic.name}</span>
+              <span>{localizedCriticName(critic.name, index)}</span>
               <b>{step > index ? critic.score : '…'}</b>
-              <em>{step > index ? critic.quote : 'читают билд'}</em>
+              <em>{step > index ? localizedCriticQuote(critic.score, critic.quote) : t('release.readingBuild')}</em>
             </div>
           ))}
         </div>
@@ -1680,13 +1863,13 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
         {showMoney && (
           <>
             <div className="score-breakdown">
-              <div className="section-head compact"><h3>Как сложилась итоговая оценка</h3><span className="pill">итог {result.score}/10</span></div>
-              <p>Карточки изданий выше — это отдельные оценки прессы. Итоговая оценка релиза не равна их среднему арифметическому: она считается из базового качества проекта и модификаторов ниже.</p>
+              <div className="section-head compact"><h3>{t('release.scoreBreakdown')}</h3><span className="pill">{t('release.finalScore', { score: result.score })}</span></div>
+              <p>{t('release.breakdownDesc')}</p>
               <div className="score-breakdown-list">
-                                                                                                                                                {result.scoreBreakdown.map((item) => {
-                  const displayLabel = item.label === `Комбо ${result.combo}` ? `Комбо: ${comboLabel(result.combo)}` : item.label;
+                                                                                                                                                                {result.scoreBreakdown.map((item) => {
+                  const displayLabel = localizedScoreBreakdownLabel(item, result.combo);
                   const info = scoreExplanation(item);
-                  const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';
+                  const influenceLabel = info.tone === 'high' ? t('release.influenceHigh') : info.tone === 'medium' ? t('release.influenceMedium') : t('release.influenceNone');
                   return (
                     <details className={`score-line-details ${item.kind}`} key={`${item.label}-${item.value}`}> 
                       <summary className={`score-line ${item.kind}`}> 
@@ -1707,19 +1890,19 @@ function ReleaseModal({ state, update }: { state: GameState; update: (fn: (state
               </div>
             </div>
             <div className="reward-row">
-              <span>+{money(result.sales)} 🪙 сразу</span>
+              <span>{t('release.salesNow', { sales: money(result.sales) })}</span>
               <span>+{result.rp} 🧪</span>
               {Boolean(result.stars) && <span>+{result.stars} ⭐</span>}
             </div>
             <div className="life-result">
-              <b>Срок жизни: {result.lifetimeDays} игровых дней</b>
-              <p>Прогноз пассивного дохода: ~{money(result.passivePerDay)} 🪙/день, популярность может расти или падать событиями.</p>
+              <b>{t('release.lifetime', { days: result.lifetimeDays })}</b>
+              <p>{t('release.passiveForecast', { income: money(result.passivePerDay) })}</p>
             </div>
-            {Boolean(result.bonusRewards?.length) && <div className="bonus-list">{result.bonusRewards?.map((item) => <span key={item}>{item}</span>)}</div>}
+            {Boolean(result.bonusRewards?.length) && <div className="bonus-list">{result.bonusRewards?.map((item) => <span key={item}>{localizedSavedText(item)}</span>)}</div>}
             <div className="inline-actions release-actions">
-              {result.score >= 8.5 && <button className="primary" onClick={() => shareRelease(`Моя игра ${result.projectName} получила ${result.score}/10!`, { url: 'https://t.me/DevTycoon_bot?startapp=share_release', imageUrl: undefined, storyText: `${result.projectName}: ${result.score}/10` })}>Поделиться</button>}
-              <button onClick={() => update((current) => ({ ...current, latestRelease: null, screen: 'develop', selectedProject: createProject(false) }))}>Следующая игра</button>
-              <button className="ghost" onClick={() => update((current) => ({ ...current, latestRelease: null }))}>Закрыть</button>
+              {result.score >= 8.5 && <button className="primary" onClick={() => shareRelease(t('release.shareText', { name: result.projectName, score: result.score }), { url: 'https://t.me/DevTycoon_bot?startapp=share_release', imageUrl: undefined, storyText: `${result.projectName}: ${result.score}/10` })}>{t('release.share')}</button>}
+              <button onClick={() => update((current) => ({ ...current, latestRelease: null, screen: 'develop', selectedProject: createProject(false) }))}>{t('release.nextGame')}</button>
+              <button className="ghost" onClick={() => update((current) => ({ ...current, latestRelease: null }))}>{t('common.close')}</button>
             </div>
           </>
         )}
@@ -1734,53 +1917,38 @@ function scoreExplanation(item: ScoreBreakdownItem) {
   const label = item.label;
   const isPositive = item.value > 0;
   const signText = item.kind === 'base'
-    ? 'Это основа оценки.'
+    ? t('scoreHelp.base')
     : isPositive
-      ? 'Сейчас этот фактор помогает релизу.'
+      ? t('scoreHelp.positive')
       : item.value < 0
-        ? 'Сейчас этот фактор снижает оценку.'
-        : 'Сейчас этот фактор почти нейтрален.';
+        ? t('scoreHelp.negative')
+        : t('scoreHelp.neutral');
 
-  const details: Record<string, { text: string; influence: string; tone: 'high' | 'medium' | 'none' }> = {
-    'Фокус разработки': { text: 'Показывает, насколько хорошо распределён фокус между этапами разработки под выбранный проект.', influence: 'Ваши решения сильно влияют на этот модификатор.', tone: 'high' },
-    'Чеклист тестирования': { text: 'Бонус за процессы контроля качества: меньше багов, стабильнее релиз.', influence: 'Вы можете влиять на него через исследования и развитие студии.', tone: 'medium' },
-    'Ощущение от игры': { text: 'Отвечает за отзывчивость, темп, анимации и общее чувство управления.', influence: 'Вы можете влиять на него через исследования и фокус разработки.', tone: 'medium' },
-    'Звуковая лаборатория': { text: 'Учитывает качество звука, музыки и атмосферы, которую они создают.', influence: 'Вы можете влиять на него через исследования.', tone: 'medium' },
-    'Продвижение': { text: 'Показывает эффект маркетингового продвижения перед релизом.', influence: 'Ваше решение напрямую влияет на этот модификатор.', tone: 'high' },
-    'Решения разработки': { text: 'Сумма последствий событий, которые случились во время разработки.', influence: 'Ваши решения во время событий напрямую влияют на этот модификатор.', tone: 'high' },
-    'Импульс студии': { text: 'Отражает общий темп студии: прошлые релизы, опыт и накопленную динамику.', influence: 'Вы влияете на него постепенно через регулярные и сильные релизы.', tone: 'medium' },
-    'Настроение аудитории': { text: 'Показывает, насколько текущая аудитория готова тепло принять такой проект.', influence: 'Вы можете влиять на него косвенно через выбор жанра, сеттинга и скан аудитории.', tone: 'medium' },
-    'События рынка': { text: 'Внешние рыночные события, которые временно помогают или мешают релизам.', influence: 'Этот модификатор не зависит от ваших решений.', tone: 'none' },
-    'Сложность технологий': { text: 'Штраф или риск за сложность выбранной платформы, жанра и технологий проекта.', influence: 'Вы влияете на него выбором проекта и подготовкой студии.', tone: 'medium' },
-    'Непредсказуемость прессы': { text: 'Небольшая случайность, чтобы оценки не были полностью одинаковыми и предсказуемыми.', influence: 'Этот модификатор не зависит от ваших решений.', tone: 'none' },
-  };
-
-  if (label.startsWith('Комбо')) {
-    return { title: 'Комбо жанра и сеттинга', text: 'Показывает, насколько хорошо выбранные жанр и сеттинг подходят друг другу.', influence: 'Ваш выбор напрямую влияет на этот модификатор.', tone: 'high' as const, signText };
+  if (label.startsWith('\u041a\u043e\u043c\u0431\u043e')) {
+    return { title: t('scoreHelp.comboTitle'), text: t('scoreHelp.comboText'), influence: t('scoreHelp.comboInfluence'), tone: 'high' as const, signText };
   }
 
   const fallback = item.kind === 'random'
-    ? { text: 'Случайная реакция мира, прессы и виртуальных игроков.', influence: 'Этот модификатор не зависит от ваших решений.', tone: 'none' as const }
-    : { text: 'Один из факторов, из которых складывается итоговая оценка релиза.', influence: 'Обычно на него можно влиять через выборы, исследования или развитие студии.', tone: 'medium' as const };
-  const picked = details[label] ?? fallback;
-  return { title: label, ...picked, signText };
+    ? { title: t('scoreHelp.randomTitle'), text: t('scoreHelp.randomText'), influence: t('scoreHelp.randomInfluence'), tone: 'none' as const }
+    : { title: getLanguage() === 'ru' ? label : t('scoreHelp.factorTitle'), text: t('scoreHelp.factorText'), influence: t('scoreHelp.factorInfluence'), tone: 'medium' as const };
+  return { ...fallback, signText };
 }
 
 function ScoreExplanationModal({ item, onClose }: { item: ScoreBreakdownItem; onClose: () => void }) {
   const info = scoreExplanation(item);
-  const influenceLabel = info.tone === 'high' ? 'Сильное влияние игрока' : info.tone === 'medium' ? 'Косвенное влияние игрока' : 'Не зависит от игрока';
+  const influenceLabel = info.tone === 'high' ? t('release.influenceHigh') : info.tone === 'medium' ? t('release.influenceMedium') : t('release.influenceNone');
   return (
     <div className="nested-modal-backdrop score-help-backdrop" onClick={onClose}>
       <section className="score-help-modal comic-card" onClick={(event) => event.stopPropagation()}>
-        <button className="modal-x" type="button" onClick={onClose} aria-label="Закрыть">×</button>
-        <p className="eyebrow">Детализация оценки</p>
+        <button className="modal-x" type="button" onClick={onClose} aria-label={t('common.close')}>×</button>
+        <p className="eyebrow">{t('release.scoreHelpTitle')}</p>
         <h3>{info.title}</h3>
         <div className={'score-help-influence influence-' + info.tone}>{influenceLabel}</div>
         <p>{info.text}</p>
         <p className="score-help-player-note">{info.influence}</p>
-        <div className="score-help-value"><span>Текущий вклад</span><b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b></div>
+        <div className="score-help-value"><span>{t('release.currentImpact')}</span><b>{item.kind === 'base' ? item.value.toFixed(2) : scoreDelta(item.value)}</b></div>
         <p className="small muted">{info.signText}</p>
-        <button className="primary wide" type="button" onClick={onClose}>Понятно</button>
+        <button className="primary wide" type="button" onClick={onClose}>{t('button.gotIt')}</button>
       </section>
     </div>
   );
@@ -1820,17 +1988,17 @@ function StarterOffer({ update }: { update: (fn: (state: GameState) => GameState
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState('');
   const statusText = status === 'checking_balance'
-    ? 'Проверяем баланс ⭐…'
+    ? t('starter.checkingBalance')
     : status === 'opening_invoice'
-      ? 'Открываем оплату Telegram Stars…'
+      ? t('starter.openingInvoice')
       : status === 'checking_payment'
-        ? 'Проверяем оплату…'
+        ? t('starter.checkingPayment')
         : status === 'credited'
-          ? 'Начислено!'
+          ? t('starter.credited')
           : status === 'cancelled'
-            ? 'Оплата закрыта.'
+            ? t('starter.cancelled')
             : status === 'failed'
-              ? 'Покупку не удалось завершить.'
+              ? t('starter.failed')
               : '';
   const buy = async () => {
     if (pending) return;
@@ -1848,14 +2016,14 @@ function StarterOffer({ update }: { update: (fn: (state: GameState) => GameState
       window.setTimeout(() => setPending(false), 450);
     }
   };
-  return <div className="modal-backdrop"><section className="release-modal offer comic-card"><span className="badge">одноразово</span><h2>Стартовый набор для быстрого рывка</h2><p className="muted">+5 000 монет и +50 очков науки для уверенного старта. Подходит, чтобы быстрее стартовать и открыть первые улучшения.</p>{statusText && <p className="shop-payment-status">{statusText}</p>}<div className="inline-actions"><button className="primary" disabled={pending} onClick={buy}>{pending ? statusText || 'Открываем…' : 'Купить ⭐79'}</button><button className="ghost" disabled={pending} onClick={() => update((current) => ({ ...current, offerSeen: true }))}>Не сейчас</button></div></section></div>;
+  return <div className="modal-backdrop"><section className="release-modal offer comic-card"><span className="badge">{t('starter.oneTime')}</span><h2>{t('starter.title')}</h2><p className="muted">{t('starter.desc')}</p>{statusText && <p className="shop-payment-status">{statusText}</p>}<div className="inline-actions"><button className="primary" disabled={pending} onClick={buy}>{pending ? statusText || t('starter.opening') : t('starter.buy')}</button><button className="ghost" disabled={pending} onClick={() => update((current) => ({ ...current, offerSeen: true }))}>{t('starter.notNow')}</button></div></section></div>;
 }
 
 function Onboarding({ update }: { update: (fn: (state: GameState) => GameState) => void }) {
   const [slide, setSlide] = useState(0);
   const slides: Array<[IconName, string, string, string]> = [
-    ['rocket', 'Сделаем первую игру за минуту', 'Ты выберешь жанр, сеттинг и платформу, запустишь разработку и выпустишь первый релиз.', 'Показать, куда нажимать'],
-    ['clock', 'Зачем возвращаться', 'После релиза игра живёт несколько игровых дней, приносит пассивный доход и может ловить события популярности.', 'Начать обучение'],
+    ['rocket', t('onboarding.slide1Title'), t('onboarding.slide1Body'), t('onboarding.slide1Button')],
+    ['clock', t('onboarding.slide2Title'), t('onboarding.slide2Body'), t('onboarding.slide2Button')],
   ];
   const current = slides[slide];
   const finish = () => update((currentState) => ({
@@ -1870,7 +2038,7 @@ function Onboarding({ update }: { update: (fn: (state: GameState) => GameState) 
     <div className="modal-backdrop onboarding guided-onboarding">
       <section className="onboarding-card comic-card">
         <div className="onboarding-emoji"><Icon name={current[0]} /></div>
-        <p className="eyebrow">Быстрый старт</p>
+        <p className="eyebrow">{t('onboarding.quickStart')}</p>
         <h2>{current[1]}</h2>
         <p>{current[2]}</p>
         <div className="dots">{slides.map((_, index) => <i key={index} className={index === slide ? 'active' : ''} />)}</div>
@@ -1883,7 +2051,7 @@ function Onboarding({ update }: { update: (fn: (state: GameState) => GameState) 
 function StudioNamingModal({ mode, currentName, onSubmit, onCancel }: { mode: 'initial' | 'rename'; currentName: string; onSubmit: (name: string) => void; onCancel?: () => void }) {
   const [value, setValue] = useState(currentName || '');
   const clean = value.replace(/\s+/g, ' ').trim().slice(0, 24);
-  return <div className="modal-backdrop naming-backdrop"><section className="onboarding-card comic-card naming-card"><div className="onboarding-emoji"><Icon name="studio" /></div><h2>{mode === 'initial' ? 'Назови свою студию' : 'Переименовать студию'}</h2><p>{mode === 'initial' ? 'Это обязательный шаг для новых игроков. Без названия студия не сможет начать работу.' : 'Новое название сразу появится в шапке и на экране студии.'}</p><input className="project-name studio-name-input" placeholder="Например, Лунная Мастерская" value={value} maxLength={18} onChange={(event) => setValue(event.target.value)} autoFocus /><div className="inline-actions">{onCancel && <button className="ghost" onClick={onCancel}>Отмена</button>}<button className="primary" disabled={!clean} onClick={() => clean && onSubmit(clean)}>{mode === 'initial' ? 'Продолжить' : 'Сохранить'}</button></div></section></div>;
+  return <div className="modal-backdrop naming-backdrop"><section className="onboarding-card comic-card naming-card"><div className="onboarding-emoji"><Icon name="studio" /></div><h2>{mode === 'initial' ? t('naming.initialTitle') : t('naming.renameTitle')}</h2><p>{mode === 'initial' ? t('naming.initialBody') : t('naming.renameBody')}</p><input className="project-name studio-name-input" placeholder={t('naming.placeholder')} value={value} maxLength={18} onChange={(event) => setValue(event.target.value)} autoFocus /><div className="inline-actions">{onCancel && <button className="ghost" onClick={onCancel}>{t('common.cancel')}</button>}<button className="primary" disabled={!clean} onClick={() => clean && onSubmit(clean)}>{mode === 'initial' ? t('common.continue') : t('common.save')}</button></div></section></div>;
 }
 
 function PromotionBurst({ trigger }: { trigger: string }) {
@@ -1891,21 +2059,21 @@ function PromotionBurst({ trigger }: { trigger: string }) {
 }
 
 function BottomNav({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
-  return <nav className="bottom-nav">{navItems.map(([id, label, icon]) => <button key={id} className={`${state.screen === id ? 'active' : ''} ${id === 'studio' ? 'main-tab' : ''} ${!state.tutorialDone && state.onboardingDone && state.screen !== 'develop' && id === 'develop' ? 'tutorial-target' : ''}`.trim()} onClick={() => update((current) => ({ ...current, screen: id }))}><Icon name={icon as IconName} />{label}</button>)}</nav>;
+  return <nav className="bottom-nav">{navItems.map(([id, labelKey, icon]) => <button key={id} className={`${state.screen === id ? 'active' : ''} ${id === 'studio' ? 'main-tab' : ''} ${!state.tutorialDone && state.onboardingDone && state.screen !== 'develop' && id === 'develop' ? 'tutorial-target' : ''}`.trim()} onClick={() => update((current) => ({ ...current, screen: id }))}><Icon name={icon as IconName} />{t(labelKey)}</button>)}</nav>;
 }
 
 
 
 function DevelopmentAmbientFx() {
   return <div className="dev-ambient" aria-hidden="true">
-    <span>КОД</span><span>АРТ</span><span>ТЕСТ</span><span>ХАЙП</span><span>ФИКС</span>
+    <span>CODE</span><span>ART</span><span>TEST</span><span>HYPE</span><span>FIX</span>
   </div>;
 }
 
-const devTickerWords = ['КОД!', 'АРТ!', 'ТЕСТ!', 'ФИКС!', 'ХАЙП!', 'СБОРКА!', 'ПОЛИШ!', 'ИДЕЯ!'];
+const devTickerWords = ['CODE!', 'ART!', 'TEST!', 'FIX!', 'HYPE!', 'BUILD!', 'POLISH!', 'IDEA!'];
 
 function DevelopmentTicker({ project }: { project: Project }) {
-  const [pulse, setPulse] = useState({ id: 0, text: 'КОД!', x: 14 });
+  const [pulse, setPulse] = useState({ id: 0, text: 'CODE!', x: 14 });
   const isCompleted = project.progress >= 100;
 
   useEffect(() => {
@@ -1923,7 +2091,7 @@ function DevelopmentTicker({ project }: { project: Project }) {
 
 function DevPop({ project }: { project: Project }) {
   if (!project.devEventId || !project.devEventText) return null;
-  return <span key={project.devEventId} className={project.devEventTone === 'danger' ? 'dev-pop danger' : 'dev-pop'}>{project.devEventText}</span>;
+  return <span key={project.devEventId} className={project.devEventTone === 'danger' ? 'dev-pop danger' : 'dev-pop'}>{localizedSavedText(project.devEventText)}</span>;
 }
 
 function ProgressBar({ value, label }: { value: number; label?: string }) {

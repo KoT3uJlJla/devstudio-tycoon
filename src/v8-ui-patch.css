@@ -21,7 +21,7 @@
 .pixel-cat-cover + .eyebrow{margin-top:2px}
 .offline-toast-claimed{background:var(--yellow)!important;color:var(--ink)!important;pointer-events:none!important}
 .archive-best-release{border:2px solid rgba(255,224,78,.75)!important;border-radius:16px;padding:10px;background:rgba(255,224,78,.09)}
-.archive-best-release:before{content:'Лучший';display:inline-flex;width:fit-content;margin-bottom:4px;padding:3px 7px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:10px;font-weight:1000}
+.archive-best-release:before{content:'Best';display:inline-flex;width:fit-content;margin-bottom:4px;padding:3px 7px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:10px;font-weight:1000}
 .studio-summary .mini-ledger{grid-template-columns:auto auto;row-gap:6px}
 @keyframes catBodyBreathe{0%,100%{transform:translate(-50%,-34%)}50%{transform:translate(-50%,-31%)}}
 @keyframes catFaceBlink{0%,88%,100%{filter:none}92%{filter:brightness(.6)}}

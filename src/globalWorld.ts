@@ -1,6 +1,7 @@
 import { genres, negativeMarketEvents, platforms, positiveMarketEvents, themes } from './gameData';
 import type { AudienceState, GameState, MarketEvent, NewsEntry } from './types';
 import { GAME_DAY_MS } from './gameLogic';
+import { getLanguage, localizedName, t } from './i18n';
 
 const GLOBAL_START_AT = Date.UTC(2026, 4, 18, 0, 0, 0);
 const MARKET_EVENT_DURATION_DAYS = 14;
@@ -71,14 +72,14 @@ export function globalAudienceForDay(day: number, previous?: AudienceState): Aud
   const eventMood = activeEvents.reduce((acc, event) => acc + (event.tone === 'positive' ? 0.08 : -0.1), 0);
   const baseMood = 0.54 + (seededIndex(month, 100, 133) - 50) / 500;
   const mood = clamp(baseMood + eventMood, 0.1, 1);
-  const genreName = genres.find((item) => item.id === desiredGenreId)?.name ?? 'Аркада';
-  const themeName = themes.find((item) => item.id === desiredThemeId)?.name ?? 'Киберпанк';
-  const platformName = platforms.find((item) => item.id === desiredPlatformId)?.name ?? 'Микро-ПК';
+  const genreName = localizedName(genres.find((item) => item.id === desiredGenreId)) || t('global.fallbackGenre');
+  const themeName = localizedName(themes.find((item) => item.id === desiredThemeId)) || t('global.fallbackTheme');
+  const platformName = localizedName(platforms.find((item) => item.id === desiredPlatformId)) || t('global.fallbackPlatform');
   const vibe = mood >= 0.75
-    ? `Глобальная аудитория в хайпе: просит ${genreName}, сеттинг «${themeName}» и платформу ${platformName}.`
+    ? t('global.audienceHype', { genre: genreName, theme: themeName, platform: platformName })
     : mood >= 0.48
-      ? `Глобальный спрос ровный: хотят ${genreName} + «${themeName}» на ${platformName}, но ждут качества.`
-      : `Аудитория осторожна: ${genreName} + «${themeName}» на ${platformName} может вернуть интерес, если релиз будет сильным.`;
+      ? t('global.audienceSteady', { genre: genreName, theme: themeName, platform: platformName })
+      : t('global.audienceCautious', { genre: genreName, theme: themeName, platform: platformName });
 
   return {
     mood,
@@ -96,8 +97,11 @@ export function globalNewsForDay(day: number, existing: NewsEntry[] = []): NewsE
   const eventNews = globalMarketEventsForDay(day).map((event) => ({
     id: `news-${event.id}`,
     day: event.startedDay,
-    title: event.title,
-    body: `${event.description} Эффект действует для всех игроков ещё ${event.daysRemaining} игровых дней.`,
+    title: getLanguage() === 'en' ? t('global.marketEventTitle') : event.title,
+    body: t('global.newsEffect', {
+      description: getLanguage() === 'en' ? t('global.marketShift') : event.description,
+      days: event.daysRemaining,
+    }),
     tone: event.tone,
   } as NewsEntry));
   const byId = new Map<string, NewsEntry>();

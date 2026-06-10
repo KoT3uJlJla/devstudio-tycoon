@@ -1,4 +1,5 @@
 import { isProductInstinctActive } from './gameLogic';
+import { getLocale, t, type TranslationKey } from './i18n';
 import type { DailyTaskId, GameState } from './types';
 
 export type TaskReward = {
@@ -27,8 +28,8 @@ export type TaskCatalogOverrides = {
 
 type DailyTaskBase = {
   id: DailyTaskId;
-  title: string;
-  desc: string;
+  titleKey: TranslationKey;
+  descKey: TranslationKey;
   target: number;
   reward: TaskReward;
   current: (state: GameState) => number;
@@ -37,8 +38,8 @@ type DailyTaskBase = {
 
 type StudioGoalBase = {
   id: string;
-  title: string;
-  desc: string;
+  titleKey: TranslationKey;
+  descKey: TranslationKey;
   target: number;
   reward: TaskReward;
   current: (state: GameState) => number;
@@ -68,8 +69,8 @@ export type StudioGoalModel = {
 const dailyTaskBase: DailyTaskBase[] = [
   {
     id: 'release',
-    title: 'Релизный спринт',
-    desc: 'Выпусти 3 игры за день.',
+    titleKey: 'tasks.release.title',
+    descKey: 'tasks.release.desc',
     target: 3,
     reward: { coins: 1800, rp: 12 },
     current: (state) => state.dailyGamesReleased,
@@ -77,8 +78,8 @@ const dailyTaskBase: DailyTaskBase[] = [
   },
   {
     id: 'work',
-    title: 'Продюсерская смена',
-    desc: 'Прими 2 решения во время разработки.',
+    titleKey: 'tasks.work.title',
+    descKey: 'tasks.work.desc',
     target: 2,
     reward: { coins: 1200, stars: 1 },
     current: (state) => state.dailyWorkTaps,
@@ -86,8 +87,8 @@ const dailyTaskBase: DailyTaskBase[] = [
   },
   {
     id: 'research',
-    title: 'День лаборатории',
-    desc: 'Открой 2 исследования, жанра или сеттинга.',
+    titleKey: 'tasks.research.title',
+    descKey: 'tasks.research.desc',
     target: 2,
     reward: { coins: 700, rp: 16 },
     current: (state) => state.dailyResearchUnlocked,
@@ -95,8 +96,8 @@ const dailyTaskBase: DailyTaskBase[] = [
   },
   {
     id: 'income',
-    title: 'Long-tail доход',
-    desc: 'Получи 2 500 монет пассивно от выпущенных игр.',
+    titleKey: 'tasks.income.title',
+    descKey: 'tasks.income.desc',
     target: 2500,
     reward: { coins: 1400 },
     current: (state) => state.dailyPassiveIncome,
@@ -109,8 +110,8 @@ const baseContentCount = 7;
 const studioGoalBase: StudioGoalBase[] = [
   {
     id: 'first-release',
-    title: 'Первый релиз',
-    desc: 'Выпусти первую игру студии.',
+    titleKey: 'goals.firstRelease.title',
+    descKey: 'goals.firstRelease.desc',
     target: 1,
     reward: { coins: 2000, rp: 5 },
     current: (state) => state.gamesReleased,
@@ -118,8 +119,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'score-7',
-    title: 'Крепкий релиз',
-    desc: 'Получи оценку 7.0 или выше.',
+    titleKey: 'goals.score7.title',
+    descKey: 'goals.score7.desc',
     target: 7,
     reward: { coins: 3500, rp: 10 },
     current: (state) => state.bestScore,
@@ -127,8 +128,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'coins-10000',
-    title: 'Финансовая подушка',
-    desc: 'Накопи 10 000 монет на балансе студии.',
+    titleKey: 'goals.coins10000.title',
+    descKey: 'goals.coins10000.desc',
     target: 10000,
     reward: { coins: 1500, rp: 6 },
     current: (state) => Math.max(0, state.coins),
@@ -136,8 +137,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'studio-level-2',
-    title: 'Первое расширение',
-    desc: 'Улучши студию до 2 уровня.',
+    titleKey: 'goals.studioLevel2.title',
+    descKey: 'goals.studioLevel2.desc',
     target: 2,
     reward: { coins: 3000, rp: 10 },
     current: (state) => state.level,
@@ -145,8 +146,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'first-employee',
-    title: 'Первый сотрудник',
-    desc: 'Найми первого человека в команду.',
+    titleKey: 'goals.firstEmployee.title',
+    descKey: 'goals.firstEmployee.desc',
     target: 1,
     reward: { coins: 2500, rp: 8 },
     current: (state) => state.employees.length,
@@ -154,8 +155,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'content-explorer',
-    title: 'Свежие идеи',
-    desc: 'Открой 3 новых жанра или сеттинга.',
+    titleKey: 'goals.contentExplorer.title',
+    descKey: 'goals.contentExplorer.desc',
     target: 3,
     reward: { coins: 4000, rp: 18 },
     current: (state) => Math.max(0, state.unlockedGenreIds.length + state.unlockedThemeIds.length - baseContentCount),
@@ -163,8 +164,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'release-10',
-    title: 'Производственный ритм',
-    desc: 'Выпусти 10 игр за карьеру студии.',
+    titleKey: 'goals.release10.title',
+    descKey: 'goals.release10.desc',
     target: 10,
     reward: { coins: 9000, rp: 30 },
     current: (state) => state.gamesReleased,
@@ -172,8 +173,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'score-9',
-    title: 'Настоящий хит',
-    desc: 'Получи оценку 9.0 или выше.',
+    titleKey: 'goals.score9.title',
+    descKey: 'goals.score9.desc',
     target: 9,
     reward: { coins: 12000, rp: 45, stars: 1 },
     current: (state) => state.bestScore,
@@ -181,8 +182,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'product-instinct-active',
-    title: 'Работа по чутью',
-    desc: 'Активируй «Продуктовое чутьё».',
+    titleKey: 'goals.productInstinct.title',
+    descKey: 'goals.productInstinct.desc',
     target: 1,
     reward: { coins: 3000, rp: 12 },
     current: (state) => isProductInstinctActive(state) ? 1 : 0,
@@ -190,8 +191,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'studio-level-3',
-    title: 'Студия растёт',
-    desc: 'Улучши студию до 3 уровня.',
+    titleKey: 'goals.studioLevel3.title',
+    descKey: 'goals.studioLevel3.desc',
     target: 3,
     reward: { coins: 18000, rp: 60, stars: 2 },
     current: (state) => state.level,
@@ -199,8 +200,8 @@ const studioGoalBase: StudioGoalBase[] = [
   },
   {
     id: 'release-50',
-    title: 'Каталог студии',
-    desc: 'Выпусти 50 игр за карьеру студии.',
+    titleKey: 'goals.release50.title',
+    descKey: 'goals.release50.desc',
     target: 50,
     reward: { coins: 50000, rp: 160, stars: 3 },
     current: (state) => state.gamesReleased,
@@ -238,8 +239,8 @@ function mergeTask<T extends DailyTaskBase | StudioGoalBase>(base: T, override: 
   if (!isVisible(override)) return null;
   return {
     id: base.id,
-    title: cleanText(override?.title, base.title),
-    desc: cleanText(override?.desc ?? override?.description, base.desc, 160),
+    title: cleanText(override?.title, t(base.titleKey)),
+    desc: cleanText(override?.desc ?? override?.description, t(base.descKey), 160),
     current: Math.max(0, base.current(state)),
     target: safeNumber(override?.target, base.target, 1, 999999999),
     reward: cleanReward(override?.reward, base.reward),
@@ -275,10 +276,10 @@ export function taskProgressPercent(current: number, target: number) {
 
 export function rewardLabel(reward: TaskReward) {
   const parts: string[] = [];
-  if (reward.coins) parts.push('+' + Math.round(reward.coins).toLocaleString('ru-RU') + ' 🪙');
-  if (reward.rp) parts.push('+' + Math.round(reward.rp).toLocaleString('ru-RU') + ' 🧪');
-  if (reward.stars) parts.push('+' + Math.round(reward.stars).toLocaleString('ru-RU') + ' ⭐');
-  return parts.join(' ') || 'Забрать';
+  if (reward.coins) parts.push('+' + Math.round(reward.coins).toLocaleString(getLocale()) + ' 🪙');
+  if (reward.rp) parts.push('+' + Math.round(reward.rp).toLocaleString(getLocale()) + ' 🧪');
+  if (reward.stars) parts.push('+' + Math.round(reward.stars).toLocaleString(getLocale()) + ' ⭐');
+  return parts.join(' ') || t('button.claim');
 }
 
 export function applyTaskReward(state: GameState, reward: TaskReward): GameState {

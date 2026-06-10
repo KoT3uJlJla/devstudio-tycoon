@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 declare global {
   interface Window {
     Telegram?: {
@@ -77,7 +79,7 @@ function referralUrl() {
 }
 
 function referralShareText(refUrl: string) {
-  return `У тебя не получится сделать игру лучше моей😼\nМожешь зайти и убедиться в этом сам\n\n${refUrl}`;
+  return t('telegram.referralShareText', { url: refUrl });
 }
 
 function canShareToStory() {
@@ -89,8 +91,8 @@ function canShareToStory() {
 
 function showStoryPlaceholder(text: string, refUrl: string) {
   safeTelegramCall(() => window.Telegram?.WebApp?.showPopup?.({
-    title: 'История релиза',
-    message: `Скоро здесь появится публикация истории с картинкой.\n\n${text.slice(0, 120)}\n${refUrl}`,
+    title: t('telegram.storyTitle'),
+    message: t('telegram.storyPlaceholder', { text: text.slice(0, 120), url: refUrl }),
     buttons: [{ type: 'ok' }],
   }));
 }
@@ -120,7 +122,7 @@ export type SharePayload = {
 };
 
 export function shareRelease(text: string, payload: SharePayload = {}) {
-  const isReferralShare = payload.url?.includes('ref_demo') || text.includes('лучше моей');
+  const isReferralShare = payload.url?.includes('ref_demo') || payload.url?.includes('start=ref') || payload.url?.includes('startapp=r_');
   const isStoryShare = payload.url?.includes('share_release') || Boolean(payload.storyText && !isReferralShare);
   const refUrl = referralUrl();
 
@@ -129,7 +131,7 @@ export function shareRelease(text: string, payload: SharePayload = {}) {
     if (canShareToStory()) {
       safeTelegramCall(() => window.Telegram?.WebApp?.shareToStory?.(mediaUrl, {
         text: (payload.storyText ?? text).slice(0, 200),
-        widget_link: { url: refUrl, name: 'Играть' },
+        widget_link: { url: refUrl, name: t('telegram.play') },
       }));
       return;
     }
