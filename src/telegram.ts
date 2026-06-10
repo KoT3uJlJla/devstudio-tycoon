@@ -10,6 +10,7 @@ declare global {
         shareToStory?: (mediaUrl: string, params?: { text?: string; widget_link?: { url: string; name?: string } }) => void;
         isVersionAtLeast?: (version: string) => boolean;
         openTelegramLink?: (url: string) => void;
+        openLink?: (url: string) => void;
         showPopup?: (params: { title?: string; message: string; buttons?: Array<{ type: string; text?: string }> }) => void;
         HapticFeedback?: {
           impactOccurred?: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
@@ -118,8 +119,13 @@ export function haptic(type: 'tap' | 'success' | 'warning' = 'tap') {
 export function openTelegramUrl(url: string) {
   const safeUrl = String(url || '').trim();
   if (!/^https:\/\/t\.me\/[A-Za-z0-9_/?=&%.-]+$/i.test(safeUrl)) return;
-  if (window.Telegram?.WebApp?.openTelegramLink) {
-    safeTelegramCall(() => window.Telegram?.WebApp?.openTelegramLink?.(safeUrl));
+  const webApp = window.Telegram?.WebApp;
+  if (webApp?.openTelegramLink) {
+    safeTelegramCall(() => webApp.openTelegramLink?.(safeUrl));
+    return;
+  }
+  if (webApp?.openLink) {
+    safeTelegramCall(() => webApp.openLink?.(safeUrl));
     return;
   }
   window.open(safeUrl, '_blank', 'noopener,noreferrer');

@@ -1272,7 +1272,10 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
     if (subscribePending || state.studioGoalClaims[goal.id]) return;
     haptic('tap');
     setSubscribePending(true);
-    const clicked = await clickBackendStudioGoal(goal.id);
+    const targetUrl = goal.action?.type === 'telegram_url' ? goal.action.url : HATCH_MIND_CHANNEL_URL;
+    const clickPromise = clickBackendStudioGoal(goal.id);
+    openTelegramUrl(targetUrl);
+    const clicked = await clickPromise;
     if (!clicked) {
       setSubscribePending(false);
       haptic('warning');
@@ -1286,7 +1289,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
         return;
       }
     }
-    openTelegramUrl(goal.action?.type === 'telegram_url' ? goal.action.url : HATCH_MIND_CHANNEL_URL);
     const eligibleAt = clicked.eligibleAt ? Date.parse(clicked.eligibleAt) : NaN;
     const delayMs = Number.isFinite(eligibleAt) ? Math.max(0, eligibleAt - Date.now()) : 5000;
     window.setTimeout(() => {
