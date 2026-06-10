@@ -543,11 +543,13 @@ async function start() {
       const goalId = String(req.params.goalId || "");
       const goal = goalId === SUBSCRIBE_HATCH_MIND_STUDIO_GOAL.id ? SUBSCRIBE_HATCH_MIND_STUDIO_GOAL : null;
       if (!goal) return res.status(404).json({ ok: false, error: "unknown_studio_goal" });
+      const logStudioGoalClaim = (status) => console.log("studio goal claim", { telegramId: req.telegramUser.id, goalId, status });
 
       const save = await getSave(req.telegramUser.id);
       let economy = await getOrCreateEconomy(req.telegramUser, save?.data);
       const currentData = overlayProtectedEconomy(normalizeServerDevelopment(save?.data || {}), economy);
       if (hasStudioGoalClaim(currentData, goal.id)) {
+        logStudioGoalClaim("already_claimed");
         return res.json({ ok: true, economy: publicEconomy(economy), save: { data: currentData, updatedAt: save?.updatedAt ?? new Date() }, studioGoal: { goalId: goal.id, claimed: true } });
       }
 
@@ -561,10 +563,15 @@ async function start() {
 
       if (!claimedAction) {
         const existing = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
-        if (!existing) return res.status(409).json({ ok: false, error: "studio_goal_click_required" });
+        if (!existing) {
+          logStudioGoalClaim("click_required");
+          return res.status(409).json({ ok: false, error: "studio_goal_click_required" });
+        }
         if (existing.claimedAt || existing.completedAt) {
+          logStudioGoalClaim("already_claimed");
           return res.status(409).json({ ok: false, error: "studio_goal_already_claimed", economy: publicEconomy(economy), studioGoal: studioGoalActionPayload(existing) });
         }
+        logStudioGoalClaim("not_ready");
         return res.status(425).json({ ok: false, error: "studio_goal_not_ready", studioGoal: studioGoalActionPayload(existing) });
       }
 
@@ -579,6 +586,7 @@ async function start() {
       });
       const nextData = overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
       await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+      logStudioGoalClaim("claimed");
       res.json({ ok: true, economy: publicEconomy(economy), reward: goal.reward, save: { data: nextData, updatedAt: new Date() }, studioGoal: studioGoalActionPayload(claimedAction) });
     } catch (error) {
       console.error("Studio goal claim failed:", error);
