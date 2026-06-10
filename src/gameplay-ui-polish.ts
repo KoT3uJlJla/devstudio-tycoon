@@ -267,11 +267,12 @@ function secureShopAction(button: HTMLButtonElement): SecureAction | null {
   const title = textOf(shopCard?.querySelector('h3') ?? null);
   const offer = button.closest<HTMLElement>('.offer');
 
-  if (offer && label.includes('Купить ⭐100')) return { label: 'Покупаем…', run: () => purchaseBackendItem('starter_pack') };
+  if (offer && label.includes('Купить ⭐79')) return { label: 'Покупаем…', run: () => purchaseBackendItem('starter_pack') };
 
   if (title === 'Стартовый набор') return { label: 'Покупаем…', run: () => purchaseBackendItem('starter_pack') };
-  if (title === 'Малый набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_small') };
-  if (title === 'Средний набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_medium') };
+  if (title === 'Набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_5k') };
+  if (title === 'Большой набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_25k') };
+  if (title === 'Мега-набор монет') return { label: 'Покупаем…', run: () => purchaseBackendItem('coins_100k') };
   if (title === 'Ускорение науки') return { label: 'Покупаем…', run: () => purchaseBackendItem('research_boost') };
 
   // Rename already subtracts stars locally and still needs a modal in the current React tree,
@@ -281,13 +282,13 @@ function secureShopAction(button: HTMLButtonElement): SecureAction | null {
 
 function secureResearchAction(button: HTMLButtonElement): SecureAction | null {
   const label = textOf(button);
-  if (label.includes('Открыть за ⭐450')) return { label: 'Открываем…', run: () => purchaseBackendItem('product_instinct') };
+  if (label.includes('Открыть за ⭐199')) return { label: 'Открываем…', run: () => purchaseBackendItem('product_instinct') };
   return null;
 }
 
 function secureDevelopmentAction(button: HTMLButtonElement): SecureAction | null {
   const label = textOf(button);
-  if (label.includes('Ускорить') && label.includes('⭐25')) return { label: 'Ускоряем…', run: () => runBackendDevelopmentAction('skip') };
+  if (label.includes('Ускорить') && label.includes('⭐15')) return { label: 'Ускоряем…', run: () => runBackendDevelopmentAction('skip') };
   if (label.includes('Продвижение ⭐35')) return { label: 'Продвигаем…', run: () => runBackendDevelopmentAction('promote') };
   return null;
 }
@@ -525,7 +526,7 @@ function applyGameplayPolish() {
   installTonWalletPanel();
   installSecureStarActionInterceptors();
   document.querySelectorAll('.time-skip-button').forEach((button) => {
-    if (textOf(button).includes('1ч')) button.textContent = button.textContent?.replace('на 1ч', 'на 25%') || 'Ускорить на 25% ⭐25';
+    if (textOf(button).includes('1ч')) button.textContent = button.textContent?.replace('на 1ч', 'на 25%').replace(/⭐\s*25/, '⭐15') || 'Ускорить на 25% ⭐15';
   });
   tuneReleaseQuotes();
 }

@@ -1084,7 +1084,7 @@ export function tickProgress(state: GameState): GameState {
 export function timeSkipProject(state: GameState): GameState {
   const current = ensureDailyState(state);
   const project = current.selectedProject;
-  const cost = 25;
+  const cost = 15;
   if (!project?.startedAt || project.progress >= 100 || project.pendingDevEvent || current.stars < cost) return current;
   const nextProgress = clamp(project.progress + 25, 0, 100);
   window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success');

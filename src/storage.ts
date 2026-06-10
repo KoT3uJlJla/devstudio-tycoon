@@ -516,7 +516,7 @@ function inferDevelopmentAction(previous: GameState | null, current: GameState):
 
   const progressDelta = currentProject.progress - previousProject.progress;
   const starDelta = previous.stars - current.stars;
-  if (progressDelta >= 20 && starDelta >= 20 && currentProject.progress < 100 && !currentProject.pendingDevEvent) {
+  if (progressDelta >= 20 && starDelta >= 15 && currentProject.progress < 100 && !currentProject.pendingDevEvent) {
     return { endpoint: 'skip' };
   }
 

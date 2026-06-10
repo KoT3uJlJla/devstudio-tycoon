@@ -1039,7 +1039,15 @@ function StudioScreen({ state, onNewProject, update, taskOverrides, onOfficeOpen
         <Stat label={t('studio.content')} value={`${state.unlockedGenreIds.length}/${genres.length}`} icon="gamepad" />
       </div>
 
-      {dailyReady && <button className="daily-card comic-card" onClick={() => void claimBackendDailyReward()}><span>{t('studio.dailyLogin')}</span> {t('studio.dailyLoginReward')}</button>}
+      {dailyReady && (
+        <button
+          type="button"
+          className="daily-card comic-card daily-reward-button"
+          onClick={() => void claimBackendDailyReward()}
+        >
+          <span>{t('studio.dailyLogin')}</span> {t('studio.dailyLoginReward')}
+        </button>
+      )}
       <DailyTasks state={state} update={update} taskOverrides={taskOverrides} />
       <StudioGoals state={state} update={update} taskOverrides={taskOverrides} />
       <DailyContractCard state={state} update={update} />
@@ -1342,14 +1350,26 @@ function ActiveDevelopmentPanel({ project, state, update }: { project: Project; 
     if (busyAction) return;
     setBusyAction(action);
     try {
+      const actionCost = action === 'skip' ? 15 : 35;
+      const invoiceItemId = action === 'skip' ? 'time_skip' : 'promotion';
       if (backendReady) {
-        const nextState = await runDevelopmentAction(action, {}, action === 'skip' ? 'time_skip' : 'promotion');
+        const nextState = await runDevelopmentAction(action, {}, invoiceItemId);
         if (nextState) {
           update(() => nextState);
           haptic('success');
           return;
         }
         haptic('warning');
+        return;
+      }
+
+      if (state.stars < actionCost) {
+        haptic('warning');
+        window.Telegram?.WebApp?.showPopup?.({
+          message: t('shop.failed'),
+          buttons: [{ type: 'ok' }],
+        });
+        return;
       }
 
       if (action === 'skip') update(timeSkipProject);
@@ -1365,11 +1385,11 @@ function ActiveDevelopmentPanel({ project, state, update }: { project: Project; 
       <div className="progress-fx active-progress-fx"><ProgressBar value={project.progress} label={`${Math.floor(project.progress)}%`} />{project.progress < 100 && <DevelopmentAmbientFx />}{project.progress < 100 && <DevelopmentTicker project={project} />}<DevPop project={project} />{project.devEventText?.startsWith('\u041f\u0420\u041e\u041c\u041e') && <PromotionBurst trigger={project.devEventId ?? 'promo'} />}</div>
       <div className="dev-tools-row">
         {project.progress >= 100 ? (
-          <button className="primary" onClick={() => runBackendOrLocal('promote')} disabled={!canTryPromote || busyAction === 'promote' || (!backendReady && state.stars < 35)}>{project.promotionUsed ? t('develop.promotionBoost', { boost: (project.promotionBoost ?? 0).toFixed(1) }) : busyAction === 'promote' ? t('common.opening') : t('develop.promotionStars')}</button>
+          <button className="primary" onClick={() => runBackendOrLocal('promote')} disabled={!canTryPromote || busyAction === 'promote'}>{project.promotionUsed ? t('develop.promotionBoost', { boost: (project.promotionBoost ?? 0).toFixed(1) }) : busyAction === 'promote' ? t('common.opening') : t('develop.promotionStars')}</button>
         ) : (
           <span className="dev-status-pill">{t('develop.inProgress')}</span>
         )}
-        {project.progress < 100 && <button className="time-skip-button" disabled={!canTrySkip || busyAction === 'skip' || (!backendReady && state.stars < 15)} onClick={() => runBackendOrLocal('skip')}>{busyAction === 'skip' ? t('common.opening') : backendReady && state.stars < 15 ? t('develop.speedUpTelegram') : t('develop.speedUpQuarter')}</button>}
+        {project.progress < 100 && <button className="time-skip-button" disabled={!canTrySkip || busyAction === 'skip'} onClick={() => runBackendOrLocal('skip')}>{busyAction === 'skip' ? t('common.opening') : t('develop.speedUpQuarter')}</button>}
       </div>
       {project.devDecisionLog?.length ? <div className="decision-log">{project.devDecisionLog.map((item) => <span key={item}>{item}</span>)}</div> : null}
       {project.progress >= 100 && <button className={!state.tutorialDone && project.isTutorial ? 'release-button tutorial-target' : 'release-button'} onClick={() => update(releaseProject)}>{t('develop.releaseGameShort')}</button>}
@@ -1423,13 +1443,14 @@ function ChoiceBlock({ kind, title, items, selected, onSelect, hint, itemHint, t
 function HireScreen({ state, update }: { state: GameState; update: (fn: (state: GameState) => GameState) => void }) {
   const slots = employeeSlotsForLevel(state.level);
   const [poolOffset, setPoolOffset] = useState(0);
+  const [refreshPending, setRefreshPending] = useState(false);
   const hiredIds = new Set(state.employees.map((employee) => employee.id));
   const freshCandidates = employeePool.filter((candidate) => !state.hiredEmployeeIds.includes(candidate.id) && !hiredIds.has(candidate.id));
   const comebackCandidates = employeePool.filter((candidate) => !hiredIds.has(candidate.id));
   const allCandidates = freshCandidates.length ? freshCandidates : comebackCandidates;
   const available = Array.from({ length: Math.min(4, Math.max(1, allCandidates.length)) }, (_, i) => allCandidates[(poolOffset + i) % allCandidates.length]).filter(Boolean);
   const hireDiscount = state.unlockedResearchIds.includes('junior-pipeline') ? 0.9 : 1;
-  const canRefresh = state.stars >= 10 && allCandidates.length > 4;
+  const canRefresh = allCandidates.length > 4;
   const hire = (employee: Employee) => update((current) => {
     const currentSlots = employeeSlotsForLevel(current.level);
     const cost = Math.round(employee.cost * hireDiscount);
@@ -1438,11 +1459,18 @@ function HireScreen({ state, update }: { state: GameState; update: (fn: (state: 
     return { ...current, coins: current.coins - cost, employees: [...current.employees, employee], hiredEmployeeIds: [...current.hiredEmployeeIds, employee.id] };
   });
   const refreshPool = () => {
-    if (!canRefresh) { haptic('warning'); return; }
+    if (!canRefresh || refreshPending) { haptic('warning'); return; }
+    setRefreshPending(true);
     void purchaseBackendItem('refresh_hires').then((next) => {
-      if (!next) return;
+      if (!next) {
+        haptic('warning');
+        return;
+      }
+      update(() => next);
       setPoolOffset((value) => value + Math.max(1, Math.floor(allCandidates.length / 2)));
       haptic('success');
+    }).finally(() => {
+      setRefreshPending(false);
     });
   };
   return (
@@ -1451,7 +1479,7 @@ function HireScreen({ state, update }: { state: GameState; update: (fn: (state: 
       {slots === 0 && <section className="locked-insight comic-card"><strong>{t('hire.lockedTitle')}</strong><p className="muted">{t('hire.lockedDesc')}</p></section>}
       {state.employees.length > 0 && <section className="panel comic-card"><div className="section-head compact"><h3>{t('hire.hired')}</h3><span className="pill">{t('hire.canFire')}</span></div><div className="cards-list compact-list">{state.employees.map((employee) => <article className="employee-card hired comic-card" key={employee.id}><div className="avatar"><Icon name={roleIcon(employee.role)} /></div><div><h3>{employee.name}</h3><p className="muted">{roleLabel(employee.role)} · {t('hire.levelShort', { level: employee.level })} · {specializationLabel(employee)}</p><p className="small employee-metrics">{employeeMetrics(employee)}</p></div><button className="danger" onClick={() => update((current) => fireEmployee(current, employee.id))}>{t('hire.fire')}</button></article>)}</div></section>}
       <div className="cards-list">{available.map((employee) => { const cost = Math.round(employee.cost * hireDiscount); return <article className="employee-card comic-card" key={employee.id}><div className="avatar"><Icon name={roleIcon(employee.role)} /></div><div><h3>{employee.name}</h3><p className="muted">{roleLabel(employee.role)} · {t('hire.levelShort', { level: employee.level })} · {specializationLabel(employee)}</p><p className="small employee-metrics">{employeeMetrics(employee)}</p></div><button disabled={state.coins < cost || state.employees.length >= slots} onClick={() => hire(employee)}>🪙 {money(cost)}</button></article>; })}</div>
-      <button className="ghost wide" disabled={!canRefresh} onClick={refreshPool}>{canRefresh ? t('hire.refresh') : t('hire.refreshDisabled')}</button>
+      <button className="ghost wide" disabled={!canRefresh || refreshPending} onClick={refreshPool}>{refreshPending ? t('common.opening') : t('hire.refresh')}</button>
     </div>
   );
 }

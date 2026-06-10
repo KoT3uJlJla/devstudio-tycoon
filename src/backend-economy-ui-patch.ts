@@ -32,8 +32,9 @@ type TelegramPopupWebApp = {
 
 const SHOP_ITEM_BY_TITLE: Record<string, string> = {
   'Стартовый набор': 'starter_pack',
-  'Малый набор монет': 'coins_small',
-  'Средний набор монет': 'coins_medium',
+  'Набор монет': 'coins_5k',
+  'Большой набор монет': 'coins_25k',
+  'Мега-набор монет': 'coins_100k',
   'Ускорение науки': 'research_boost',
 };
 

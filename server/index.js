@@ -53,15 +53,21 @@ const REFERRAL_MILESTONES = [
 ];
 
 const SHOP_ITEMS = {
-  starter_pack: { title: "Стартовый набор", costStars: 100, reward: { coins: 5000, rp: 50, offerSeen: true } },
-  coins_small: { title: "Малый набор монет", costStars: 50, reward: { coins: 3000 } },
-  coins_medium: { title: "Средний набор монет", costStars: 250, reward: { coins: 18000 } },
-  research_boost: { title: "Ускорение науки", costStars: 75, reward: { rp: 100 } },
-  rename_studio: { title: "Переименование студии", costStars: 25, reward: {} },
+  starter_pack: { title: "Стартовый набор", costStars: 79, reward: { coins: 5000, rp: 50, offerSeen: true } },
+  coins_5k: { title: "Набор монет", costStars: 39, reward: { coins: 5000 } },
+  coins_25k: { title: "Большой набор монет", costStars: 149, reward: { coins: 25000 } },
+  coins_100k: { title: "Мега-набор монет", costStars: 399, reward: { coins: 100000 } },
+  research_boost: { title: "Набор науки", costStars: 69, reward: { rp: 50 } },
+  rename_studio: { title: "Переименование студии", costStars: 15, reward: {} },
   refresh_hires: { title: "Обновление кандидатов", costStars: 10, reward: {} },
   time_skip: { title: "Ускорить разработку на 25%", costStars: 15, reward: {} },
   promotion: { title: "Продвижение релиза", costStars: 35, reward: {} },
-  product_instinct: { title: "Продуктовое чутьё", costStars: 450, reward: { unlockResearchId: "product-instinct" } },
+  product_instinct: { title: "Продуктовое чутьё", costStars: 199, reward: { unlockResearchId: "product-instinct" } },
+};
+
+const DEVELOPMENT_ACTION_INVOICE_ITEMS = {
+  skip: "time_skip",
+  promote: "promotion",
 };
 
 function safeTimingEqual(a, b) {
@@ -284,7 +290,66 @@ function applyRewardToSaveData(data, reward) {
   next.lastSavedAt = Date.now();
   return normalizeServerDevelopment(next);
 }
+async function consumeDevelopmentInvoice(req, action, amount) {
+  const invoiceId = String(req.body?.invoiceId || "").trim().slice(0, 80);
+  if (!invoiceId) return null;
+
+  const expectedItemId = DEVELOPMENT_ACTION_INVOICE_ITEMS[action];
+  if (!expectedItemId) return { error: "invoice_not_supported", status: 400 };
+
+  const safeAmount = safeInt(amount, 1, 100000);
+  const invoice = await db.collection("stars_invoices").findOne({
+    invoiceId,
+    telegramId: req.telegramUser.id,
+  });
+
+  if (!invoice) return { error: "invoice_not_found", status: 404 };
+  if (invoice.status !== "paid") return { error: "invoice_not_paid", status: 402 };
+  if (invoice.itemId !== expectedItemId) return { error: "invoice_item_mismatch", status: 409 };
+  if (safeInt(invoice.amountStars, 0) !== safeAmount) return { error: "invoice_amount_mismatch", status: 409 };
+  if (invoice.developmentAppliedAt) return { error: "invoice_already_used", status: 409 };
+
+  const applied = await db.collection("stars_invoices").updateOne(
+    {
+      invoiceId,
+      telegramId: req.telegramUser.id,
+      status: "paid",
+      itemId: expectedItemId,
+      amountStars: safeAmount,
+      developmentAppliedAt: { $exists: false },
+    },
+    {
+      $set: {
+        developmentAppliedAt: new Date(),
+        developmentAction: action,
+        updatedAt: new Date(),
+      },
+    },
+  );
+
+  if (!applied.modifiedCount) return { error: "invoice_already_used", status: 409 };
+
+  const save = await getSave(req.telegramUser.id);
+  const economy = await getOrCreateEconomy(req.telegramUser, save?.data);
+  await patchEconomy(economy.telegramId, {
+    $push: {
+      ledger: {
+        $each: [buildLedgerEntry("development_invoice", -safeAmount, `development:${action}`, { action, invoiceId })],
+        $slice: -80,
+      },
+    },
+  });
+  const refreshedEconomy = await db.collection("economy").findOne({ telegramId: req.telegramUser.id });
+  return { save, economy: refreshedEconomy || economy };
+}
 async function spendActionStars(req, res, action, amount) {
+  const paidInvoice = await consumeDevelopmentInvoice(req, action, amount);
+  if (paidInvoice?.error) {
+    res.status(paidInvoice.status || 402).json({ ok: false, error: paidInvoice.error });
+    return null;
+  }
+  if (paidInvoice) return paidInvoice;
+
   const save = await getSave(req.telegramUser.id);
   const economy = await getOrCreateEconomy(req.telegramUser, save?.data);
   const updated = await spendStars(economy, amount, `development:${action}`, { action });

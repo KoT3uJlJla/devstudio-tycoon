@@ -302,7 +302,7 @@ export const ru = {
   'develop.freePromotion': 'Продвижение бесплатно',
   'develop.promotionStars': 'Продвижение ⭐35',
   'develop.inProgress': 'Идёт разработка',
-  'develop.speedUpOneHour': 'Ускорить на 1ч ⭐25',
+  'develop.speedUpOneHour': 'Ускорить на 25% ⭐15',
   'develop.speedUpTelegram': 'Ускорить через Telegram ⭐15',
   'develop.speedUpQuarter': 'Ускорить на 25% ⭐15',
   'develop.eventPauseHelp': 'События ставят разработку на паузу. Если появилась карточка события — выбери решение, чтобы продолжить.',

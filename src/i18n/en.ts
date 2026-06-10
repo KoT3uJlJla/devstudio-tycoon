@@ -304,7 +304,7 @@ export const en: Partial<Record<TranslationKey, string>> = {
   'develop.freePromotion': 'Free promotion',
   'develop.promotionStars': 'Promotion ⭐35',
   'develop.inProgress': 'In development',
-  'develop.speedUpOneHour': 'Speed up 1h ⭐25',
+  'develop.speedUpOneHour': 'Speed up by 25% ⭐15',
   'develop.speedUpTelegram': 'Speed up through Telegram ⭐15',
   'develop.speedUpQuarter': 'Speed up by 25% ⭐15',
   'develop.eventPauseHelp': 'Events pause development. If an event card appears, choose what to do so the team can continue.',

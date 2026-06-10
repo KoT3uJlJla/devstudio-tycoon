@@ -16,6 +16,27 @@ input, textarea, [contenteditable="true"], .project-name, .studio-name-input, .t
   display: none !important;
 }
 
+button.daily-card.daily-reward-button,
+.daily-card.daily-reward-button {
+  background: linear-gradient(135deg, #ffe04e 0%, #ffc33d 48%, #ff9f2e 100%) !important;
+  color: var(--ink, #05060d) !important;
+  border: 3px solid var(--ink, #05060d) !important;
+  box-shadow:
+    5px 5px 0 var(--pink, #ff3bbd),
+    inset 0 1px 0 rgba(255, 255, 255, .55) !important;
+  text-shadow: none !important;
+}
+
+.daily-card.daily-reward-button span,
+.daily-card.daily-reward-button strong,
+.daily-card.daily-reward-button b {
+  color: inherit !important;
+}
+
+.daily-card.daily-reward-button:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
 .dev-ticker-pop::after {
   bottom: -5px;
   width: 8px;
