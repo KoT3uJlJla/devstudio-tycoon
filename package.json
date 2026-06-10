@@ -13,9 +13,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@telegram-apps/analytics": "^1.6.4",
+    "pixi.js": "^8.10.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "pixi.js": "^8.10.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

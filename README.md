@@ -36,6 +36,22 @@ npm run build
 
 Then upload the fresh `dist/` folder to Cloudflare Pages.
 
+Telegram Analytics env:
+
+- `VITE_TG_ANALYTICS_TOKEN`
+- `VITE_TG_ANALYTICS_APP_NAME=dst_open_beta`
+
+For a local production build with analytics enabled:
+
+```powershell
+$env:VITE_API_URL="https://devstudio-tycoon-api.onrender.com"
+$env:VITE_TG_ANALYTICS_TOKEN="<real token from owner>"
+$env:VITE_TG_ANALYTICS_APP_NAME="dst_open_beta"
+npm run build
+```
+
+For Cloudflare Pages, add `VITE_TG_ANALYTICS_TOKEN` and `VITE_TG_ANALYTICS_APP_NAME=dst_open_beta` to both Production and Preview environment variables, then rebuild the frontend.
+
 ### Backend / Render
 
 Render runs the backend from `server/`:

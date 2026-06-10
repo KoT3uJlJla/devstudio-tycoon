@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { initTelegramAnalytics } from './analytics';
 import { installGameLanguage } from './i18n';
 import './styles.css';
 import './mobile-topbar.css';
@@ -12,6 +13,7 @@ import './release-results-update.css';
 import './studio-office-layout-fix.css';
 
 installGameLanguage();
+initTelegramAnalytics();
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
