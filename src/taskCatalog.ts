@@ -1,11 +1,19 @@
 import { isProductInstinctActive } from './gameLogic';
-import { getLocale, t, type TranslationKey } from './i18n';
+import { getLanguage, getLocale, t, type TranslationKey } from './i18n';
 import type { DailyTaskId, GameState } from './types';
+
+export const SUBSCRIBE_HATCH_MIND_GOAL_ID = 'studio.subscribe_hatch_mind_channel';
+export const HATCH_MIND_CHANNEL_URL = 'https://t.me/hatch_mind';
 
 export type TaskReward = {
   coins?: number;
   rp?: number;
   stars?: number;
+};
+
+export type TaskCatalogAction = {
+  type: 'telegram_url';
+  url: string;
 };
 
 export type TaskCatalogItemOverride = {
@@ -14,11 +22,17 @@ export type TaskCatalogItemOverride = {
   hidden?: boolean;
   status?: 'active' | 'hidden' | 'disabled' | string;
   title?: string;
+  titleEn?: string;
   desc?: string;
+  descEn?: string;
   description?: string;
+  descriptionEn?: string;
+  buttonLabel?: string;
+  buttonLabelEn?: string;
   target?: number;
   reward?: TaskReward;
   order?: number;
+  action?: TaskCatalogAction;
 };
 
 export type TaskCatalogOverrides = {
@@ -40,10 +54,12 @@ type StudioGoalBase = {
   id: string;
   titleKey: TranslationKey;
   descKey: TranslationKey;
+  buttonLabelKey?: TranslationKey;
   target: number;
   reward: TaskReward;
   current: (state: GameState) => number;
   order: number;
+  action?: TaskCatalogAction;
 };
 
 export type DailyTaskModel = {
@@ -60,10 +76,12 @@ export type StudioGoalModel = {
   id: string;
   title: string;
   desc: string;
+  buttonLabel?: string;
   current: number;
   target: number;
   reward: TaskReward;
   order: number;
+  action?: TaskCatalogAction;
 };
 
 const dailyTaskBase: DailyTaskBase[] = [
@@ -108,6 +126,17 @@ const dailyTaskBase: DailyTaskBase[] = [
 const baseContentCount = 7;
 
 const studioGoalBase: StudioGoalBase[] = [
+  {
+    id: SUBSCRIBE_HATCH_MIND_GOAL_ID,
+    titleKey: 'goals.subscribeHatchMind.title',
+    descKey: 'goals.subscribeHatchMind.desc',
+    buttonLabelKey: 'goals.subscribeHatchMind.button',
+    target: 1,
+    reward: { stars: 35, coins: 8000 },
+    current: (state) => state.studioGoalClaims?.[SUBSCRIBE_HATCH_MIND_GOAL_ID] ? 1 : 0,
+    order: -1000,
+    action: { type: 'telegram_url', url: HATCH_MIND_CHANNEL_URL },
+  },
   {
     id: 'first-release',
     titleKey: 'goals.firstRelease.title',
@@ -229,22 +258,55 @@ function cleanReward(value: unknown, fallback: TaskReward): TaskReward {
   };
 }
 
+function cleanTelegramUrl(value: unknown, fallback = '') {
+  const url = String(value || '').trim();
+  if (/^https:\/\/t\.me\/[A-Za-z0-9_/?=&%.-]{1,140}$/i.test(url)) return url;
+  return fallback;
+}
+
+function cleanAction(value: unknown, fallback?: TaskCatalogAction): TaskCatalogAction | undefined {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<TaskCatalogAction> : {};
+  const type = raw.type === 'telegram_url' ? raw.type : fallback?.type;
+  const url = cleanTelegramUrl(raw.url, fallback?.url);
+  return type === 'telegram_url' && url ? { type, url } : undefined;
+}
+
 function isVisible(override?: TaskCatalogItemOverride) {
   if (!override) return true;
   if (override.enabled === false || override.visible === false || override.hidden === true) return false;
   return !['hidden', 'disabled', 'off'].includes(String(override.status || '').toLowerCase());
 }
 
+function localizedTitleOverride(override?: TaskCatalogItemOverride) {
+  if (!override) return undefined;
+  return getLanguage() === 'en' ? override.titleEn : override.title;
+}
+
+function localizedDescOverride(override?: TaskCatalogItemOverride) {
+  if (!override) return undefined;
+  if (getLanguage() === 'en') return override.descEn ?? override.descriptionEn;
+  return override.desc ?? override.description;
+}
+
+function localizedButtonOverride(override?: TaskCatalogItemOverride) {
+  if (!override) return undefined;
+  return getLanguage() === 'en' ? override.buttonLabelEn : override.buttonLabel;
+}
+
 function mergeTask<T extends DailyTaskBase | StudioGoalBase>(base: T, override: TaskCatalogItemOverride | undefined, state: GameState) {
   if (!isVisible(override)) return null;
+  const baseButtonLabel = 'buttonLabelKey' in base && base.buttonLabelKey ? t(base.buttonLabelKey) : undefined;
+  const fallbackAction = 'action' in base ? base.action : undefined;
   return {
     id: base.id,
-    title: cleanText(override?.title, t(base.titleKey)),
-    desc: cleanText(override?.desc ?? override?.description, t(base.descKey), 160),
+    title: cleanText(localizedTitleOverride(override), t(base.titleKey)),
+    desc: cleanText(localizedDescOverride(override), t(base.descKey), 160),
+    buttonLabel: baseButtonLabel ? cleanText(localizedButtonOverride(override), baseButtonLabel, 48) : undefined,
     current: Math.max(0, base.current(state)),
     target: safeNumber(override?.target, base.target, 1, 999999999),
     reward: cleanReward(override?.reward, base.reward),
-    order: safeNumber(override?.order, base.order, 0, 9999),
+    order: safeNumber(override?.order, base.order, -100000, 999999),
+    action: cleanAction(override?.action, fallbackAction),
   };
 }
 

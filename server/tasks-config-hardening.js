@@ -8,6 +8,7 @@ const DEFAULT_TASK_CONFIG_ROWS = [
   { group: "daily", id: "work", enabled: true, visible: true, hidden: false, status: "active", title: "Продюсерская смена", desc: "Прими 2 решения во время разработки.", target: 2, reward: { coins: 1200, stars: 1 }, order: 20 },
   { group: "daily", id: "research", enabled: true, visible: true, hidden: false, status: "active", title: "День лаборатории", desc: "Открой 2 исследования, жанра или сеттинга.", target: 2, reward: { coins: 700, rp: 16 }, order: 30 },
   { group: "daily", id: "income", enabled: true, visible: true, hidden: false, status: "active", title: "Long-tail доход", desc: "Получи 2 500 монет пассивно от выпущенных игр.", target: 2500, reward: { coins: 1400 }, order: 40 },
+  { group: "studio", id: "studio.subscribe_hatch_mind_channel", enabled: true, visible: true, hidden: false, status: "active", title: "Подпишись на наш канал!", titleEn: "Follow our channel!", desc: "Загляни в наш канал и забери бонус для студии.", descEn: "Check out our channel and grab a bonus for your studio.", buttonLabel: "Подписаться", buttonLabelEn: "Follow", target: 1, reward: { stars: 35, coins: 8000 }, order: -1000, action: { type: "telegram_url", url: "https://t.me/hatch_mind" } },
   { group: "studio", id: "first-release", enabled: true, visible: true, hidden: false, status: "active", title: "Первый релиз", desc: "Выпусти первую игру студии.", target: 1, reward: { coins: 2000, rp: 5 }, order: 10 },
   { group: "studio", id: "score-7", enabled: true, visible: true, hidden: false, status: "active", title: "Крепкий релиз", desc: "Получи оценку 7.0 или выше.", target: 7, reward: { coins: 3500, rp: 10 }, order: 20 },
   { group: "studio", id: "coins-10000", enabled: true, visible: true, hidden: false, status: "active", title: "Финансовая подушка", desc: "Накопи 10 000 монет на балансе студии.", target: 10000, reward: { coins: 1500, rp: 6 }, order: 30 },
@@ -35,6 +36,13 @@ function cleanTaskReward(value) {
   if (stars) reward.stars = stars;
   return reward;
 }
+function cleanTaskAction(value) {
+  if (!isPlainObject(value)) return undefined;
+  const type = value.type === "telegram_url" ? "telegram_url" : "";
+  const url = cleanTaskText(value.url || "", "").slice(0, 180);
+  if (type === "telegram_url" && /^https:\/\/t\.me\/[A-Za-z0-9_/?=&%.-]+$/i.test(url)) return { type, url };
+  return undefined;
+}
 function cleanTaskConfigRow(row) {
   const id = cleanTaskText(row?.id || row?.taskId || "", "").slice(0, 96);
   const group = String(row?.group || row?.type || "").toLowerCase();
@@ -47,10 +55,15 @@ function cleanTaskConfigRow(row) {
     hidden: row.hidden === true,
     status: cleanTaskText(row.status || "active", "active").slice(0, 24),
     title: cleanTaskText(row.title || "", ""),
+    titleEn: cleanTaskText(row.titleEn || "", ""),
     desc: cleanTaskText(row.desc || row.description || "", ""),
+    descEn: cleanTaskText(row.descEn || row.descriptionEn || "", ""),
+    buttonLabel: cleanTaskText(row.buttonLabel || "", "").slice(0, 48),
+    buttonLabelEn: cleanTaskText(row.buttonLabelEn || "", "").slice(0, 48),
     target: safeInt(row.target, 0, 999999999),
     reward: cleanTaskReward(row.reward),
-    order: safeInt(row.order, 0, 9999),
+    order: safeInt(row.order, -100000, 999999),
+    action: cleanTaskAction(row.action),
   };
 }
 async function ensureDefaultTaskConfigs() {

@@ -70,6 +70,13 @@ const DEVELOPMENT_ACTION_INVOICE_ITEMS = {
   promote: "promotion",
 };
 
+const SUBSCRIBE_HATCH_MIND_STUDIO_GOAL = {
+  id: "studio.subscribe_hatch_mind_channel",
+  url: "https://t.me/hatch_mind",
+  waitMs: 5000,
+  reward: { stars: 35, coins: 8000 },
+};
+
 function safeTimingEqual(a, b) {
   const left = Buffer.from(a, "hex");
   const right = Buffer.from(b, "hex");
@@ -290,6 +297,46 @@ function applyRewardToSaveData(data, reward) {
   next.lastSavedAt = Date.now();
   return normalizeServerDevelopment(next);
 }
+function isoDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+function studioGoalActionPayload(action) {
+  if (!action) return null;
+  return {
+    goalId: action.goalId,
+    clickedAt: isoDate(action.clickedAt),
+    eligibleAt: isoDate(action.eligibleAt),
+    claimedAt: isoDate(action.claimedAt),
+    completedAt: isoDate(action.completedAt),
+    claimed: Boolean(action.claimedAt || action.completedAt),
+  };
+}
+function hasStudioGoalClaim(data, goalId) {
+  return Boolean(isPlainObject(data?.studioGoalClaims) && data.studioGoalClaims[goalId]);
+}
+function applyStudioGoalRewardToSaveData(data, goal) {
+  const rewarded = applyRewardToSaveData(data, { coins: goal.reward.coins });
+  const claims = isPlainObject(rewarded.studioGoalClaims) ? rewarded.studioGoalClaims : {};
+  const ledger = Array.isArray(rewarded.lastLedger) ? rewarded.lastLedger : [];
+  const nextLedger = [
+    ...ledger,
+    {
+      id: `studio-goal-${goal.id}-${Date.now()}`,
+      day: safeInt(rewarded.gameDay, 1, 999999999),
+      title: "Цель студии: подписка на канал",
+      amount: goal.reward.coins,
+      kind: "income",
+    },
+  ].slice(-10);
+  return normalizeServerDevelopment({
+    ...rewarded,
+    studioGoalClaims: { ...claims, [goal.id]: true },
+    lastLedger: nextLedger,
+    lastSavedAt: Date.now(),
+  });
+}
 async function consumeDevelopmentInvoice(req, action, amount) {
   const invoiceId = String(req.body?.invoiceId || "").trim().slice(0, 80);
   if (!invoiceId) return null;
@@ -388,6 +435,8 @@ async function start() {
   await db.collection("ratings").createIndex({ telegramId: 1, weekKey: 1 }, { unique: true });
   await db.collection("stars_invoices").createIndex({ invoiceId: 1 }, { unique: true });
   await db.collection("stars_invoices").createIndex({ telegramId: 1, createdAt: -1 });
+  await db.collection("studio_goal_actions").createIndex({ telegramId: 1, goalId: 1 }, { unique: true });
+  await db.collection("studio_goal_actions").createIndex({ eligibleAt: 1 });
 
   app.get("/health", (req, res) => res.json({ ok: true }));
   app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));
@@ -449,6 +498,92 @@ async function start() {
     const nextData = overlayProtectedEconomy(applyRewardToSaveData(save?.data, { coins: 500 }), economy);
     await writeSave(req.telegramUser.id, req.telegramUser, nextData);
     res.json({ ok: true, economy: publicEconomy(economy), reward: { stars: 1, coins: 500 }, save: { data: nextData, updatedAt: new Date() } });
+  });
+  app.post("/api/tasks/studio-goals/:goalId/click", requireTelegramUser, async (req, res) => {
+    try {
+      const goalId = String(req.params.goalId || "");
+      const goal = goalId === SUBSCRIBE_HATCH_MIND_STUDIO_GOAL.id ? SUBSCRIBE_HATCH_MIND_STUDIO_GOAL : null;
+      if (!goal) return res.status(404).json({ ok: false, error: "unknown_studio_goal" });
+
+      const save = await getSave(req.telegramUser.id);
+      const economy = await getOrCreateEconomy(req.telegramUser, save?.data);
+      const currentData = overlayProtectedEconomy(normalizeServerDevelopment(save?.data || {}), economy);
+      if (hasStudioGoalClaim(currentData, goal.id)) {
+        return res.json({ ok: true, economy: publicEconomy(economy), save: { data: currentData, updatedAt: save?.updatedAt ?? new Date() }, studioGoal: { goalId: goal.id, claimed: true } });
+      }
+
+      const now = new Date();
+      await db.collection("studio_goal_actions").updateOne(
+        { telegramId: req.telegramUser.id, goalId: goal.id },
+        {
+          $setOnInsert: {
+            telegramId: req.telegramUser.id,
+            telegramUser: req.telegramUser,
+            goalId: goal.id,
+            url: goal.url,
+            clickedAt: now,
+            eligibleAt: new Date(now.getTime() + goal.waitMs),
+            claimedAt: null,
+            completedAt: null,
+            createdAt: now,
+          },
+          $set: { telegramUser: req.telegramUser, updatedAt: now },
+        },
+        { upsert: true },
+      );
+      const action = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
+      res.json({ ok: true, economy: publicEconomy(economy), save: { data: currentData, updatedAt: save?.updatedAt ?? new Date() }, studioGoal: studioGoalActionPayload(action) });
+    } catch (error) {
+      console.error("Studio goal click failed:", error);
+      res.status(500).json({ ok: false, error: "studio_goal_click_failed" });
+    }
+  });
+  app.post("/api/tasks/studio-goals/:goalId/claim", requireTelegramUser, async (req, res) => {
+    try {
+      const goalId = String(req.params.goalId || "");
+      const goal = goalId === SUBSCRIBE_HATCH_MIND_STUDIO_GOAL.id ? SUBSCRIBE_HATCH_MIND_STUDIO_GOAL : null;
+      if (!goal) return res.status(404).json({ ok: false, error: "unknown_studio_goal" });
+
+      const save = await getSave(req.telegramUser.id);
+      let economy = await getOrCreateEconomy(req.telegramUser, save?.data);
+      const currentData = overlayProtectedEconomy(normalizeServerDevelopment(save?.data || {}), economy);
+      if (hasStudioGoalClaim(currentData, goal.id)) {
+        return res.json({ ok: true, economy: publicEconomy(economy), save: { data: currentData, updatedAt: save?.updatedAt ?? new Date() }, studioGoal: { goalId: goal.id, claimed: true } });
+      }
+
+      const now = new Date();
+      const claimResult = await db.collection("studio_goal_actions").findOneAndUpdate(
+        { telegramId: req.telegramUser.id, goalId: goal.id, claimedAt: null, eligibleAt: { $lte: now } },
+        { $set: { claimedAt: now, completedAt: now, updatedAt: now } },
+        { returnDocument: "after" },
+      );
+      const claimedAction = claimResult?.goalId ? claimResult : claimResult?.value;
+
+      if (!claimedAction) {
+        const existing = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
+        if (!existing) return res.status(409).json({ ok: false, error: "studio_goal_click_required" });
+        if (existing.claimedAt || existing.completedAt) {
+          return res.status(409).json({ ok: false, error: "studio_goal_already_claimed", economy: publicEconomy(economy), studioGoal: studioGoalActionPayload(existing) });
+        }
+        return res.status(425).json({ ok: false, error: "studio_goal_not_ready", studioGoal: studioGoalActionPayload(existing) });
+      }
+
+      economy = await patchEconomy(economy.telegramId, {
+        $inc: { stars: goal.reward.stars },
+        $push: {
+          ledger: {
+            $each: [buildLedgerEntry("studio_goal", goal.reward.stars, `studio_goal:${goal.id}`, { goalId: goal.id, url: goal.url, amounts: goal.reward })],
+            $slice: -80,
+          },
+        },
+      });
+      const nextData = overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
+      await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+      res.json({ ok: true, economy: publicEconomy(economy), reward: goal.reward, save: { data: nextData, updatedAt: new Date() }, studioGoal: studioGoalActionPayload(claimedAction) });
+    } catch (error) {
+      console.error("Studio goal claim failed:", error);
+      res.status(500).json({ ok: false, error: "studio_goal_claim_failed" });
+    }
   });
   app.post("/api/economy/shop/purchase", requireTelegramUser, async (req, res) => {
     const itemId = String(req.body?.itemId || "");

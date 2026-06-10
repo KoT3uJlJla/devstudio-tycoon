@@ -10,6 +10,14 @@ type BackendPayload = {
   ok?: boolean;
   save?: { data?: unknown } | null;
   economy?: { stars?: unknown } | null;
+  studioGoal?: {
+    goalId?: string;
+    clickedAt?: string;
+    eligibleAt?: string;
+    claimedAt?: string | null;
+    completedAt?: string | null;
+    claimed?: boolean;
+  } | null;
   error?: string;
 };
 
@@ -65,7 +73,7 @@ function normalizePayloadState(payload: BackendPayload | null): GameState | null
   }
 }
 
-async function postJson(path: string, body: Record<string, unknown> = {}): Promise<{ state: GameState | null; error?: string }> {
+async function postJson(path: string, body: Record<string, unknown> = {}): Promise<{ state: GameState | null; error?: string; payload?: BackendPayload | null }> {
   if (!canUseBackend()) return { state: null, error: 'backend_unavailable' };
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
@@ -78,8 +86,8 @@ async function postJson(path: string, body: Record<string, unknown> = {}): Promi
 
   if (!response) return { state: null, error: 'network_failed' };
   const payload = await response.json().catch(() => null) as BackendPayload | null;
-  if (!response.ok || !payload?.ok) return { state: null, error: payload?.error || `http_${response.status}` };
-  return { state: normalizePayloadState(payload) };
+  if (!response.ok || !payload?.ok) return { state: null, error: payload?.error || `http_${response.status}`, payload };
+  return { state: normalizePayloadState(payload), payload };
 }
 
 async function createInvoice(itemId: string) {
@@ -155,6 +163,19 @@ export async function claimBackendDailyTask(taskId: string) {
 
 export async function claimBackendReferralMilestone(milestoneId: string) {
   return (await postJson('/api/economy/referral/claim', { milestoneId })).state;
+}
+
+export async function clickBackendStudioGoal(goalId: string) {
+  const result = await postJson(`/api/tasks/studio-goals/${encodeURIComponent(goalId)}/click`);
+  if (result.error) return null;
+  return {
+    state: result.state,
+    eligibleAt: typeof result.payload?.studioGoal?.eligibleAt === 'string' ? result.payload.studioGoal.eligibleAt : null,
+  };
+}
+
+export async function claimBackendStudioGoal(goalId: string) {
+  return (await postJson(`/api/tasks/studio-goals/${encodeURIComponent(goalId)}/claim`)).state;
 }
 
 export async function runBackendDevelopmentAction(endpoint: DevelopmentEndpoint, body: Record<string, unknown> = {}) {

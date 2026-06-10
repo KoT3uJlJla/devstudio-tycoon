@@ -51,10 +51,10 @@ import {
   gameDateParts,
 } from './gameLogic';
 import { loadGame, saveGame } from './storage';
-import { haptic, initTelegram, shareRelease } from './telegram';
-import { claimBackendDailyReward, claimBackendReferralMilestone, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
+import { haptic, initTelegram, openTelegramUrl, shareRelease } from './telegram';
+import { claimBackendDailyReward, claimBackendReferralMilestone, claimBackendStudioGoal, clickBackendStudioGoal, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
 import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet, claimReferralMilestone, fetchTaskConfig, hasBackendSession, runDevelopmentAction } from './backendClient';
-import { applyTaskReward, buildDailyTasks, buildStudioGoals, rewardLabel, taskProgressPercent, type DailyTaskModel, type StudioGoalModel, type TaskCatalogOverrides } from './taskCatalog';
+import { applyTaskReward, buildDailyTasks, buildStudioGoals, HATCH_MIND_CHANNEL_URL, rewardLabel, SUBSCRIBE_HATCH_MIND_GOAL_ID, taskProgressPercent, type DailyTaskModel, type StudioGoalModel, type TaskCatalogOverrides } from './taskCatalog';
 import { getLanguage, getLocale, localizedDescription, localizedEffect, localizedName, localizedTitle, t, type TranslationKey } from './i18n';
 import { PixiCanvas } from './rendering/PixiCanvas';
 import type { DailyTaskId, DevEventChoice, Employee, Focus, GameState, GenreId, PhaseId, PlatformId, Project, ScoreBreakdownItem, ThemeId } from './types';
@@ -1247,23 +1247,72 @@ function DailyTasks({ state, update, taskOverrides }: { state: GameState; update
 
 function StudioGoals({ state, update, taskOverrides }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {
   const [open, setOpen] = useState(false);
+  const [subscribePending, setSubscribePending] = useState(false);
+  const [resumeClaimChecked, setResumeClaimChecked] = useState(false);
   const goals = buildStudioGoals(state, taskOverrides);
   const visibleGoals = open ? goals : goals.slice(0, 3);
   const completed = goals.filter((goal) => state.studioGoalClaims[goal.id]).length;
+  const subscribeClaimed = Boolean(state.studioGoalClaims[SUBSCRIBE_HATCH_MIND_GOAL_ID]);
   const claim = (goal: StudioGoalModel) => update((current) => {
     if (current.studioGoalClaims[goal.id] || goal.current < goal.target) return current;
     haptic('success');
     return applyTaskReward({ ...current, studioGoalClaims: { ...current.studioGoalClaims, [goal.id]: true } }, goal.reward);
   });
+  const claimSubscribeGoal = async (goalId: string, notify = true) => {
+    const nextState = await claimBackendStudioGoal(goalId);
+    if (!nextState) {
+      if (notify) haptic('warning');
+      return false;
+    }
+    update(() => nextState);
+    haptic('success');
+    return true;
+  };
+  const startSubscribeGoal = async (goal: StudioGoalModel) => {
+    if (subscribePending || state.studioGoalClaims[goal.id]) return;
+    haptic('tap');
+    setSubscribePending(true);
+    const clicked = await clickBackendStudioGoal(goal.id);
+    if (!clicked) {
+      setSubscribePending(false);
+      haptic('warning');
+      return;
+    }
+    const clickedState = clicked.state;
+    if (clickedState) {
+      update(() => clickedState);
+      if (clickedState.studioGoalClaims[goal.id]) {
+        setSubscribePending(false);
+        return;
+      }
+    }
+    openTelegramUrl(goal.action?.type === 'telegram_url' ? goal.action.url : HATCH_MIND_CHANNEL_URL);
+    const eligibleAt = clicked.eligibleAt ? Date.parse(clicked.eligibleAt) : NaN;
+    const delayMs = Number.isFinite(eligibleAt) ? Math.max(0, eligibleAt - Date.now()) : 5000;
+    window.setTimeout(() => {
+      void claimSubscribeGoal(goal.id).finally(() => setSubscribePending(false));
+    }, delayMs);
+  };
+  useEffect(() => {
+    if (resumeClaimChecked || subscribeClaimed) return;
+    setResumeClaimChecked(true);
+    void claimSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, false);
+  }, [resumeClaimChecked, subscribeClaimed]);
   if (!goals.length) return null;
   return (
     <section className="panel daily-tasks comic-card">
       <div className="section-head"><div><p className="eyebrow">{t('studio.studioGoals')}</p><h3>{t('studio.studioGoalsTitle')}</h3></div><button className="ghost" type="button" onClick={() => setOpen((value) => !value)}>{open ? t('studio.collapse') : t('studio.showAll')}</button></div>
       {visibleGoals.map((goal) => {
+        const isSubscribeGoal = goal.id === SUBSCRIBE_HATCH_MIND_GOAL_ID;
         const claimed = Boolean(state.studioGoalClaims[goal.id]);
         const ready = goal.current >= goal.target && !claimed;
-        const progress = taskProgressPercent(goal.current, goal.target);
-        return <article className="task-card" key={goal.id}><div><strong>{goal.title}</strong><p>{goal.desc}</p><ProgressBar value={progress} /></div><button disabled={!ready} onClick={() => claim(goal)}>{claimed ? '✅' : ready ? rewardLabel(goal.reward) : Math.min(Math.round(goal.current), goal.target) + '/' + goal.target}</button></article>;
+        const progress = subscribePending && isSubscribeGoal ? 50 : taskProgressPercent(goal.current, goal.target);
+        const buttonText = isSubscribeGoal
+          ? (claimed ? '✅' : subscribePending ? t('goals.subscribeHatchMind.checking') : goal.buttonLabel ?? t('goals.subscribeHatchMind.button'))
+          : (claimed ? '✅' : ready ? rewardLabel(goal.reward) : Math.min(Math.round(goal.current), goal.target) + '/' + goal.target);
+        const disabled = isSubscribeGoal ? claimed || subscribePending : !ready;
+        const onClick = isSubscribeGoal ? () => void startSubscribeGoal(goal) : () => claim(goal);
+        return <article className="task-card" key={goal.id}><div><strong>{goal.title}</strong><p>{goal.desc}</p><ProgressBar value={progress} /></div><button disabled={disabled} onClick={onClick}>{buttonText}</button></article>;
       })}
       <p className="small muted">{t('studio.completed', { done: completed, total: goals.length })}</p>
     </section>

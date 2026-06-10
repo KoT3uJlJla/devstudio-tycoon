@@ -115,6 +115,16 @@ export function haptic(type: 'tap' | 'success' | 'warning' = 'tap') {
   });
 }
 
+export function openTelegramUrl(url: string) {
+  const safeUrl = String(url || '').trim();
+  if (!/^https:\/\/t\.me\/[A-Za-z0-9_/?=&%.-]+$/i.test(safeUrl)) return;
+  if (window.Telegram?.WebApp?.openTelegramLink) {
+    safeTelegramCall(() => window.Telegram?.WebApp?.openTelegramLink?.(safeUrl));
+    return;
+  }
+  window.open(safeUrl, '_blank', 'noopener,noreferrer');
+}
+
 export type SharePayload = {
   url?: string;
   imageUrl?: string;
