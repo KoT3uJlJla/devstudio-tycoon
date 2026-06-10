@@ -60,8 +60,10 @@ function absoluteAssetUrl(path: string) {
 function safeTelegramCall(callback: () => void) {
   try {
     callback();
+    return true;
   } catch {
     // Telegram WebView methods are best-effort. They must never block game startup.
+    return false;
   }
 }
 
@@ -119,16 +121,18 @@ export function haptic(type: 'tap' | 'success' | 'warning' = 'tap') {
 export function openTelegramUrl(url: string) {
   const safeUrl = String(url || '').trim();
   if (!/^https:\/\/t\.me\/[A-Za-z0-9_/?=&%.-]+$/i.test(safeUrl)) return;
+  const popup = window.open(safeUrl, '_blank', 'noopener,noreferrer');
+  if (popup) {
+    return;
+  }
   const webApp = window.Telegram?.WebApp;
+  if (webApp?.openLink && safeTelegramCall(() => webApp.openLink?.(safeUrl))) {
+    return;
+  }
   if (webApp?.openTelegramLink) {
-    safeTelegramCall(() => webApp.openTelegramLink?.(safeUrl));
-    return;
+    if (safeTelegramCall(() => webApp.openTelegramLink?.(safeUrl))) return;
   }
-  if (webApp?.openLink) {
-    safeTelegramCall(() => webApp.openLink?.(safeUrl));
-    return;
-  }
-  window.open(safeUrl, '_blank', 'noopener,noreferrer');
+  window.location.assign(safeUrl);
 }
 
 export type SharePayload = {

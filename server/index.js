@@ -210,6 +210,7 @@ async function getOrCreateEconomy(telegramUser, saveData = null) {
     referralMilestoneClaims: {},
     dailyClaimedAt: null,
     dailyTaskStarClaims: {},
+    studioGoalStarClaimIds: [],
     tutorialStarClaimed: false,
     prizeClaims: {},
     ledger: [],
@@ -315,6 +316,38 @@ function studioGoalActionPayload(action) {
 }
 function hasStudioGoalClaim(data, goalId) {
   return Boolean(isPlainObject(data?.studioGoalClaims) && data.studioGoalClaims[goalId]);
+}
+function hasStudioGoalStarGrant(economy, goalId) {
+  if (Array.isArray(economy?.studioGoalStarClaimIds) && economy.studioGoalStarClaimIds.includes(goalId)) return true;
+  return Array.isArray(economy?.ledger) && economy.ledger.some((entry) => entry?.reason === `studio_goal:${goalId}`);
+}
+async function grantStudioGoalStarsIfNeeded(economy, goal) {
+  if (hasStudioGoalStarGrant(economy, goal.id)) {
+    if (Array.isArray(economy?.studioGoalStarClaimIds) && economy.studioGoalStarClaimIds.includes(goal.id)) return economy;
+    await db.collection("economy").updateOne(
+      { telegramId: economy.telegramId },
+      { $addToSet: { studioGoalStarClaimIds: goal.id }, $set: { updatedAt: new Date() } },
+    );
+    return db.collection("economy").findOne({ telegramId: economy.telegramId });
+  }
+
+  const updated = await db.collection("economy").findOneAndUpdate(
+    { telegramId: economy.telegramId, studioGoalStarClaimIds: { $ne: goal.id } },
+    {
+      $inc: { stars: goal.reward.stars },
+      $addToSet: { studioGoalStarClaimIds: goal.id },
+      $push: {
+        ledger: {
+          $each: [buildLedgerEntry("studio_goal", goal.reward.stars, `studio_goal:${goal.id}`, { goalId: goal.id, url: goal.url, amounts: goal.reward })],
+          $slice: -80,
+        },
+      },
+      $set: { updatedAt: new Date() },
+    },
+    { returnDocument: "after" },
+  );
+  const updatedEconomy = updated?.telegramId === economy.telegramId ? updated : updated?.value;
+  return updatedEconomy || db.collection("economy").findOne({ telegramId: economy.telegramId });
 }
 function applyStudioGoalRewardToSaveData(data, goal) {
   const rewarded = applyRewardToSaveData(data, { coins: goal.reward.coins });
@@ -568,11 +601,18 @@ async function start() {
           return res.status(409).json({ ok: false, error: "studio_goal_click_required" });
         }
         if (existing.claimedAt || existing.completedAt) {
+          economy = await grantStudioGoalStarsIfNeeded(economy, goal);
+          const nextData = hasStudioGoalClaim(currentData, goal.id)
+            ? overlayProtectedEconomy(currentData, economy)
+            : overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
+          if (!hasStudioGoalClaim(currentData, goal.id)) {
+            await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+          }
           logStudioGoalClaim("already_claimed");
           return res.json({
             ok: true,
             economy: publicEconomy(economy),
-            save: { data: currentData, updatedAt: save?.updatedAt ?? existing.completedAt ?? existing.claimedAt ?? new Date() },
+            save: { data: nextData, updatedAt: hasStudioGoalClaim(currentData, goal.id) ? save?.updatedAt ?? existing.completedAt ?? existing.claimedAt ?? new Date() : new Date() },
             studioGoal: studioGoalActionPayload(existing),
           });
         }
@@ -580,15 +620,7 @@ async function start() {
         return res.status(425).json({ ok: false, error: "studio_goal_not_ready", studioGoal: studioGoalActionPayload(existing) });
       }
 
-      economy = await patchEconomy(economy.telegramId, {
-        $inc: { stars: goal.reward.stars },
-        $push: {
-          ledger: {
-            $each: [buildLedgerEntry("studio_goal", goal.reward.stars, `studio_goal:${goal.id}`, { goalId: goal.id, url: goal.url, amounts: goal.reward })],
-            $slice: -80,
-          },
-        },
-      });
+      economy = await grantStudioGoalStarsIfNeeded(economy, goal);
       const nextData = overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
       await writeSave(req.telegramUser.id, req.telegramUser, nextData);
       logStudioGoalClaim("claimed");
