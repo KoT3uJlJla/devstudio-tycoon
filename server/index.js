@@ -124,6 +124,66 @@ function requireTelegramUser(req, res, next) {
   }
 }
 
+async function callTelegram(method, payload) {
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error(`Telegram ${method} failed`, response.status, body);
+    return null;
+  }
+
+  return response.json().catch(() => null);
+}
+
+function webAppUrl() {
+  return String(process.env.WEBAPP_URL || "https://devstudio-tycoon-stat.pages.dev").replace(/\/+$/, "");
+}
+
+function botStartImageUrl() {
+  return String(process.env.BOT_START_IMAGE_URL || `${webAppUrl()}/assets/bot-start-cover.png`);
+}
+
+function playKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "Play Now!",
+          web_app: { url: webAppUrl() },
+        },
+      ],
+    ],
+  };
+}
+
+async function sendStartMessage(chatId) {
+  const caption = [
+    "Build hit games, grow your indie studio, and climb the charts.",
+    "",
+    "Tap the button below to start playing.",
+  ].join("\n");
+
+  const photoResult = await callTelegram("sendPhoto", {
+    chat_id: chatId,
+    photo: botStartImageUrl(),
+    caption,
+    reply_markup: playKeyboard(),
+  });
+
+  if (photoResult?.ok) return;
+
+  await callTelegram("sendMessage", {
+    chat_id: chatId,
+    text: caption,
+    reply_markup: playKeyboard(),
+  });
+}
+
 function isPlainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -472,6 +532,36 @@ async function start() {
   await db.collection("studio_goal_actions").createIndex({ eligibleAt: 1 });
 
   app.get("/health", (req, res) => res.json({ ok: true }));
+
+  app.post("/api/telegram/webhook", async (req, res) => {
+    try {
+      const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+      if (secret) {
+        const headerSecret = req.get("x-telegram-bot-api-secret-token");
+        if (headerSecret !== secret) {
+          return res.status(401).json({ ok: false, error: "bad_webhook_secret" });
+        }
+      }
+
+      const update = req.body;
+      const message = update?.message || update?.edited_message;
+      const text = String(message?.text || "").trim();
+      const chatId = message?.chat?.id;
+
+      if (!chatId) return res.json({ ok: true });
+
+      if (text.startsWith("/start")) {
+        await sendStartMessage(chatId);
+        return res.json({ ok: true });
+      }
+
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("Telegram webhook failed", error);
+      return res.status(500).json({ ok: false, error: "telegram_webhook_failed" });
+    }
+  });
+
   app.get("/api/me", requireTelegramUser, (req, res) => res.json({ ok: true, user: req.telegramUser }));
 
   app.get("/api/save", requireTelegramUser, async (req, res) => {

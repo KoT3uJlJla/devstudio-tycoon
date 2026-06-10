@@ -12,7 +12,7 @@ function publicBackendUrl(req) {
 }
 
 function webAppUrl() {
-  return String(process.env.BOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.APP_URL || process.env.FRONTEND_URL || "").trim();
+  return String(process.env.WEBAPP_URL || process.env.BOT_WEBAPP_URL || process.env.APP_URL || process.env.FRONTEND_URL || "https://devstudio-tycoon-stat.pages.dev").trim().replace(/\/+$/, "");
 }
 
 function botDeepLinkFallback() {
@@ -21,18 +21,18 @@ function botDeepLinkFallback() {
 }
 
 function startPhotoUrl(req) {
-  const direct = String(process.env.BOT_START_PHOTO_URL || "").trim();
+  const direct = String(process.env.BOT_START_IMAGE_URL || process.env.BOT_START_PHOTO_URL || "").trim();
   if (direct) return direct;
-  const base = publicBackendUrl(req);
-  return base ? `${base}/bot/start-banner.jpg` : "";
+  const appUrl = webAppUrl();
+  return appUrl ? `${appUrl}/assets/bot-start-cover.png` : "";
 }
 
 function startReplyMarkup() {
   const url = webAppUrl();
   const fallback = botDeepLinkFallback();
   const button = url && /^https:\/\//i.test(url)
-    ? { text: "Играть!", web_app: { url } }
-    : { text: "Играть!", url: fallback || "https://t.me" };
+    ? { text: "Play Now!", web_app: { url } }
+    : { text: "Play Now!", url: fallback || "https://t.me" };
   return { inline_keyboard: [[button]] };
 }
 
@@ -54,9 +54,9 @@ async function telegramApi(method, payload) {
 
 async function sendStartMessage(chatId, req) {
   const caption = [
-    "🎮 <b>DevStudio Tycoon</b>",
+    "Build hit games, grow your indie studio, and climb the charts.",
     "",
-    "Сделай игру лучше моей: выбирай жанр, сеттинг и платформу, выпускай релизы, собирай рейтинг студии и докажи, что твоя инди-команда умеет делать хиты.",
+    "Tap the button below to start playing.",
   ].join("\n");
   const replyMarkup = startReplyMarkup();
   const photo = startPhotoUrl(req);
@@ -67,7 +67,6 @@ async function sendStartMessage(chatId, req) {
         chat_id: chatId,
         photo,
         caption,
-        parse_mode: "HTML",
         reply_markup: replyMarkup,
       });
     } catch (error) {
@@ -78,7 +77,6 @@ async function sendStartMessage(chatId, req) {
   return telegramApi("sendMessage", {
     chat_id: chatId,
     text: caption,
-    parse_mode: "HTML",
     reply_markup: replyMarkup,
     disable_web_page_preview: true,
   });

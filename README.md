@@ -7,7 +7,7 @@ Telegram Mini App prototype: React + Vite + TypeScript, Cloudflare Pages fronten
 - Frontend: Cloudflare Pages — https://devstudio-tycoon-stat.pages.dev
 - Backend: Render — https://devstudio-tycoon-api.onrender.com
 - Cloud save/auth: Telegram Mini App `initData`, validated on the backend.
-- Backend env: `BOT_TOKEN`, `MONGODB_URI`, `PORT`; optional `APP_URL`, `ALLOWED_ORIGINS`/`CORS_ORIGINS`, `MAX_INIT_DATA_AGE_SECONDS`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_SECRET`.
+- Backend env: `BOT_TOKEN`, `MONGODB_URI`, `PORT`, `WEBAPP_URL`, `PUBLIC_BACKEND_URL`, `TELEGRAM_WEBHOOK_SECRET`; optional `BOT_START_IMAGE_URL`, `APP_URL`, `ALLOWED_ORIGINS`/`CORS_ORIGINS`, `MAX_INIT_DATA_AGE_SECONDS`.
 
 ## Security / hardening notes in v0.7.6
 
@@ -67,6 +67,42 @@ Use Render Manual Deploy after backend changes. The start command runs:
 ```bash
 node --import ./server-hardening.js index.js
 ```
+
+### Telegram Bot `/start` Setup
+
+The bot webhook must point to the Render backend, not the Cloudflare frontend:
+
+```powershell
+$botToken = "<BOT_TOKEN>"
+$secret = "<TELEGRAM_WEBHOOK_SECRET>"
+$body = @{
+  url = "https://<render-service>.onrender.com/api/telegram/webhook"
+  secret_token = $secret
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/setWebhook" -Method Post -ContentType "application/json" -Body $body
+```
+
+Check the active webhook:
+
+```powershell
+Invoke-RestMethod "https://api.telegram.org/bot$botToken/getWebhookInfo"
+```
+
+Required backend variables:
+
+- `WEBAPP_URL=https://devstudio-tycoon-stat.pages.dev`
+- `PUBLIC_BACKEND_URL=https://your-render-service.onrender.com`
+- `TELEGRAM_WEBHOOK_SECRET=<random_secret>`
+- `BOT_START_IMAGE_URL=https://devstudio-tycoon-stat.pages.dev/assets/bot-start-cover.png`
+
+The promo image is served by the Cloudflare frontend at:
+
+```text
+https://devstudio-tycoon-stat.pages.dev/assets/bot-start-cover.png
+```
+
+After changing the image or frontend assets, deploy the frontend. After changing the webhook route, deploy the backend and call `setWebhook` again.
 
 ## Local development
 
