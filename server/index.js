@@ -21,7 +21,7 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 const mongoUri = process.env.MONGODB_URI;
-const botToken = process.env.BOT_TOKEN;
+const botToken = String(process.env.BOT_TOKEN || "").trim();
 const maxInitDataAgeSeconds = Number(process.env.MAX_INIT_DATA_AGE_SECONDS || 604800);
 
 if (!mongoUri) {
@@ -125,11 +125,17 @@ function requireTelegramUser(req, res, next) {
 }
 
 async function callTelegram(method, payload) {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.error(`Telegram ${method} request failed`, error?.message || error);
+    return null;
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
@@ -137,7 +143,12 @@ async function callTelegram(method, payload) {
     return null;
   }
 
-  return response.json().catch(() => null);
+  const result = await response.json().catch(() => null);
+  if (result && !result.ok) {
+    console.error(`Telegram ${method} rejected`, result.description || result);
+    return null;
+  }
+  return result;
 }
 
 function webAppUrl() {
@@ -533,7 +544,7 @@ async function start() {
 
   app.get("/health", (req, res) => res.json({ ok: true }));
 
-  app.post("/api/telegram/webhook", async (req, res) => {
+  app.post("/api/telegram/webhook", async (req, res, next) => {
     try {
       const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
       if (secret) {
@@ -544,6 +555,10 @@ async function start() {
       }
 
       const update = req.body;
+      if (update?.pre_checkout_query || update?.message?.successful_payment) {
+        return next();
+      }
+
       const message = update?.message || update?.edited_message;
       const text = String(message?.text || "").trim();
       const chatId = message?.chat?.id;
@@ -558,7 +573,7 @@ async function start() {
       return res.json({ ok: true });
     } catch (error) {
       console.error("Telegram webhook failed", error);
-      return res.status(500).json({ ok: false, error: "telegram_webhook_failed" });
+      return res.status(200).json({ ok: false, error: "telegram_webhook_failed" });
     }
   });
 

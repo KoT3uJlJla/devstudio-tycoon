@@ -37,13 +37,18 @@ function startReplyMarkup() {
 }
 
 async function telegramApi(method, payload) {
-  const token = process.env.BOT_TOKEN;
+  const token = String(process.env.BOT_TOKEN || "").trim();
   if (!token) throw new Error("missing_bot_token");
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    throw new Error(error?.message || `telegram_${method}_request_failed`);
+  }
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.ok) {
     const description = result?.description || `telegram_${method}_failed`;
@@ -113,7 +118,7 @@ function registerBotStartRoutes(app) {
       res.json({ ok: true });
     } catch (error) {
       console.error("bot-start: failed", error?.message || error);
-      res.status(500).json({ ok: false, error: "bot_start_failed" });
+      res.status(200).json({ ok: false, error: "bot_start_failed" });
     }
   });
 
