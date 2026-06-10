@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import { MongoClient } from "mongodb";
 import { mergeServerDevelopment, normalizeServerDevelopment, publicDevelopmentStatus } from "./devAuthority.js";
-import { registerStarsPaymentRoutes } from "./starsPayments.js";
+import { handleStarsPaymentWebhook, registerStarsPaymentRoutes } from "./starsPayments.js";
 import {
   DEVELOPMENT_ACTION_STAR_COSTS,
   promoteDevelopmentAction,
@@ -113,17 +113,6 @@ function validateTelegramInitData(initData) {
   };
 }
 
-function requireTelegramUser(req, res, next) {
-  try {
-    const auth = req.get("authorization") || "";
-    const initData = auth.startsWith("tma ") ? auth.slice(4) : req.get("x-telegram-init-data");
-    req.telegramUser = validateTelegramInitData(initData);
-    next();
-  } catch {
-    res.status(401).json({ ok: false, error: "telegram_auth_failed" });
-  }
-}
-
 async function callTelegram(method, payload) {
   let response;
   try {
@@ -193,6 +182,17 @@ async function sendStartMessage(chatId) {
     text: caption,
     reply_markup: playKeyboard(),
   });
+}
+
+function requireTelegramUser(req, res, next) {
+  try {
+    const auth = req.get("authorization") || "";
+    const initData = auth.startsWith("tma ") ? auth.slice(4) : req.get("x-telegram-init-data");
+    req.telegramUser = validateTelegramInitData(initData);
+    next();
+  } catch {
+    res.status(401).json({ ok: false, error: "telegram_auth_failed" });
+  }
 }
 
 function isPlainObject(value) {
@@ -541,10 +541,11 @@ async function start() {
   await db.collection("stars_invoices").createIndex({ telegramId: 1, createdAt: -1 });
   await db.collection("studio_goal_actions").createIndex({ telegramId: 1, goalId: 1 }, { unique: true });
   await db.collection("studio_goal_actions").createIndex({ eligibleAt: 1 });
+  const serverDeps = { db, botToken, requireTelegramUser, SHOP_ITEMS, getSave, getOrCreateEconomy, overlayProtectedEconomy, applyRewardToSaveData, writeSave, patchEconomy };
 
   app.get("/health", (req, res) => res.json({ ok: true }));
 
-  app.post("/api/telegram/webhook", async (req, res, next) => {
+  app.post("/api/telegram/webhook", async (req, res) => {
     try {
       const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
       if (secret) {
@@ -556,7 +557,12 @@ async function start() {
 
       const update = req.body;
       if (update?.pre_checkout_query || update?.message?.successful_payment) {
-        return next();
+        try {
+          await handleStarsPaymentWebhook(serverDeps, update);
+        } catch (error) {
+          console.error("Telegram Stars webhook processing failed:", error?.message || error);
+        }
+        return res.json({ ok: true });
       }
 
       const message = update?.message || update?.edited_message;
@@ -806,7 +812,7 @@ async function start() {
     if (!data) return res.status(400).json({ ok: false, error: "missing_state" });
     res.json({ ok: true, rating: await upsertRating(req.telegramUser, data), leaderboard: await leaderboardForCurrentWeek(), weekKey: weekKey() });
   });
-  registerStarsPaymentRoutes(app, { db, botToken, requireTelegramUser, SHOP_ITEMS, getSave, getOrCreateEconomy, overlayProtectedEconomy, applyRewardToSaveData, writeSave, patchEconomy });
+  registerStarsPaymentRoutes(app, serverDeps);
 
   const port = process.env.PORT || 3000;
   app.listen(port, () => console.log(`Backend запущен: http://localhost:${port}`));

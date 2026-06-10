@@ -275,6 +275,12 @@ async function handleSuccessfulPayment(deps, message) {
   await applyPaidInvoice(deps, invoice, payment);
 }
 
+export async function handleStarsPaymentWebhook(deps, update) {
+  const safeUpdate = isPlainObject(update) ? update : {};
+  if (safeUpdate.pre_checkout_query) await handlePreCheckout(deps, safeUpdate.pre_checkout_query);
+  if (safeUpdate.message?.successful_payment) await handleSuccessfulPayment(deps, safeUpdate.message);
+}
+
 function canSpendRp(data, amount) {
   return safeInt(data?.rp, 0) >= amount;
 }
@@ -455,19 +461,6 @@ export function registerStarsPaymentRoutes(app, deps) {
     const fixedData = invoice.status === "paid" ? await applyInvoiceRewardIfNeeded(deps, invoice) : null;
     const save = fixedData ? { data: fixedData, updatedAt: new Date() } : invoice.status === "paid" ? await deps.getSave(req.telegramUser.id) : null;
     res.json({ ok: true, invoice: invoicePublic(invoice), save: save?.data ? { data: save.data, updatedAt: save.updatedAt || null } : null });
-  });
-
-  app.post("/api/telegram/webhook", async (req, res) => {
-    if (webhookSecret && req.get("x-telegram-bot-api-secret-token") !== webhookSecret) return res.status(403).json({ ok: false, error: "bad_webhook_secret" });
-    const update = isPlainObject(req.body) ? req.body : {};
-    try {
-      if (update.pre_checkout_query) await handlePreCheckout(deps, update.pre_checkout_query);
-      if (update.message?.successful_payment) await handleSuccessfulPayment(deps, update.message);
-      res.json({ ok: true });
-    } catch (error) {
-      console.error("Telegram webhook processing failed:", error);
-      res.status(200).json({ ok: false });
-    }
   });
 
   void ensureWebhook(deps.botToken, webhookUrl, webhookSecret);
