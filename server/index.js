@@ -73,7 +73,7 @@ const DEVELOPMENT_ACTION_INVOICE_ITEMS = {
 const SUBSCRIBE_HATCH_MIND_STUDIO_GOAL = {
   id: "studio.subscribe_hatch_mind_channel",
   url: "https://t.me/hatch_mind",
-  waitMs: 5000,
+  waitMs: 4000,
   reward: { stars: 35, coins: 8000 },
 };
 

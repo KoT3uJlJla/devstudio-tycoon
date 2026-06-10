@@ -117,19 +117,14 @@ function clearPendingSubscribeGoal() {
 
 function pendingSubscribeDelayMs(eligibleAt: string | null) {
   const timestamp = eligibleAt ? Date.parse(eligibleAt) : NaN;
-  if (!Number.isFinite(timestamp)) return 1500;
+  if (!Number.isFinite(timestamp)) return 4000;
   return Math.max(0, timestamp - Date.now() + 250);
 }
 
 type SubscribeGoalStatus = 'idle' | 'opening' | 'waiting' | 'claiming' | 'retry';
 
-const SUBSCRIBE_CLAIM_MAX_ATTEMPTS = 5;
-const SUBSCRIBE_CLAIM_RETRY_BACKOFF_MS = 1500;
+const SUBSCRIBE_CLAIM_FALLBACK_DELAY_MS = 4000;
 const SUBSCRIBE_PENDING_UNLOCK_MS = 9000;
-
-function isRetryableSubscribeClaimError(error?: string) {
-  return !error || error === 'backend_unavailable' || error === 'network_failed' || error.startsWith('http_') || error === 'studio_goal_claim_failed' || error === 'unknown';
-}
 
 function money(value: number) {
   return Math.round(value).toLocaleString(getLocale());
@@ -1305,12 +1300,10 @@ function DailyTasks({ state, update, taskOverrides }: { state: GameState; update
 function StudioGoals({ state, update, taskOverrides }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {
   const [open, setOpen] = useState(false);
   const [subscribeStatus, setSubscribeStatus] = useState<SubscribeGoalStatus>('idle');
-  const subscribePending = subscribeStatus === 'opening' || subscribeStatus === 'claiming';
+  const subscribePending = subscribeStatus === 'opening' || subscribeStatus === 'waiting' || subscribeStatus === 'claiming';
   const subscribeRetryTimer = useRef<number | null>(null);
   const subscribeUiUnlockTimer = useRef<number | null>(null);
   const subscribeClaimInFlight = useRef(false);
-  const subscribeClaimAttempts = useRef(0);
-  const subscribeClickRequiredRetried = useRef(false);
   const goals = buildStudioGoals(state, taskOverrides);
   const visibleGoals = open ? goals : goals.slice(0, 3);
   const completed = goals.filter((goal) => state.studioGoalClaims[goal.id]).length;
@@ -1342,11 +1335,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
     }, SUBSCRIBE_PENDING_UNLOCK_MS);
   };
 
-  const resetSubscribeRetryState = () => {
-    subscribeClaimAttempts.current = 0;
-    subscribeClickRequiredRetried.current = false;
-  };
-
   const scheduleSubscribeClaimRetry = (eligibleAt: string | null, showWaiting = false, minDelayMs = 0) => {
     clearSubscribeRetryTimer();
     if (showWaiting) setSubscribeStatus('waiting');
@@ -1360,7 +1348,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
       clearPendingSubscribeGoal();
       clearSubscribeRetryTimer();
       clearSubscribeUiUnlockTimer();
-      resetSubscribeRetryState();
       setSubscribeStatus('idle');
       return;
     }
@@ -1373,16 +1360,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
       return;
     }
 
-    if (subscribeClaimAttempts.current >= SUBSCRIBE_CLAIM_MAX_ATTEMPTS) {
-      clearPendingSubscribeGoal();
-      clearSubscribeRetryTimer();
-      clearSubscribeUiUnlockTimer();
-      resetSubscribeRetryState();
-      setSubscribeStatus('retry');
-      return;
-    }
-
-    subscribeClaimAttempts.current += 1;
     clearSubscribeRetryTimer();
     setSubscribeStatus('claiming');
     scheduleSubscribeUiUnlock();
@@ -1395,7 +1372,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
         clearPendingSubscribeGoal();
         clearSubscribeRetryTimer();
         clearSubscribeUiUnlockTimer();
-        resetSubscribeRetryState();
         setSubscribeStatus('idle');
         haptic('success');
         return;
@@ -1405,84 +1381,27 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
         clearPendingSubscribeGoal();
         clearSubscribeRetryTimer();
         clearSubscribeUiUnlockTimer();
-        resetSubscribeRetryState();
         setSubscribeStatus('idle');
-        return;
-      }
-
-      if (result.error === 'studio_goal_click_required') {
-        if (subscribeClickRequiredRetried.current) {
-          clearPendingSubscribeGoal();
-          clearSubscribeRetryTimer();
-          clearSubscribeUiUnlockTimer();
-          resetSubscribeRetryState();
-          setSubscribeStatus('idle');
-          haptic('warning');
-          return;
-        }
-        subscribeClickRequiredRetried.current = true;
-        const clicked = await clickBackendStudioGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID);
-        const clickedState = clicked?.state ?? null;
-        if (clickedState?.studioGoalClaims[SUBSCRIBE_HATCH_MIND_GOAL_ID]) {
-          update(() => clickedState);
-          clearPendingSubscribeGoal();
-          clearSubscribeRetryTimer();
-          clearSubscribeUiUnlockTimer();
-          resetSubscribeRetryState();
-          setSubscribeStatus('idle');
-          haptic('success');
-          return;
-        }
-        if (!clicked) {
-          clearPendingSubscribeGoal();
-          clearSubscribeRetryTimer();
-          clearSubscribeUiUnlockTimer();
-          resetSubscribeRetryState();
-          setSubscribeStatus('idle');
-          haptic('warning');
-          return;
-        }
-        const nextEligibleAt = clicked?.eligibleAt ?? pending.eligibleAt;
-        savePendingSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, nextEligibleAt, clicked?.clickedAt ?? pending.clickedAt);
-        subscribeClaimAttempts.current = 0;
-        scheduleSubscribeClaimRetry(nextEligibleAt, true);
+        haptic('success');
         return;
       }
 
       if (result.error === 'studio_goal_not_ready') {
         const nextEligibleAt = result.eligibleAt ?? pending.eligibleAt;
         savePendingSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, nextEligibleAt, pending.clickedAt);
-        if (subscribeClaimAttempts.current >= SUBSCRIBE_CLAIM_MAX_ATTEMPTS) {
-          clearPendingSubscribeGoal();
-          clearSubscribeRetryTimer();
-          clearSubscribeUiUnlockTimer();
-          resetSubscribeRetryState();
-          setSubscribeStatus('retry');
-          haptic('warning');
-          return;
-        }
-        scheduleSubscribeClaimRetry(nextEligibleAt, true);
+        scheduleSubscribeClaimRetry(nextEligibleAt, true, SUBSCRIBE_CLAIM_FALLBACK_DELAY_MS);
         return;
       }
 
-      const nextEligibleAt = result.eligibleAt ?? pending.eligibleAt;
-      savePendingSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, nextEligibleAt, pending.clickedAt);
-      if (isRetryableSubscribeClaimError(result.error) && subscribeClaimAttempts.current < SUBSCRIBE_CLAIM_MAX_ATTEMPTS) {
-        setSubscribeStatus('retry');
-        scheduleSubscribeClaimRetry(nextEligibleAt, false, SUBSCRIBE_CLAIM_RETRY_BACKOFF_MS);
-        return;
-      }
       clearSubscribeRetryTimer();
       clearSubscribeUiUnlockTimer();
       clearPendingSubscribeGoal();
-      resetSubscribeRetryState();
       setSubscribeStatus('retry');
       haptic('warning');
     } catch {
       clearPendingSubscribeGoal();
       clearSubscribeRetryTimer();
       clearSubscribeUiUnlockTimer();
-      resetSubscribeRetryState();
       setSubscribeStatus('retry');
       haptic('warning');
     } finally {
@@ -1496,7 +1415,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
     const targetUrl = goal.action?.type === 'telegram_url' ? goal.action.url : HATCH_MIND_CHANNEL_URL;
     openTelegramUrl(targetUrl);
     haptic('tap');
-    resetSubscribeRetryState();
     clearSubscribeRetryTimer();
     setSubscribeStatus('opening');
     scheduleSubscribeUiUnlock();
@@ -1507,7 +1425,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
       clearPendingSubscribeGoal();
       clearSubscribeRetryTimer();
       clearSubscribeUiUnlockTimer();
-      resetSubscribeRetryState();
       setSubscribeStatus('idle');
       haptic('warning');
       return;
@@ -1519,13 +1436,13 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
         clearPendingSubscribeGoal();
         clearSubscribeRetryTimer();
         clearSubscribeUiUnlockTimer();
-        resetSubscribeRetryState();
         setSubscribeStatus('idle');
         return;
       }
     }
-    savePendingSubscribeGoal(goal.id, clicked.eligibleAt, clicked.clickedAt);
-    scheduleSubscribeClaimRetry(clicked.eligibleAt, true);
+    const eligibleAt = clicked.eligibleAt ?? new Date(Date.now() + SUBSCRIBE_CLAIM_FALLBACK_DELAY_MS).toISOString();
+    savePendingSubscribeGoal(goal.id, eligibleAt, clicked.clickedAt);
+    scheduleSubscribeClaimRetry(eligibleAt, true);
     clearSubscribeUiUnlockTimer();
   };
 
@@ -1534,7 +1451,6 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
       clearPendingSubscribeGoal();
       clearSubscribeRetryTimer();
       clearSubscribeUiUnlockTimer();
-      resetSubscribeRetryState();
       setSubscribeStatus('idle');
       return;
     }

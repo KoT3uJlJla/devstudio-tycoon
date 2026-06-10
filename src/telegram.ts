@@ -121,18 +121,14 @@ export function haptic(type: 'tap' | 'success' | 'warning' = 'tap') {
 export function openTelegramUrl(url: string) {
   const safeUrl = String(url || '').trim();
   if (!/^https:\/\/t\.me\/[A-Za-z0-9_/?=&%.-]+$/i.test(safeUrl)) return;
-  const popup = window.open(safeUrl, '_blank', 'noopener,noreferrer');
-  if (popup) {
-    return;
-  }
   const webApp = window.Telegram?.WebApp;
-  if (webApp?.openLink && safeTelegramCall(() => webApp.openLink?.(safeUrl))) {
-    return;
-  }
   if (webApp?.openTelegramLink) {
     if (safeTelegramCall(() => webApp.openTelegramLink?.(safeUrl))) return;
   }
-  window.location.assign(safeUrl);
+  if (webApp?.openLink && safeTelegramCall(() => webApp.openLink?.(safeUrl))) {
+    return;
+  }
+  window.open(safeUrl, '_blank', 'noopener,noreferrer');
 }
 
 export type SharePayload = {
