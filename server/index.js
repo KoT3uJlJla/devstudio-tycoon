@@ -566,7 +566,11 @@ async function start() {
       if (!chatId) return res.json({ ok: true });
 
       if (text.startsWith("/start")) {
-        await sendStartMessage(chatId);
+        try {
+          await sendStartMessage(chatId);
+        } catch (error) {
+          console.error("Telegram start message failed", error?.message || error);
+        }
         return res.json({ ok: true });
       }
 

@@ -118,7 +118,7 @@ function registerBotStartRoutes(app) {
       res.json({ ok: true });
     } catch (error) {
       console.error("bot-start: failed", error?.message || error);
-      res.status(200).json({ ok: false, error: "bot_start_failed" });
+      res.status(200).json({ ok: true, warning: "bot_start_failed" });
     }
   });
 
