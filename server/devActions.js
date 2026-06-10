@@ -8,7 +8,8 @@ const COMBOS = { "arcade:cyberpunk":"Great", "arcade:sport":"Great", "platformer
 const CRITICS = ["Пиксель Сегодня", "Инди Радар", "Отчёт об ошибках", "Игровая неделя"];
 const DEV_EVENT_IDS = ["team-burnout","ui-contrast","microtransaction-idea","community-poll","localization-gap","balance-drama","boss-cameo","testers-love","legal-name","publisher-call","crash-on-ios","meme-title","feature-flag","data-loss-rumor","speedrun-scene","tutorial-skip","boss-fight","store-art","qa-night","trend-shift","designer-duel","analytics-ping","combat-juice","chat-stickers","database-cleanup","streamer-feedback","pricing-debate","ai-voice","festival-slot","achievement-bug","modding-request","accessibility","boss-micromanage","mystery-influencer","economy-exploit","mobile-heat","npc-dialogue"];
 const STAR_COSTS = { skip:15, promote:35 };
-const MAX_DEVELOPMENT_SECONDS = 20 * 72;
+const MAX_DEVELOPMENT_SECONDS = 25 * 72;
+const DAILY_DEVELOPMENT_DURATION_SECONDS = [10, 25, 75, 240, 720, MAX_DEVELOPMENT_SECONDS];
 
 function isObj(v){ return Boolean(v && typeof v === "object" && !Array.isArray(v)); }
 function arr(v){ return Array.isArray(v) ? v : []; }
@@ -36,15 +37,24 @@ function income(data){
 function science(data){ return n(1+arr(data?.employees).reduce((s,e)=>s+(Number(e?.scienceBoost)||0),0),.75,2.2); }
 function teamScore(data){ return n(arr(data?.employees).reduce((s,e)=>s+(Number(e?.scoreBoost)||0),0),-.35,.9); }
 function releaseNumber(data){ return Math.max(1,i(data?.gamesReleased,0)+1); }
-function durationForRelease(release){ if(release<=1)return 5; if(release===2)return 30; if(release===3)return 60; const steps=[180,300,600,900,1200,MAX_DEVELOPMENT_SECONDS]; return Math.min(MAX_DEVELOPMENT_SECONDS,steps[Math.min(steps.length-1,release-4)]||MAX_DEVELOPMENT_SECONDS); }
-function duration(project,data){ return Math.min(MAX_DEVELOPMENT_SECONDS,durationForRelease(releaseNumber(data))); }
+function dailyDevelopmentIndex(data){ return Math.max(1,i(data?.dailyDevelopmentStarted,0)+1); }
+function dailyDevelopmentTargetSeconds(index){ return DAILY_DEVELOPMENT_DURATION_SECONDS[Math.min(DAILY_DEVELOPMENT_DURATION_SECONDS.length-1,Math.max(1,i(index,1))-1)]; }
+function developmentSpeedDiscount(data){ return n(Math.sqrt(speed(data)),1,1.25); }
+function duration(project,data){
+  if(project.isTutorial)return 5;
+  const target=dailyDevelopmentTargetSeconds(dailyDevelopmentIndex(data));
+  const genreFactor=GENRES[project.genre]||1;
+  const platformFactor=PLATFORMS[project.platform]?.t||1;
+  const difficultyFactor=n(.92+(genreFactor-1)*.08+(platformFactor-1)*.05,.9,1.18);
+  return i((target*difficultyFactor)/developmentSpeedDiscount(data),8,MAX_DEVELOPMENT_SECONDS);
+}
 function cost(project,data){
   if(project.isTutorial)return 0;
   const tech=["engine-v2","sound-lab","liveops-lite","ai-assist","data-warehouse"].filter(x=>has(data,x)).length;
   const raw=360+(duration(project,data)/10)*28+(GENRES[project.genre]||1)*260+(PLATFORMS[project.platform]?.t||1)*280+tech*95;
   return Math.round(raw*(has(data,"budget-ops")?.9:1)*(has(data,"reusable-tech")?.92:1));
 }
-function startedAt(project,data,progress,now=Date.now()){ return Math.max(0,Math.round(now-(n(progress,0,100)/100)*Math.max(1,Number(project.durationSeconds)||180)*1000/Math.max(.1,speed(data)))); }
+function startedAt(project,data,progress,now=Date.now()){ return Math.max(0,Math.round(now-(n(progress,0,100)/100)*Math.max(1,Number(project.durationSeconds)||180)*1000)); }
 function ledger(data,title,amount,kind){ return [...arr(data?.lastLedger),{id:id(),day:i(data?.gameDay,1),title,amount,kind}].slice(-10); }
 function normalize(data){ return normalizeServerDevelopment(isObj(data)?data:{}); }
 function projectOf(data){ if(!isObj(data?.selectedProject)) throw Object.assign(new Error("missing_project"),{status:400,code:"missing_project"}); return data.selectedProject; }
@@ -73,7 +83,7 @@ export function startDevelopmentAction(saveData,draft){
   const durationSeconds=duration(p,data), devCost=cost({...p,durationSeconds},data);
   if((Number(data.coins)||0)-devCost<MIN_COINS) throw actionError("not_enough_coins",402);
   const now=Date.now();
-  return normalize({...data,coins:(Number(data.coins)||0)-devCost,screen:"develop",tutorialStep:data.tutorialDone?data.tutorialStep:4,selectedProject:{...p,durationSeconds,devCost,techComplexity:PLATFORMS[platform].t+(has(data,"engine-v2")?.25:0)+(has(data,"ai-assist")?.18:0),startedAt:now,progress:Math.max(1,Number(p.progress)||0),promotionUsed:false,promotionBoost:0,devGlitchTriggered:false,devEventQueue:devQueue(data),pendingDevEvent:null,devDecisionScoreBonus:0,devDecisionSalesMultiplier:1,devDecisionLog:[],serverActionAt:now},lastLedger:devCost>0?ledger(data,`Старт разработки: ${clean(p.name)}`,-devCost,"expense"):data.lastLedger,lastSavedAt:now});
+  return normalize({...data,coins:(Number(data.coins)||0)-devCost,dailyDevelopmentStarted:i(data.dailyDevelopmentStarted,0)+1,screen:"develop",tutorialStep:data.tutorialDone?data.tutorialStep:4,selectedProject:{...p,durationSeconds,devCost,techComplexity:PLATFORMS[platform].t+(has(data,"engine-v2")?.25:0)+(has(data,"ai-assist")?.18:0),startedAt:now,progress:Math.max(1,Number(p.progress)||0),promotionUsed:false,promotionBoost:0,devGlitchTriggered:false,devEventQueue:devQueue(data),pendingDevEvent:null,devDecisionScoreBonus:0,devDecisionSalesMultiplier:1,devDecisionLog:[],serverActionAt:now},lastLedger:devCost>0?ledger(data,`Старт разработки: ${clean(p.name)}`,-devCost,"expense"):data.lastLedger,lastSavedAt:now});
 }
 
 export function skipDevelopmentAction(saveData){

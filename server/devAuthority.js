@@ -1,4 +1,5 @@
 const DEFAULT_DURATION_SECONDS = 180;
+const MAX_DEVELOPMENT_SECONDS = 25 * 72;
 const MAX_SERVER_ELAPSED_MS = Number(process.env.DEV_SERVER_MAX_ELAPSED_MS || 6 * 60 * 60 * 1000);
 
 function isPlainObject(value) {
@@ -21,6 +22,25 @@ function safeArray(value) {
 
 function safeText(value, fallback = '') {
   return String(value || fallback).replace(/[<>"'`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || fallback;
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeDailyState(data) {
+  const key = todayKey();
+  const sameDay = data?.dailyStatsDate === key;
+  return {
+    ...data,
+    dailyStatsDate: key,
+    dailyGamesReleased: sameDay ? safeInt(data?.dailyGamesReleased, 0) : 0,
+    dailyDevelopmentStarted: sameDay ? safeInt(data?.dailyDevelopmentStarted, 0) : 0,
+    dailyWorkTaps: sameDay ? safeInt(data?.dailyWorkTaps, 0) : 0,
+    dailyResearchUnlocked: sameDay ? safeInt(data?.dailyResearchUnlocked, 0) : 0,
+    dailyPassiveIncome: sameDay ? safeInt(data?.dailyPassiveIncome, 0) : 0,
+    dailyTaskClaims: sameDay && isPlainObject(data?.dailyTaskClaims) ? data.dailyTaskClaims : {},
+  };
 }
 
 function sameProject(a, b) {
@@ -153,20 +173,20 @@ export function mergeServerDevelopment(incomingData, previousData) {
       ...incomingProject,
       startedAt,
       progress,
-      durationSeconds: clampNumber(incomingProject.durationSeconds || previousProject.durationSeconds, 1, 900),
+      durationSeconds: clampNumber(incomingProject.durationSeconds || previousProject.durationSeconds, 1, MAX_DEVELOPMENT_SECONDS),
     },
   });
 }
 
 export function normalizeServerDevelopment(data, previousData = null) {
   if (!isPlainObject(data)) return data;
-  const baseData = sanitizePersistentCollections(data);
+  const baseData = normalizeDailyState(sanitizePersistentCollections(data));
   const project = baseData.selectedProject;
   if (!isPlainObject(project)) return baseData;
 
   const previousProject = sameProject(project, previousData?.selectedProject) ? previousData.selectedProject : null;
   const startedAt = earliestStartedAt(project, previousProject);
-  const durationSeconds = clampNumber(project.durationSeconds, 1, 900) || DEFAULT_DURATION_SECONDS;
+  const durationSeconds = clampNumber(project.durationSeconds, 1, MAX_DEVELOPMENT_SECONDS) || DEFAULT_DURATION_SECONDS;
   const clientProgress = clampNumber(project.progress, 0, 100);
   const previousProgress = previousProject ? clampNumber(previousProject.progress, 0, 100) : 0;
 
@@ -184,7 +204,7 @@ export function normalizeServerDevelopment(data, previousData = null) {
 
   const now = Date.now();
   const elapsedMs = clampNumber(now - startedAt, 0, MAX_SERVER_ELAPSED_MS);
-  const serverProgress = clampNumber((elapsedMs / (durationSeconds * 1000)) * 100 * developmentSpeedMultiplier(baseData), 0, 100);
+  const serverProgress = clampNumber((elapsedMs / (durationSeconds * 1000)) * 100, 0, 100);
   const progress = Number(Math.max(clientProgress, previousProgress, serverProgress).toFixed(2));
 
   return {
@@ -210,7 +230,7 @@ export function publicDevelopmentStatus(data) {
       id: project.id || null,
       name: project.name || '',
       progress: clampNumber(project.progress, 0, 100),
-      durationSeconds: clampNumber(project.durationSeconds, 1, 900),
+      durationSeconds: clampNumber(project.durationSeconds, 1, MAX_DEVELOPMENT_SECONDS),
       startedAt: Number(project.startedAt) || null,
       paused: Boolean(project.pendingDevEvent),
       serverProgressAt: Number(project.serverProgressAt) || null,

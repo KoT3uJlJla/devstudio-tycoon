@@ -245,6 +245,7 @@ export type GameState = {
   dailyClaimedAt: string | null;
   dailyStatsDate: string;
   dailyGamesReleased: number;
+  dailyDevelopmentStarted: number;
   dailyWorkTaps: number;
   dailyResearchUnlocked: number;
   dailyPassiveIncome: number;

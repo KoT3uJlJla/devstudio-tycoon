@@ -168,6 +168,7 @@ export const initialState: GameState = {
   dailyClaimedAt: null,
   dailyStatsDate: todayKey(),
   dailyGamesReleased: 0,
+  dailyDevelopmentStarted: 0,
   dailyWorkTaps: 0,
   dailyResearchUnlocked: 0,
   dailyPassiveIncome: 0,
@@ -215,6 +216,7 @@ export function ensureDailyState(state: GameState): GameState {
     ...state,
     dailyStatsDate: key,
     dailyGamesReleased: 0,
+    dailyDevelopmentStarted: 0,
     dailyWorkTaps: 0,
     dailyResearchUnlocked: 0,
     dailyPassiveIncome: 0,
@@ -424,6 +426,12 @@ export function normalizeState(partial?: Partial<GameState>): GameState {
     productInstinctExpiresAt: productInstinctActive ? migratedProductInstinctExpiresAt : null,
     unlockedGenreIds: Array.from(new Set([...baseGenreIds, ...unlockedGenreIds.filter((id) => genres.some((genre) => genre.id === id))])),
     unlockedThemeIds: Array.from(new Set([...baseThemeIds, ...unlockedThemeIds.filter((id) => themes.some((theme) => theme.id === id))])),
+    dailyStatsDate: typeof merged.dailyStatsDate === 'string' ? merged.dailyStatsDate : todayKey(),
+    dailyGamesReleased: Math.max(0, Math.floor(Number(merged.dailyGamesReleased) || 0)),
+    dailyDevelopmentStarted: Math.max(0, Math.floor(Number((merged as unknown as { dailyDevelopmentStarted?: unknown }).dailyDevelopmentStarted) || 0)),
+    dailyWorkTaps: Math.max(0, Math.floor(Number(merged.dailyWorkTaps) || 0)),
+    dailyResearchUnlocked: Math.max(0, Math.floor(Number(merged.dailyResearchUnlocked) || 0)),
+    dailyPassiveIncome: Math.max(0, Math.floor(Number(merged.dailyPassiveIncome) || 0)),
     dailyTaskClaims: (() => {
       const raw = merged.dailyTaskClaims;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -441,8 +449,6 @@ export function normalizeState(partial?: Partial<GameState>): GameState {
           .map(([k, v]) => [String(k).slice(0, 96), Boolean(v)]),
       );
     })(),
-
-    dailyPassiveIncome: Math.max(0, Math.floor(Number(merged.dailyPassiveIncome) || 0)),
     weeklyExpenseTotal: Math.max(0, Math.floor(Number(merged.weeklyExpenseTotal) || 0)),
     unpaidSinceMonth: merged.unpaidSinceMonth === null || merged.unpaidSinceMonth === undefined ? null : Math.max(0, Math.floor(Number(merged.unpaidSinceMonth) || 0)),
     closureWarningMonth: merged.closureWarningMonth === null || merged.closureWarningMonth === undefined ? null : Math.max(0, Math.floor(Number(merged.closureWarningMonth) || 0)),
@@ -623,19 +629,42 @@ export function projectDurationSecondsForReleaseCount(gamesReleased: number) {
   return steps[Math.min(steps.length - 1, releaseNumber - 4)] ?? 7200;
 }
 
+export const DAILY_DEVELOPMENT_DURATION_SECONDS = [
+  10,
+  25,
+  75,
+  240,
+  720,
+  Math.round((25 * GAME_DAY_MS) / 1000),
+] as const;
+
+export function dailyDevelopmentIndex(state: GameState) {
+  return Math.max(1, Math.floor(Number(state.dailyDevelopmentStarted) || 0) + 1);
+}
+
+export function dailyDevelopmentTargetSeconds(index: number) {
+  const safeIndex = Math.max(1, Math.floor(Number(index) || 1));
+  return DAILY_DEVELOPMENT_DURATION_SECONDS[Math.min(DAILY_DEVELOPMENT_DURATION_SECONDS.length - 1, safeIndex - 1)];
+}
+
+function developmentSpeedDiscount(state: GameState) {
+  return clamp(Math.sqrt(speedMultiplier(state)), 1, 1.25);
+}
+
 export function estimateProjectDuration(project: Project, state: GameState) {
-  const releaseNumber = Math.max(1, Math.floor(Number(state.gamesReleased) || 0) + 1);
-  if (releaseNumber <= 1) return 5;
-  if (releaseNumber === 2) return 30;
-  if (releaseNumber === 3) return 60;
-  const maxDurationSeconds = Math.round((20 * GAME_DAY_MS) / 1000);
+  if (project.isTutorial) return 5;
+  const target = dailyDevelopmentTargetSeconds(dailyDevelopmentIndex(state));
+  const maxDurationSeconds = Math.round((25 * GAME_DAY_MS) / 1000);
   const genre = genres.find((item) => item.id === project.genre);
   const platform = platforms.find((item) => item.id === project.platform) ?? platforms[0];
-  const difficulty = genre?.difficulty ?? 1;
-  const baseSeconds = 130 + difficulty * 52 + platform.techComplexity * 28;
-  const releaseSteps = [180, 300, 600, 900, 1200, maxDurationSeconds];
-  const releaseTarget = releaseSteps[Math.min(releaseSteps.length - 1, releaseNumber - 4)] ?? maxDurationSeconds;
-  return Math.round(clamp(Math.max(baseSeconds, releaseTarget), 120, maxDurationSeconds));
+  const difficultyFactor = clamp(
+    0.92 + ((genre?.difficulty ?? 1) - 1) * 0.08 + (platform.techComplexity - 1) * 0.05,
+    0.9,
+    1.18,
+  );
+  const targetSeconds = Math.round(target * difficultyFactor);
+  const adjustedSeconds = targetSeconds / developmentSpeedDiscount(state);
+  return Math.round(clamp(adjustedSeconds, 8, maxDurationSeconds));
 }
 
 export function estimateDevelopmentCost(project: Project, state: GameState) {
@@ -892,6 +921,7 @@ export function startProject(state: GameState): GameState {
   return {
     ...current,
     coins: clamp(current.coins - devCost, MIN_COINS, Number.MAX_SAFE_INTEGER),
+    dailyDevelopmentStarted: current.dailyDevelopmentStarted + 1,
     screen: 'develop',
     tutorialStep: current.tutorialDone ? current.tutorialStep : 4,
     selectedProject: {
@@ -1017,8 +1047,7 @@ export function resolveDevelopmentEvent(state: GameState, choiceId: 'a' | 'b'): 
 const devPopWords = ['ПОЛИШ!', 'СБОРКА!', 'ФИКС!', 'ИДЕЯ!', 'ТЕСТ!', 'ВАУ!', 'КОМБО!', 'ПАТЧ!', 'ПИКСЕЛИ!', 'БАЛАНС!', 'ТЕСТ!', 'ХАЙП!'];
 
 function startedAtForProgress(project: Project, state: GameState, progress: number, now = Date.now()) {
-  const multiplier = Math.max(0.1, speedMultiplier(state));
-  const elapsedMs = (clamp(progress, 0, 100) / 100) * project.durationSeconds * 1000 / multiplier;
+  const elapsedMs = (clamp(progress, 0, 100) / 100) * project.durationSeconds * 1000;
   return Math.max(0, Math.round(now - elapsedMs));
 }
 
@@ -1049,7 +1078,7 @@ export function tickProgress(state: GameState): GameState {
   }
 
   const seconds = (now - project.startedAt) / 1000;
-  let progress = clamp((seconds / project.durationSeconds) * 100 * speedMultiplier(advanced), project.progress, 100);
+  let progress = clamp((seconds / project.durationSeconds) * 100, project.progress, 100);
   let nextProject: Project = { ...project, progress };
 
   const dueEvent = (project.devEventQueue ?? []).find((event) => !event.triggered && progress >= event.progressAt);
