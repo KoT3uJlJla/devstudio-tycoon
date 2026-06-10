@@ -170,12 +170,23 @@ export async function clickBackendStudioGoal(goalId: string) {
   if (result.error) return null;
   return {
     state: result.state,
+    clickedAt: typeof result.payload?.studioGoal?.clickedAt === 'string' ? result.payload.studioGoal.clickedAt : null,
     eligibleAt: typeof result.payload?.studioGoal?.eligibleAt === 'string' ? result.payload.studioGoal.eligibleAt : null,
   };
 }
 
+export async function claimBackendStudioGoalResult(goalId: string) {
+  const result = await postJson(`/api/tasks/studio-goals/${encodeURIComponent(goalId)}/claim`);
+  return {
+    state: result.state,
+    error: result.error,
+    eligibleAt: typeof result.payload?.studioGoal?.eligibleAt === 'string' ? result.payload.studioGoal.eligibleAt : null,
+    claimed: Boolean(result.payload?.studioGoal?.claimed),
+  };
+}
+
 export async function claimBackendStudioGoal(goalId: string) {
-  return (await postJson(`/api/tasks/studio-goals/${encodeURIComponent(goalId)}/claim`)).state;
+  return (await claimBackendStudioGoalResult(goalId)).state;
 }
 
 export async function runBackendDevelopmentAction(endpoint: DevelopmentEndpoint, body: Record<string, unknown> = {}) {

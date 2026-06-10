@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode } from 'react';
@@ -52,7 +53,7 @@ import {
 } from './gameLogic';
 import { loadGame, saveGame } from './storage';
 import { haptic, initTelegram, openTelegramUrl, shareRelease } from './telegram';
-import { claimBackendDailyReward, claimBackendReferralMilestone, claimBackendStudioGoal, clickBackendStudioGoal, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
+import { claimBackendDailyReward, claimBackendReferralMilestone, claimBackendStudioGoalResult, clickBackendStudioGoal, purchaseBackendItem, runBackendDevelopmentAction } from './server-economy';
 import { getTonWallet, purchaseShopItem, saveTonWallet, unlinkTonWallet, claimReferralMilestone, fetchTaskConfig, hasBackendSession, runDevelopmentAction } from './backendClient';
 import { applyTaskReward, buildDailyTasks, buildStudioGoals, HATCH_MIND_CHANNEL_URL, rewardLabel, SUBSCRIBE_HATCH_MIND_GOAL_ID, taskProgressPercent, type DailyTaskModel, type StudioGoalModel, type TaskCatalogOverrides } from './taskCatalog';
 import { getLanguage, getLocale, localizedDescription, localizedEffect, localizedName, localizedTitle, t, type TranslationKey } from './i18n';
@@ -71,6 +72,54 @@ const prizeDistribution = [
   ['900 ⭐', '30%'], ['600 ⭐', '20%'], ['420 ⭐', '14%'], ['300 ⭐', '10%'], ['240 ⭐', '8%'],
   ['180 ⭐', '6%'], ['135 ⭐', '4.5%'], ['105 ⭐', '3.5%'], ['75 ⭐', '2.5%'], ['45 ⭐', '1.5%'],
 ] as const;
+
+const PENDING_SUBSCRIBE_GOAL_KEY = `devstudio:pending-goal:${SUBSCRIBE_HATCH_MIND_GOAL_ID}`;
+
+type PendingSubscribeGoal = {
+  goalId: string;
+  clickedAt: string | null;
+  eligibleAt: string | null;
+};
+
+function savePendingSubscribeGoal(goalId: string, eligibleAt: string | null, clickedAt: string | null = new Date().toISOString()) {
+  if (goalId !== SUBSCRIBE_HATCH_MIND_GOAL_ID) return;
+  try {
+    localStorage.setItem(PENDING_SUBSCRIBE_GOAL_KEY, JSON.stringify({ goalId, clickedAt, eligibleAt }));
+  } catch {
+    // The backend remains the source of truth; storage is only a resume reminder.
+  }
+}
+
+function readPendingSubscribeGoal(): PendingSubscribeGoal | null {
+  try {
+    const raw = localStorage.getItem(PENDING_SUBSCRIBE_GOAL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingSubscribeGoal>;
+    if (parsed?.goalId !== SUBSCRIBE_HATCH_MIND_GOAL_ID) return null;
+    return {
+      goalId: SUBSCRIBE_HATCH_MIND_GOAL_ID,
+      clickedAt: typeof parsed.clickedAt === 'string' ? parsed.clickedAt : null,
+      eligibleAt: typeof parsed.eligibleAt === 'string' ? parsed.eligibleAt : null,
+    };
+  } catch {
+    clearPendingSubscribeGoal();
+    return null;
+  }
+}
+
+function clearPendingSubscribeGoal() {
+  try {
+    localStorage.removeItem(PENDING_SUBSCRIBE_GOAL_KEY);
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+function pendingSubscribeDelayMs(eligibleAt: string | null) {
+  const timestamp = eligibleAt ? Date.parse(eligibleAt) : NaN;
+  if (!Number.isFinite(timestamp)) return 1500;
+  return Math.max(0, timestamp - Date.now() + 250);
+}
 
 function money(value: number) {
   return Math.round(value).toLocaleString(getLocale());
@@ -1248,7 +1297,8 @@ function DailyTasks({ state, update, taskOverrides }: { state: GameState; update
 function StudioGoals({ state, update, taskOverrides }: { state: GameState; update: (fn: (state: GameState) => GameState) => void; taskOverrides: TaskCatalogOverrides }) {
   const [open, setOpen] = useState(false);
   const [subscribePending, setSubscribePending] = useState(false);
-  const [resumeClaimChecked, setResumeClaimChecked] = useState(false);
+  const subscribeRetryTimer = useRef<number | null>(null);
+  const subscribeClaimInFlight = useRef(false);
   const goals = buildStudioGoals(state, taskOverrides);
   const visibleGoals = open ? goals : goals.slice(0, 3);
   const completed = goals.filter((goal) => state.studioGoalClaims[goal.id]).length;
@@ -1258,48 +1308,156 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
     haptic('success');
     return applyTaskReward({ ...current, studioGoalClaims: { ...current.studioGoalClaims, [goal.id]: true } }, goal.reward);
   });
-  const claimSubscribeGoal = async (goalId: string, notify = true) => {
-    const nextState = await claimBackendStudioGoal(goalId);
-    if (!nextState) {
-      if (notify) haptic('warning');
-      return false;
-    }
-    update(() => nextState);
-    haptic('success');
-    return true;
+
+  const clearSubscribeRetryTimer = () => {
+    if (subscribeRetryTimer.current === null) return;
+    window.clearTimeout(subscribeRetryTimer.current);
+    subscribeRetryTimer.current = null;
   };
+
+  const scheduleSubscribeClaimRetry = (eligibleAt: string | null) => {
+    clearSubscribeRetryTimer();
+    subscribeRetryTimer.current = window.setTimeout(() => {
+      void tryClaimSubscribeGoal('timer');
+    }, pendingSubscribeDelayMs(eligibleAt));
+  };
+
+  const tryClaimSubscribeGoal = async (reason: 'timer' | 'focus' | 'resume' | 'manual') => {
+    void reason;
+    if (state.studioGoalClaims[SUBSCRIBE_HATCH_MIND_GOAL_ID]) {
+      clearPendingSubscribeGoal();
+      clearSubscribeRetryTimer();
+      setSubscribePending(false);
+      return;
+    }
+
+    const pending = readPendingSubscribeGoal();
+    if (!pending || subscribeClaimInFlight.current) return;
+    setSubscribePending(true);
+    subscribeClaimInFlight.current = true;
+    try {
+      const result = await claimBackendStudioGoalResult(SUBSCRIBE_HATCH_MIND_GOAL_ID);
+      const claimedState = result.state;
+      if (claimedState) {
+        update(() => claimedState);
+        clearPendingSubscribeGoal();
+        clearSubscribeRetryTimer();
+        setSubscribePending(false);
+        haptic('success');
+        return;
+      }
+
+      if (result.claimed || result.error === 'studio_goal_already_claimed') {
+        clearPendingSubscribeGoal();
+        clearSubscribeRetryTimer();
+        setSubscribePending(false);
+        return;
+      }
+
+      if (result.error === 'studio_goal_click_required') {
+        const clicked = await clickBackendStudioGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID);
+        const clickedState = clicked?.state ?? null;
+        if (clickedState?.studioGoalClaims[SUBSCRIBE_HATCH_MIND_GOAL_ID]) {
+          update(() => clickedState);
+          clearPendingSubscribeGoal();
+          clearSubscribeRetryTimer();
+          setSubscribePending(false);
+          haptic('success');
+          return;
+        }
+        const nextEligibleAt = clicked?.eligibleAt ?? pending.eligibleAt;
+        savePendingSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, nextEligibleAt, clicked?.clickedAt ?? pending.clickedAt);
+        scheduleSubscribeClaimRetry(nextEligibleAt);
+        return;
+      }
+
+      const nextEligibleAt = result.eligibleAt ?? pending.eligibleAt;
+      savePendingSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, nextEligibleAt, pending.clickedAt);
+      scheduleSubscribeClaimRetry(nextEligibleAt);
+    } finally {
+      subscribeClaimInFlight.current = false;
+    }
+  };
+
   const startSubscribeGoal = async (goal: StudioGoalModel) => {
     if (subscribePending || state.studioGoalClaims[goal.id]) return;
     haptic('tap');
     setSubscribePending(true);
     const targetUrl = goal.action?.type === 'telegram_url' ? goal.action.url : HATCH_MIND_CHANNEL_URL;
+    savePendingSubscribeGoal(goal.id, null);
     const clickPromise = clickBackendStudioGoal(goal.id);
     openTelegramUrl(targetUrl);
     const clicked = await clickPromise;
     if (!clicked) {
-      setSubscribePending(false);
       haptic('warning');
+      scheduleSubscribeClaimRetry(null);
       return;
     }
     const clickedState = clicked.state;
     if (clickedState) {
       update(() => clickedState);
       if (clickedState.studioGoalClaims[goal.id]) {
+        clearPendingSubscribeGoal();
+        clearSubscribeRetryTimer();
         setSubscribePending(false);
         return;
       }
     }
-    const eligibleAt = clicked.eligibleAt ? Date.parse(clicked.eligibleAt) : NaN;
-    const delayMs = Number.isFinite(eligibleAt) ? Math.max(0, eligibleAt - Date.now()) : 5000;
-    window.setTimeout(() => {
-      void claimSubscribeGoal(goal.id).finally(() => setSubscribePending(false));
-    }, delayMs);
+    savePendingSubscribeGoal(goal.id, clicked.eligibleAt, clicked.clickedAt);
+    scheduleSubscribeClaimRetry(clicked.eligibleAt);
   };
+
   useEffect(() => {
-    if (resumeClaimChecked || subscribeClaimed) return;
-    setResumeClaimChecked(true);
-    void claimSubscribeGoal(SUBSCRIBE_HATCH_MIND_GOAL_ID, false);
-  }, [resumeClaimChecked, subscribeClaimed]);
+    if (subscribeClaimed) {
+      clearPendingSubscribeGoal();
+      clearSubscribeRetryTimer();
+      setSubscribePending(false);
+      return;
+    }
+
+    const claimOnResume = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      const pending = readPendingSubscribeGoal();
+      if (!pending) return;
+      setSubscribePending(true);
+      const delay = pendingSubscribeDelayMs(pending.eligibleAt);
+      if (delay > 500) {
+        scheduleSubscribeClaimRetry(pending.eligibleAt);
+        return;
+      }
+      void tryClaimSubscribeGoal('resume');
+    };
+
+    claimOnResume();
+    window.addEventListener('focus', claimOnResume);
+    window.addEventListener('pageshow', claimOnResume);
+    document.addEventListener('visibilitychange', claimOnResume);
+
+    const webApp = window.Telegram?.WebApp as unknown as {
+      onEvent?: (event: string, callback: () => void) => void;
+      offEvent?: (event: string, callback: () => void) => void;
+    } | undefined;
+    try {
+      webApp?.onEvent?.('viewportChanged', claimOnResume);
+      webApp?.onEvent?.('activated', claimOnResume);
+    } catch {
+      // Telegram event bindings are best-effort across WebApp versions.
+    }
+
+    return () => {
+      window.removeEventListener('focus', claimOnResume);
+      window.removeEventListener('pageshow', claimOnResume);
+      document.removeEventListener('visibilitychange', claimOnResume);
+      try {
+        webApp?.offEvent?.('viewportChanged', claimOnResume);
+        webApp?.offEvent?.('activated', claimOnResume);
+      } catch {
+        // best-effort cleanup
+      }
+      clearSubscribeRetryTimer();
+    };
+  }, [subscribeClaimed]);
+
   if (!goals.length) return null;
   return (
     <section className="panel daily-tasks comic-card">
