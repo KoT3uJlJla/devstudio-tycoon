@@ -546,21 +546,29 @@ async function start() {
       }
 
       const now = new Date();
+      const existing = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
+      if (existing?.claimedAt || existing?.completedAt) {
+        return res.json({ ok: true, economy: publicEconomy(economy), save: { data: currentData, updatedAt: save?.updatedAt ?? new Date() }, studioGoal: studioGoalActionPayload(existing) });
+      }
+
+      const eligibleAt = new Date(now.getTime() + goal.waitMs);
       await db.collection("studio_goal_actions").updateOne(
         { telegramId: req.telegramUser.id, goalId: goal.id },
         {
-          $setOnInsert: {
-            telegramId: req.telegramUser.id,
+          $set: {
             telegramUser: req.telegramUser,
-            goalId: goal.id,
             url: goal.url,
             clickedAt: now,
-            eligibleAt: new Date(now.getTime() + goal.waitMs),
+            eligibleAt,
             claimedAt: null,
             completedAt: null,
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            telegramId: req.telegramUser.id,
+            goalId: goal.id,
             createdAt: now,
           },
-          $set: { telegramUser: req.telegramUser, updatedAt: now },
         },
         { upsert: true },
       );
@@ -587,38 +595,65 @@ async function start() {
       }
 
       const now = new Date();
-      const claimResult = await db.collection("studio_goal_actions").findOneAndUpdate(
-        { telegramId: req.telegramUser.id, goalId: goal.id, claimedAt: null, eligibleAt: { $lte: now } },
-        { $set: { claimedAt: now, completedAt: now, updatedAt: now } },
-        { returnDocument: "after" },
-      );
-      const claimedAction = claimResult?.goalId === goal.id ? claimResult : claimResult?.value?.goalId === goal.id ? claimResult.value : null;
-
-      if (!claimedAction) {
-        const existing = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
-        if (!existing) {
-          logStudioGoalClaim("click_required");
-          return res.status(409).json({ ok: false, error: "studio_goal_click_required" });
-        }
-        if (existing.claimedAt || existing.completedAt) {
-          economy = await grantStudioGoalStarsIfNeeded(economy, goal);
-          const nextData = hasStudioGoalClaim(currentData, goal.id)
-            ? overlayProtectedEconomy(currentData, economy)
-            : overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
-          if (!hasStudioGoalClaim(currentData, goal.id)) {
-            await writeSave(req.telegramUser.id, req.telegramUser, nextData);
-          }
-          logStudioGoalClaim("already_claimed");
-          return res.json({
-            ok: true,
-            economy: publicEconomy(economy),
-            save: { data: nextData, updatedAt: hasStudioGoalClaim(currentData, goal.id) ? save?.updatedAt ?? existing.completedAt ?? existing.claimedAt ?? new Date() : new Date() },
-            studioGoal: studioGoalActionPayload(existing),
-          });
-        }
-        logStudioGoalClaim("not_ready");
-        return res.status(425).json({ ok: false, error: "studio_goal_not_ready", studioGoal: studioGoalActionPayload(existing) });
+      const existing = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
+      if (!existing) {
+        const clickedAt = new Date(now.getTime() - goal.waitMs);
+        const action = {
+          telegramId: req.telegramUser.id,
+          telegramUser: req.telegramUser,
+          goalId: goal.id,
+          url: goal.url,
+          clickedAt,
+          eligibleAt: now,
+          claimedAt: now,
+          completedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await db.collection("studio_goal_actions").updateOne(
+          { telegramId: req.telegramUser.id, goalId: goal.id },
+          { $setOnInsert: action },
+          { upsert: true },
+        );
+        economy = await grantStudioGoalStarsIfNeeded(economy, goal);
+        const nextData = overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
+        await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+        logStudioGoalClaim("claimed");
+        return res.json({ ok: true, economy: publicEconomy(economy), reward: goal.reward, save: { data: nextData, updatedAt: new Date() }, studioGoal: studioGoalActionPayload(action) });
       }
+
+      if (existing.claimedAt || existing.completedAt) {
+        economy = await grantStudioGoalStarsIfNeeded(economy, goal);
+        const nextData = hasStudioGoalClaim(currentData, goal.id)
+          ? overlayProtectedEconomy(currentData, economy)
+          : overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);
+        if (!hasStudioGoalClaim(currentData, goal.id)) {
+          await writeSave(req.telegramUser.id, req.telegramUser, nextData);
+        }
+        logStudioGoalClaim("already_claimed");
+        return res.json({
+          ok: true,
+          economy: publicEconomy(economy),
+          save: { data: nextData, updatedAt: hasStudioGoalClaim(currentData, goal.id) ? save?.updatedAt ?? existing.completedAt ?? existing.claimedAt ?? new Date() : new Date() },
+          studioGoal: studioGoalActionPayload(existing),
+        });
+      }
+
+      const clickedAt = existing.clickedAt instanceof Date ? existing.clickedAt : new Date(existing.clickedAt || now);
+      const savedEligibleAt = existing.eligibleAt instanceof Date ? existing.eligibleAt : new Date(existing.eligibleAt || 0);
+      const eligibleAt = Number.isNaN(savedEligibleAt.getTime()) || savedEligibleAt.getTime() <= 0
+        ? new Date(clickedAt.getTime() + goal.waitMs)
+        : savedEligibleAt;
+      if (eligibleAt > now) {
+        logStudioGoalClaim("not_ready");
+        return res.status(425).json({ ok: false, error: "studio_goal_not_ready", studioGoal: studioGoalActionPayload({ ...existing, eligibleAt }) });
+      }
+
+      await db.collection("studio_goal_actions").updateOne(
+        { telegramId: req.telegramUser.id, goalId: goal.id, claimedAt: null, completedAt: null },
+        { $set: { claimedAt: now, completedAt: now, updatedAt: now } },
+      );
+      const claimedAction = await db.collection("studio_goal_actions").findOne({ telegramId: req.telegramUser.id, goalId: goal.id });
 
       economy = await grantStudioGoalStarsIfNeeded(economy, goal);
       const nextData = overlayProtectedEconomy(applyStudioGoalRewardToSaveData(currentData, goal), economy);

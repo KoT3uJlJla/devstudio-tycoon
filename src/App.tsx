@@ -1413,20 +1413,19 @@ function StudioGoals({ state, update, taskOverrides }: { state: GameState; updat
   const startSubscribeGoal = async (goal: StudioGoalModel) => {
     if (subscribePending || subscribeClaimInFlight.current || state.studioGoalClaims[goal.id]) return;
     const targetUrl = goal.action?.type === 'telegram_url' ? goal.action.url : HATCH_MIND_CHANNEL_URL;
-    openTelegramUrl(targetUrl);
     haptic('tap');
     clearSubscribeRetryTimer();
     setSubscribeStatus('opening');
     scheduleSubscribeUiUnlock();
-    savePendingSubscribeGoal(goal.id, null);
+    const fallbackEligibleAt = new Date(Date.now() + SUBSCRIBE_CLAIM_FALLBACK_DELAY_MS).toISOString();
+    savePendingSubscribeGoal(goal.id, fallbackEligibleAt);
+    scheduleSubscribeClaimRetry(fallbackEligibleAt, true);
     const clickPromise = clickBackendStudioGoal(goal.id);
+    openTelegramUrl(targetUrl);
     const clicked = await clickPromise;
     if (!clicked) {
-      clearPendingSubscribeGoal();
-      clearSubscribeRetryTimer();
       clearSubscribeUiUnlockTimer();
-      setSubscribeStatus('idle');
-      haptic('warning');
+      setSubscribeStatus('waiting');
       return;
     }
     const clickedState = clicked.state;
